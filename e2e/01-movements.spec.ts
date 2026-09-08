@@ -28,6 +28,31 @@ test.describe("Movements (Etapa 1/2)", () => {
     await shot(page, "01-movements", "capital-injection")
   })
 
+  test("large image attachment is compressed on upload", async ({ page }) => {
+    // e2e/fixtures/large-receipt.jpg is a 3200x2400 ~5.5MB JPEG. Both the client
+    // (hooks/use-attachment-upload.ts) and the server (uploadAttachment ->
+    // compressImage) shrink images; this test drives the real browser path and
+    // asserts the stored size the UI reports is a fraction of the original.
+    // The server-side behaviour in isolation (dimension cap, WebP re-encode,
+    // graceful fallback) is pinned by the jest unit tests.
+    await page.goto("/movements/new", { waitUntil: "networkidle" })
+    await pickToday(page)
+    await page.locator('input[inputmode="numeric"]').first().fill("50000")
+    await page.getByRole("button", { name: "Continuar" }).click()
+
+    await page.locator("select[name='category_id']").selectOption({ index: 1 })
+    await page.getByRole("button", { name: "Continuar" }).click()
+
+    await page.locator('input[type="file"]').setInputFiles("e2e/fixtures/large-receipt.jpg")
+    await expect(page.getByText("large-receipt.jpg")).toBeVisible({ timeout: 15_000 })
+
+    // 5.5MB original -> the reported size must be in KB, not MB. A blown
+    // compression path would surface the untouched "5.5 MB" here.
+    await expect(page.getByText(/^\d+(\.\d+)?\s*KB$/)).toBeVisible()
+
+    await shot(page, "01-movements", "attachment-compressed")
+  })
+
   test("movement detail + edit", async ({ page }) => {
     // /movements/new (non-capital-injection) is a 3-step wizard: step 1
     // (type/amount/date) → step 2 (who/payment method/category) → step 3

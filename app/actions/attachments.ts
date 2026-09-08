@@ -3,6 +3,7 @@
 import { getCurrentUser } from "@/lib/supabase/server"
 import { PERMISSIONS, can } from "@/lib/permissions/rbac"
 import { attachmentStorageService } from "@/services/storage/attachment-storage.service"
+import { compressImage } from "@/services/storage/image-compression.service"
 import { MAX_ATTACHMENT_SIZE_BYTES } from "@/lib/constants/attachments"
 
 // This action just uploads a file to Supabase Storage and hands back its
@@ -44,20 +45,28 @@ export async function uploadAttachment(
     return { error: "El archivo supera el tamaño máximo permitido (10MB)" }
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer())
+  const originalBuffer = Buffer.from(await file.arrayBuffer())
+
+  // The client compresses images too (hooks/use-attachment-upload.ts), but a
+  // client that skips or fails that step must not be able to park a full-size
+  // photo in permanent storage — movements are never deleted.
+  const { buffer, mimeType, sizeBytes } = await compressImage({
+    buffer: originalBuffer,
+    mimeType: file.type
+  })
 
   try {
     const path = await attachmentStorageService.upload({
       fileName: file.name,
-      mimeType: file.type,
+      mimeType,
       buffer
     })
 
     return {
       path,
       fileName: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size
+      mimeType,
+      sizeBytes
     }
   } catch (error) {
     console.error("attachmentStorageService.upload failed", error)

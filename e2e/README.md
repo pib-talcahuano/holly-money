@@ -48,6 +48,9 @@ loaded by `db reset`, never applied to a remote project (which only ever runs
   (`registerTransferSchema`), and `AttachmentInput` uploads to Supabase Storage
   as soon as a file is selected. This works against the local Supabase stack
   every other e2e test already depends on — no extra credentials needed.
+- **`01-movements.spec.ts` uploads `fixtures/large-receipt.jpg`** (a 3200×2400
+  ~5.5 MB JPEG) to exercise the client + server image-compression path and
+  assert the stored size the UI reports is a fraction of the original.
 - **Payroll is one-record-per-calendar-month.** `06-payroll.spec.ts` registers
   a payroll for the current month — rerunning it in the same month without a
   `db reset` in between will hit the uniqueness guard and fail. That's the
