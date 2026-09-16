@@ -19,6 +19,7 @@ const eslintConfig = [
       "next-env.d.ts",
       "coverage",
       "supabase/functions/**",
+      "supabase/.temp/**",
       "public/sw.js",
       "public/swe-worker-*.js",
       ".worktrees/**",
