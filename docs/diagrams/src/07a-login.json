@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Inicio de sesión",
+    "output": "07a-login.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "browser", "label": "Navegador" },
+    { "id": "server", "label": "Servidor (Next.js)" },
+    { "id": "denied", "label": "Salidas / errores", "variant": "exception" }
+  ],
+  "mainPath": ["open_root", "check_session", "login_form", "submit_login", "go_dashboard", "proxy_gate"],
+  "nodes": [
+    { "id": "open_root", "lane": "browser", "col": 0, "type": "external", "label": "Abre la app en /", "sublabel": "sin sesión conocida", "width": 150 },
+    { "id": "check_session", "lane": "server", "col": 1, "type": "backend", "label": "Verifica sesión", "sublabel": "supabase.auth.getUser()", "width": 150 },
+    { "id": "has_session", "lane": "denied", "col": 2, "type": "security", "label": "Ya autenticado", "sublabel": "redirige a /dashboard", "width": 150 },
+    { "id": "login_form", "lane": "browser", "col": 2, "type": "frontend", "label": "Muestra LoginForm", "sublabel": "components/auth/login-form.tsx", "width": 170 },
+    { "id": "submit_login", "lane": "browser", "col": 3, "type": "frontend", "label": "Envía credenciales", "sublabel": "supabase.auth.signInWithPassword()", "width": 170 },
+    { "id": "invalid_creds", "lane": "denied", "col": 4, "type": "security", "label": "Credenciales inválidas", "sublabel": "mensaje genérico, no revela la causa", "width": 180 },
+    { "id": "go_dashboard", "lane": "browser", "col": 4, "type": "frontend", "label": "router.push('/dashboard')", "sublabel": "cookies de sesión ya establecidas", "width": 195 },
+    { "id": "proxy_gate", "lane": "server", "col": 5, "type": "security", "label": "proxy.ts + getCurrentUser()", "sublabel": "valida sesión y permisos en cada request", "tag": "cada request", "width": 205 },
+    { "id": "no_session", "lane": "denied", "col": 5, "type": "security", "label": "Sin sesión", "sublabel": "redirige a /", "width": 150 }
+  ],
+  "edges": [
+    { "id": "e1", "from": "open_root", "to": "check_session", "variant": "default" },
+    { "id": "e2", "from": "check_session", "to": "has_session", "label": "sí", "variant": "security", "role": "branch" },
+    { "id": "e3", "from": "check_session", "to": "login_form", "label": "no hay sesión", "variant": "default" },
+    { "id": "e4", "from": "login_form", "to": "submit_login", "variant": "default" },
+    { "id": "e5", "from": "submit_login", "to": "invalid_creds", "label": "credenciales inválidas", "variant": "security", "role": "error" },
+    { "id": "e6", "from": "submit_login", "to": "go_dashboard", "label": "credenciales válidas", "variant": "emphasis" },
+    { "id": "e7", "from": "go_dashboard", "to": "proxy_gate", "label": "siguiente navegación", "variant": "default" },
+    { "id": "e8", "from": "proxy_gate", "to": "no_session", "label": "sin usuario autenticado", "variant": "security", "role": "branch" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Mensaje de error genérico", "items": ["\"Credenciales inválidas o usuario inactivo\" nunca revela si el problema es el email, la contraseña, o que la cuenta está INACTIVE/no ACTIVE en public.users"] },
+    { "dot": "cyan", "title": "Rutas públicas", "items": ["proxy.ts deja pasar /, /forgot-password, /activate, /auth/callback y los endpoints de auth sin sesión"] },
+    { "dot": "emerald", "title": "Ver también", "items": ["06-roles-and-permissions.html — cómo se resuelven los permisos efectivos", "07c-impersonation-resolve.html — cómo getCurrentUser() resuelve una suplantación activa"] }
+  ]
+}

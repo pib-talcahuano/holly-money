@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Holly Money Architecture",
+    "output": "holly-money-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/pib-talcahuano/holly-money",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "f871672284adce5bc35e4b2626b2c96bcff3de2c"
+    },
+    "views": [
+      { "id": "request-path", "label": "Request path", "focus": ["browser", "proxy", "nextjs", "mutations", "services", "ssrclient", "postgres"], "note": "A page load or form submit flows through proxy.ts, the App Router, and the service layer down to Postgres." },
+      { "id": "authorization", "label": "Authorization", "focus": ["proxy", "mutations", "rbac", "auth", "postgres"], "note": "Session checks happen twice: proxy.ts at the edge, then can() before every mutation. RLS is the last line of defense." },
+      { "id": "integrations", "label": "Side-effects", "focus": ["services", "adminclient", "storage", "resend"], "note": "Audit logging and attachment storage use the service-role client to bypass RLS; email is fire-and-forget via Resend." }
+    ]
+  },
+  "components": [
+    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "user session", "pos": [40, 300], "size": [130, 60] },
+    { "id": "proxy", "type": "security", "label": "proxy.ts", "sublabel": "route protection", "pos": [230, 300], "size": [130, 60], "sources": [{ "path": "proxy.ts" }] },
+    { "id": "nextjs", "type": "frontend", "label": "Next.js App Router", "sublabel": "app/(dashboard) pages", "pos": [420, 300], "size": [140, 60], "sources": [{ "path": "app/(dashboard)/dashboard/page.tsx" }] },
+    { "id": "rbac", "type": "security", "label": "RBAC", "sublabel": "can(permissions, X)", "pos": [610, 140], "size": [140, 60], "sources": [{ "path": "lib/permissions/rbac.ts" }] },
+    { "id": "mutations", "type": "backend", "label": "Actions & API Routes", "sublabel": "app/actions, app/api", "pos": [610, 300], "size": [140, 60], "sources": [{ "path": "app/actions/movements.ts" }, { "path": "app/api/movements/route.ts" }] },
+    { "id": "resend", "type": "external", "label": "Resend", "sublabel": "transactional email", "pos": [610, 460], "size": [130, 60], "sources": [{ "path": "services/email/resend.service.ts" }] },
+    { "id": "services", "type": "backend", "label": "Service Layer", "sublabel": "services/*", "pos": [800, 300], "size": [140, 60], "sources": [{ "path": "services/movements/movements.service.ts" }] },
+    { "id": "adminclient", "type": "security", "label": "Supabase Admin Client", "sublabel": "service role, bypasses RLS", "pos": [800, 460], "size": [150, 64], "sources": [{ "path": "lib/supabase/admin.ts" }] },
+    { "id": "ssrclient", "type": "backend", "label": "Supabase SSR Client", "sublabel": "cookies-based session", "pos": [990, 300], "size": [150, 60], "sources": [{ "path": "lib/supabase/server.ts" }] },
+    { "id": "auth", "type": "security", "label": "Supabase Auth", "sublabel": "email/password", "pos": [990, 140], "size": [140, 60] },
+    { "id": "storage", "type": "cloud", "label": "Supabase Storage", "sublabel": "attachments bucket", "pos": [990, 460], "size": [140, 60], "sources": [{ "path": "services/storage/attachment-storage.service.ts" }] },
+    { "id": "postgres", "type": "database", "label": "Postgres", "sublabel": "RLS on every table", "pos": [1180, 300], "size": [130, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Supabase Project", "wraps": ["auth", "postgres", "storage"] }
+  ],
+  "connections": [
+    { "id": "browser-proxy", "from": "browser", "to": "proxy", "label": "request", "variant": "emphasis" },
+    { "id": "proxy-nextjs", "from": "proxy", "to": "nextjs", "label": "session valid", "labelDy": -24 },
+    { "id": "proxy-redirect", "from": "proxy", "to": "browser", "label": "redirect → /", "variant": "dashed", "fromSide": "top", "toSide": "top", "via": [[295, 60], [105, 60]] },
+    { "id": "nextjs-mutations", "from": "nextjs", "to": "mutations", "label": "invoke" },
+    { "id": "mutations-rbac", "from": "mutations", "to": "rbac", "label": "can(permissions, X)", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "mutations-services", "from": "mutations", "to": "services", "label": "authorized call", "labelDy": -24 },
+    { "id": "mutations-resend", "from": "mutations", "to": "resend", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "services-ssrclient", "from": "services", "to": "ssrclient", "label": "query / mutate", "labelDy": -24 },
+    { "id": "services-adminclient", "from": "services", "to": "adminclient", "label": "audit log + storage", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "ssrclient-postgres", "from": "ssrclient", "to": "postgres", "label": "SQL, RLS enforced", "labelDy": -24 },
+    { "id": "ssrclient-auth", "from": "ssrclient", "to": "auth", "label": "getCurrentUser()", "fromSide": "top", "toSide": "bottom" },
+    { "id": "adminclient-postgres", "from": "adminclient", "to": "postgres", "label": "bypass RLS", "variant": "security", "fromSide": "right", "toSide": "bottom" },
+    { "id": "adminclient-storage", "from": "adminclient", "to": "storage", "label": "upload / signed URL", "labelDy": 49 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Request path", "items": ["proxy.ts gates every request; no session redirects to /", "App Router pages call server actions or route handlers directly"] },
+    { "dot": "emerald", "title": "Service layer", "items": ["Route handlers and server actions never call Supabase directly", "services/* is the only caller of the Supabase clients"] },
+    { "dot": "rose", "title": "Authorization", "items": ["can(permissions, PERMISSIONS.X) gates every mutation, not role names", "RLS is enabled on every table as the last line of defense"] },
+    { "dot": "amber", "title": "Side-effects", "items": ["Admin (service-role) client only for audit inserts and attachment storage", "Movement mutations trigger a Resend email notification"] }
+  ]
+}

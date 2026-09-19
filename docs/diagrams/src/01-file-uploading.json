@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Adjuntos: subida y descarga",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "external": { "label": "Cliente / UI" },
+        "backend": { "label": "Ruta o server action" },
+        "cloud": { "label": "Llamada a Supabase" },
+        "security": { "label": "Respuesta de error" }
+      }
+    },
+    "views": [
+      { "id": "subida", "label": "Subida", "focus": ["file_select", "upload_action", "storage_upload"], "note": "El cliente comprime la imagen, el servidor vuelve a comprimir por defensa en profundidad, y solo entonces se sube a Storage." },
+      { "id": "descarga", "label": "Descarga", "focus": ["click_link", "download_route", "sign_url", "error_response", "redirect"], "note": "Cada descarga pasa por autenticación, validación de bucket/ruta, y una URL firmada de corta duración." }
+    ]
+  },
+  "lanes": [
+    { "id": "cliente", "label": "Cliente (navegador)" },
+    { "id": "servidor", "label": "Servidor (Next.js + Supabase)" }
+  ],
+  "mainPath": ["file_select", "upload_action", "storage_upload", "click_link", "download_route", "sign_url", "redirect"],
+  "nodes": [
+    { "id": "file_select", "lane": "cliente", "col": 0, "type": "external", "label": "Selecciona archivo", "sublabel": "comprime si es imagen", "width": 170 },
+    { "id": "upload_action", "lane": "servidor", "col": 1, "type": "backend", "label": "uploadAttachment()", "sublabel": "permisos + tamaño ≤10MB", "tag": "server action", "width": 170 },
+    { "id": "storage_upload", "lane": "servidor", "col": 2, "type": "cloud", "label": "Sube a Storage", "sublabel": "bucket \"attachments\"", "width": 170 },
+    { "id": "click_link", "lane": "cliente", "col": 3, "type": "external", "label": "Clic en adjunto", "sublabel": "más tarde, desde la UI", "width": 170 },
+    { "id": "download_route", "lane": "servidor", "col": 4, "type": "backend", "label": "GET /api/attachments", "sublabel": "auth + bucket + ruta", "width": 170 },
+    { "id": "sign_url", "lane": "servidor", "col": 5, "type": "cloud", "label": "createSignedUrl()", "sublabel": "TTL 1 hora", "width": 170 },
+    { "id": "redirect", "lane": "cliente", "col": 5, "type": "external", "label": "302 redirect", "sublabel": "URL firmada", "width": 170 },
+    { "id": "error_response", "lane": "cliente", "col": 4, "type": "security", "label": "401 / 400 / 404", "sublabel": "sesión, ruta u objeto inválido", "width": 170 }
+  ],
+  "edges": [
+    { "id": "select-upload", "from": "file_select", "to": "upload_action", "label": "envía FormData" },
+    { "id": "upload-storage", "from": "upload_action", "to": "storage_upload", "label": "recomprime (sharp) + sube" },
+    { "id": "storage-click", "from": "storage_upload", "to": "click_link", "variant": "dashed", "label": "path guardado; más tarde" },
+    { "id": "click-route", "from": "click_link", "to": "download_route", "label": "GET" },
+    { "id": "route-signurl", "from": "download_route", "to": "sign_url", "label": "auth + bucket + ruta válidos" },
+    { "id": "route-error", "from": "download_route", "to": "error_response", "variant": "security", "role": "error", "label": "falla validación" },
+    { "id": "signurl-redirect", "from": "sign_url", "to": "redirect", "label": "firmada" },
+    { "id": "signurl-error", "from": "sign_url", "to": "error_response", "variant": "security", "role": "error", "label": "no existe" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Subida", "items": ["El cliente comprime la imagen antes de enviarla", "El servidor vuelve a comprimir con sharp por defensa en profundidad", "Sube al bucket privado \"attachments\" con el cliente admin"] },
+    { "dot": "rose", "title": "Descarga", "items": ["getCurrentUser() exige sesión antes de tocar Storage", "isAttachmentBucket() y el bloqueo de \"..\" evitan path traversal", "La URL firmada expira en 1 hora; nunca se guarda una URL pública"] }
+  ]
+}

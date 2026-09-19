@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Flujo de solicitudes de fondos",
+    "output": "03-requests-flow.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "solicitud", "label": "Solicitud", "focus": ["crear_solicitud", "revisar_solicitud", "cancelar_solicitud", "rechazada_solicitud"], "note": "El ministro crea la solicitud; tesorería/finanzas la aprueba o rechaza." },
+      { "id": "transferencia-rendicion", "label": "Transferencia y rendición", "focus": ["registrar_transferencia", "crear_rendicion", "enviar_rendicion", "cancelar_rendicion"], "note": "Si el financiamiento es por transferencia anticipada, se registra antes de la rendición." },
+      { "id": "revision-cierre", "label": "Revisión y cierre", "focus": ["revisar_rendicion", "devuelta_rendicion", "rechazada_rendicion", "cerrar_solicitud"], "note": "La rendición puede devolverse para corrección; al aprobarse se crea o reutiliza el movimiento y se cierra la solicitud." }
+    ]
+  },
+  "lanes": [
+    { "id": "solicitud", "label": "Solicitud / Transferencia" },
+    { "id": "excepciones_solicitud", "label": "Cancelación / rechazo", "variant": "exception" },
+    { "id": "rendicion", "label": "Rendición" },
+    { "id": "excepciones_rendicion", "label": "Cancelación / devolución / rechazo", "variant": "exception" }
+  ],
+  "mainPath": ["crear_solicitud", "revisar_solicitud", "registrar_transferencia", "crear_rendicion", "enviar_rendicion", "revisar_rendicion", "cerrar_solicitud"],
+  "nodes": [
+    { "id": "crear_solicitud", "lane": "solicitud", "col": 0, "type": "external", "label": "Crea la solicitud", "sublabel": "DRAFT o PENDING", "width": 160 },
+    { "id": "revisar_solicitud", "lane": "solicitud", "col": 1, "type": "security", "label": "Revisor evalúa", "sublabel": "aprueba o rechaza", "width": 155 },
+    { "id": "registrar_transferencia", "lane": "solicitud", "col": 2, "type": "backend", "label": "Registra transferencia", "sublabel": "solo si es TRANSFER", "width": 170 },
+    { "id": "cerrar_solicitud", "lane": "solicitud", "col": 4, "type": "backend", "label": "Cierra la solicitud", "sublabel": "comprobante final", "width": 165 },
+    { "id": "crear_rendicion", "lane": "rendicion", "col": 2, "type": "external", "label": "Crea la rendición", "sublabel": "monto + comprobante", "width": 165 },
+    { "id": "enviar_rendicion", "lane": "rendicion", "col": 3, "type": "external", "label": "Envía a revisión", "sublabel": "→ PENDING", "width": 145 },
+    { "id": "revisar_rendicion", "lane": "rendicion", "col": 4, "type": "security", "label": "Revisor la revisa", "sublabel": "toma y decide", "width": 155 },
+    { "id": "cancelar_solicitud", "lane": "excepciones_solicitud", "col": 0, "type": "security", "label": "Cancela", "sublabel": "antes de revisarse", "width": 155 },
+    { "id": "rechazada_solicitud", "lane": "excepciones_solicitud", "col": 1, "type": "security", "label": "Rechazada", "sublabel": "email al ministro", "width": 140 },
+    { "id": "cancelar_rendicion", "lane": "excepciones_rendicion", "col": 2, "type": "security", "label": "Cancela", "sublabel": "antes de revisarse", "width": 155 },
+    { "id": "devuelta_rendicion", "lane": "excepciones_rendicion", "col": 3, "type": "security", "label": "Devuelta", "sublabel": "requiere comentario", "width": 155 },
+    { "id": "rechazada_rendicion", "lane": "excepciones_rendicion", "col": 4, "type": "security", "label": "Rechazada", "sublabel": "email al ministro", "width": 140 }
+  ],
+  "edges": [
+    { "from": "crear_solicitud", "to": "revisar_solicitud" },
+    { "from": "crear_solicitud", "to": "cancelar_solicitud", "label": "cancela", "variant": "dashed" },
+    { "from": "revisar_solicitud", "to": "registrar_transferencia", "label": "aprobada + TRANSFER" },
+    { "from": "revisar_solicitud", "to": "crear_rendicion", "label": "aprobada + REEMBOLSO", "variant": "dashed" },
+    { "from": "revisar_solicitud", "to": "rechazada_solicitud", "label": "rechazada", "variant": "security", "role": "error" },
+    { "from": "registrar_transferencia", "to": "crear_rendicion" },
+    { "from": "crear_rendicion", "to": "enviar_rendicion", "label": "envía a revisión" },
+    { "from": "crear_rendicion", "to": "cancelar_rendicion", "label": "cancela", "variant": "dashed" },
+    { "from": "enviar_rendicion", "to": "revisar_rendicion" },
+    { "from": "revisar_rendicion", "to": "devuelta_rendicion", "label": "devuelve", "variant": "dashed" },
+    { "from": "devuelta_rendicion", "to": "enviar_rendicion", "label": "reenvía", "role": "return" },
+    { "from": "revisar_rendicion", "to": "rechazada_rendicion", "label": "rechazada", "variant": "security", "role": "error" },
+    { "from": "revisar_rendicion", "to": "cerrar_solicitud", "label": "aprobada: crea/reutiliza movimiento" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Dos formas de financiamiento", "items": ["TRANSFER: se registra la transferencia al aprobar, antes de la rendición", "REEMBOLSO: sin transferencia; la rendición crea el movimiento directamente al aprobarse"] },
+    { "dot": "emerald", "title": "Permisos", "items": ["CREATE_REQUEST y CREATE_SETTLEMENT son independientes desde la migración 20260717030809", "MINISTER y ADMIN los tienen ambos por defecto; FINANCE solo tiene visibilidad de solo lectura"] },
+    { "dot": "amber", "title": "Ciclo de corrección y cierre", "items": ["Una rendición devuelta puede reenviarse (PENDING) sin perder el historial", "Estar en revisión bloquea edición/cancelación; cerrar la solicitud puede cubrir varias rendiciones"] }
+  ]
+}

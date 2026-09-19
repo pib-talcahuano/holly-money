@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Edición de la matriz de permisos",
+    "output": "06-permission-matrix-edit.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1060, 480]
+  },
+  "participants": [
+    { "id": "admin", "type": "external", "label": "ADMIN", "sublabel": "usuario real" },
+    { "id": "ui", "type": "frontend", "label": "Matriz UI", "sublabel": "PermissionsMatrix" },
+    { "id": "action", "type": "backend", "label": "Server Action", "sublabel": "updateRolePermission" },
+    { "id": "db", "type": "database", "label": "Postgres", "sublabel": "role_permissions" },
+    { "id": "cache", "type": "database", "label": "Caché", "sublabel": "unstable_cache, 24h" }
+  ],
+  "messages": [
+    { "id": "toggle", "from": "admin", "to": "ui", "y": 160, "label": "activa/desactiva un permiso" },
+    { "id": "call-action", "from": "ui", "to": "action", "y": 194, "label": "updateRolePermission(role, permiso, habilitado)", "variant": "emphasis", "note": "requiere can(MANAGE_SETTINGS), si no lanza error" },
+    { "id": "upsert", "from": "action", "to": "db", "y": 234, "label": "upsert role_permissions", "variant": "emphasis" },
+    { "id": "upsert-ok", "from": "db", "to": "action", "y": 262, "label": "ok", "variant": "return" },
+    { "id": "revalidate-tag", "from": "action", "to": "cache", "y": 294, "label": "revalidateTag('role-permissions')", "variant": "dashed", "note": "invalida la caché de 24h al instante" },
+    { "id": "revalidate-path", "from": "action", "to": "ui", "y": 328, "label": "revalidatePath('/settings/permissions')", "variant": "return" },
+    { "id": "ui-updated", "from": "ui", "to": "admin", "y": 358, "label": "matriz actualizada", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "ui", "from": 160, "to": 364, "type": "frontend" },
+    { "participant": "action", "from": 190, "to": 334, "type": "backend" },
+    { "participant": "db", "from": 230, "to": 266, "type": "database" },
+    { "participant": "cache", "from": 290, "to": 300, "type": "database" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Invalidación inmediata", "items": ["revalidateTag('role-permissions') no espera el TTL de 24h", "El cambio aplica en el próximo request de cualquier usuario con ese rol"] },
+    { "dot": "rose", "title": "Guarda única", "items": ["Solo MANAGE_SETTINGS puede editar la matriz", "Los permisos de ADMIN son inmutables y no pasan por este flujo"] }
+  ]
+}

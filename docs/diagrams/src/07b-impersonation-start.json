@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Inicio de suplantación de usuario",
+    "output": "07b-impersonation-start.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1080, 640]
+  },
+  "participants": [
+    { "id": "admin", "type": "external", "label": "ADMIN", "sublabel": "usuario real" },
+    { "id": "action", "type": "backend", "label": "startImpersonation", "sublabel": "server action" },
+    { "id": "service", "type": "backend", "label": "impersonationService", "sublabel": "services/impersonation" },
+    { "id": "db", "type": "database", "label": "Sesiones", "sublabel": "impersonation_sessions" },
+    { "id": "cookie", "type": "security", "label": "Cookie httpOnly", "sublabel": "impersonation_session" }
+  ],
+  "messages": [
+    { "from": "admin", "to": "action", "y": 165, "label": "Elige usuario objetivo", "variant": "emphasis", "note": "assertRealAdmin(): getRealUser().role === ADMIN" },
+    { "from": "action", "to": "service", "y": 205, "label": "start(adminId, targetId)", "variant": "default" },
+    { "from": "service", "to": "db", "y": 245, "label": "Busca usuario objetivo", "variant": "default" },
+    { "from": "db", "to": "service", "y": 285, "label": "target (status, role)", "variant": "return", "note": "Error si: target = admin mismo, no existe, status ≠ ACTIVE, role = ADMIN" },
+    { "from": "service", "to": "db", "y": 325, "label": "¿Sesión activa existente?", "variant": "default" },
+    { "from": "db", "to": "service", "y": 365, "label": "ninguna sesión activa", "variant": "return" },
+    { "from": "service", "to": "db", "y": 405, "label": "Inserta sesión, expires_at = +30min", "variant": "emphasis" },
+    { "from": "db", "to": "action", "y": 445, "label": "sesión creada", "variant": "return" },
+    { "from": "action", "to": "cookie", "y": 485, "label": "Guarda session id (httpOnly, secure)", "variant": "security", "note": "Desde aquí, getCurrentUser() devuelve la identidad suplantada" }
+  ],
+  "activations": [
+    { "participant": "action", "from": 155, "to": 500, "type": "backend" },
+    { "participant": "service", "from": 195, "to": 455, "type": "backend" },
+    { "participant": "db", "from": 235, "to": 415, "type": "database" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Validaciones y duración", "items": ["No se puede suplantar la propia cuenta ni a otro ADMIN; el objetivo debe existir y estar ACTIVE", "Solo una sesión activa por admin a la vez", "expires_at = +30 min, controlado en el servidor; cookie httpOnly + secure"] }
+  ]
+}
