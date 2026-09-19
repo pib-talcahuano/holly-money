@@ -36,6 +36,9 @@ pnpm types:generate
 
 # React Email dev server (emails/ directory, port 3001)
 pnpm email:dev
+
+# Open an index of all architecture/flow diagrams (docs/diagrams/) in the browser
+pnpm docs
 ```
 
 Always use `pnpm`, never `npm` or `yarn`.

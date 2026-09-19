@@ -2,7 +2,15 @@
 
 Interactive [Archify](https://github.com/tt-a1i/archify) diagrams for the key app flows. Content is
 in Spanish (matching the app's UI language). These are self-contained HTML files — GitHub won't
-render them inline, so open them locally in a browser (double-click, or `open docs/diagrams/00-architecture.html`).
+render them inline, so review them locally with:
+
+```bash
+pnpm docs
+```
+
+which opens a small index page linking to every diagram in this folder. Or open one directly
+(double-click, or `open docs/diagrams/00-architecture.html`).
+
 Each diagram's authoring spec lives alongside in [`src/`](src/) so it can be edited without
 reverse-engineering the rendered SVG — regenerate with the `archify` skill/CLI after editing a spec.
 
