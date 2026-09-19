@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Holly Money — Diagram Gallery</title>
+<meta name="description" content="Browsable gallery of every Holly Money architecture and flow diagram, generated with Archify and grounded in the current codebase.">
+<style>
+  :root {
+    --paper:#f6f7f5; --panel:#ffffff; --ink:#161a17; --soft:#4b524d; --muted:#7c837e;
+    --line:rgba(20,23,20,0.12); --line-hi:rgba(20,23,20,0.24);
+    --accent:#2f5d4f; --accent-soft:rgba(47,93,79,0.1);
+    --arch:#0f6b8c; --workflow:#2f5d4f; --sequence:#8a4b1f;
+    --plate:#11140f;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  html[data-theme="dark"] {
+    --paper:#14171a; --panel:#1b1f22; --ink:#eef1ee; --soft:#c2c8c3; --muted:#8b928d;
+    --line:rgba(238,241,238,0.12); --line-hi:rgba(238,241,238,0.24);
+    --accent:#6fceb1; --accent-soft:rgba(111,206,177,0.12);
+    --arch:#5fb8dd; --workflow:#6fceb1; --sequence:#e2a463;
+    --plate:#0a0c0a;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:var(--font); -webkit-font-smoothing:antialiased; }
+  .shell { max-width: 1180px; margin: 0 auto; padding: 56px 24px 80px; }
+  .eyebrow { font-family:var(--mono); font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin:0 0 14px; }
+  h1 { font-size: clamp(1.9rem, 3.6vw, 2.6rem); line-height:1.08; letter-spacing:-.02em; margin:0 0 14px; font-weight:650; }
+  .lede { max-width: 680px; color:var(--soft); font-size: .98rem; line-height:1.6; margin: 0 0 24px; }
+  .lede code { font-family:var(--mono); font-size:.85em; background:var(--accent-soft); padding:.1em .35em; border-radius:4px; }
+  .stats { display:flex; flex-wrap:wrap; gap:10px; margin-bottom: 40px; }
+  .stat { border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:.78rem; color:var(--soft); background:var(--panel); }
+  .stat b { color:var(--ink); font-weight:650; }
+
+  .controls { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; padding: 14px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin-bottom: 28px; }
+  .filters { display:flex; flex-wrap:wrap; gap:8px; }
+  .pill { font-family:var(--mono); font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; padding:7px 13px; border-radius:999px; border:1px solid var(--line-hi); background:transparent; color:var(--muted); cursor:pointer; transition: all .15s ease; }
+  .pill:hover { color:var(--ink); border-color:var(--ink); }
+  .pill[aria-pressed="true"] { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .toggle { font-family:var(--mono); font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; padding:7px 13px; border-radius:999px; border:1px solid var(--line-hi); background:var(--panel); color:var(--soft); cursor:pointer; }
+  .toggle:hover { color:var(--ink); border-color:var(--ink); }
+
+  .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:20px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; transition: border-color .15s ease, transform .15s ease; }
+  .card:hover { border-color: var(--line-hi); }
+  .card[hidden] { display:none; }
+
+  .preview { position:relative; aspect-ratio: 16 / 9; background:var(--plate); border-bottom:1px solid var(--line); overflow:hidden; transition: aspect-ratio .1s ease; }
+  .preview iframe { width:100%; height:100%; border:0; display:block; pointer-events:none; }
+  .preview-link { position:absolute; inset:0; }
+
+  .card-body { padding: 16px 18px 18px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .card-meta { display:flex; align-items:center; gap:8px; }
+  .badge { font-family:var(--mono); font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; padding:3px 8px; border-radius:5px; color:#fff; }
+  .badge-architecture { background:var(--arch); }
+  .badge-workflow { background:var(--workflow); }
+  .badge-sequence { background:var(--sequence); }
+  .card-index { font-family:var(--mono); font-size:.7rem; color:var(--muted); }
+  .card-title { font-size:1.02rem; font-weight:650; margin:0; letter-spacing:-.01em; }
+  .card-desc { color:var(--soft); font-size:.85rem; line-height:1.5; margin:0; flex:1; }
+  .card-links { display:flex; gap:14px; margin-top:6px; }
+  .card-links a { font-size:.78rem; font-weight:600; color:var(--accent); text-decoration:none; }
+  .card-links a:hover { text-decoration:underline; }
+
+  footer { margin-top:48px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:.8rem; line-height:1.6; }
+  footer code { font-family:var(--mono); background:var(--accent-soft); padding:.1em .35em; border-radius:4px; }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <p class="eyebrow">Holly Money · Documentation</p>
+    <h1>Flow &amp; architecture diagrams</h1>
+    <p class="lede">
+      Interactive <a href="https://github.com/tt-a1i/archify" target="_blank" rel="noopener">Archify</a> diagrams
+      generated from the current codebase — not hand-drawn illustrations. Content is in Spanish, matching the
+      app's UI language. Each preview below is the live diagram itself (<code>?embed=1</code>), not a screenshot.
+    </p>
+    <div class="stats">
+      <span class="stat"><b>11</b>&nbsp;diagrams</span>
+      <span class="stat"><b>3</b>&nbsp;diagram types</span>
+      <span class="stat">grounded in commit <b>f871672</b></span>
+      <span class="stat">specs in <b>src/</b> for edits</span>
+    </div>
+
+    <div class="controls">
+      <div class="filters" id="filters">
+        <button class="pill" type="button" data-filter="all" aria-pressed="true">All · 11</button>
+        <button class="pill" type="button" data-filter="architecture" aria-pressed="false">Architecture · 1</button>
+        <button class="pill" type="button" data-filter="workflow" aria-pressed="false">Workflow · 8</button>
+        <button class="pill" type="button" data-filter="sequence" aria-pressed="false">Sequence · 2</button>
+      </div>
+      <button class="toggle" id="theme-toggle" type="button">Switch to dark mode</button>
+    </div>
+
+    <div class="grid" id="grid">
+
+      <article class="card" data-type="architecture">
+        <div class="preview"><iframe class="pv" data-src="00-architecture.html" title="Holly Money Architecture preview" loading="eager"></iframe><a class="preview-link" href="00-architecture.html" target="_blank" rel="noopener" aria-label="Open Holly Money Architecture"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-architecture">Architecture</span><span class="card-index">00</span></div>
+          <h3 class="card-title">Holly Money Architecture</h3>
+          <p class="card-desc">Next.js App Router → service layer → Supabase (Postgres/Auth/Storage), RBAC, and the Resend/admin-client side-effects.</p>
+          <div class="card-links"><a href="00-architecture.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/00-architecture.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="01-file-uploading.html" title="Adjuntos: subida y descarga preview" loading="lazy"></iframe><a class="preview-link" href="01-file-uploading.html" target="_blank" rel="noopener" aria-label="Open Adjuntos: subida y descarga"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">01</span></div>
+          <h3 class="card-title">Adjuntos: subida y descarga</h3>
+          <p class="card-desc">Client-side compression → server action → server-side (sharp) re-compression → Supabase Storage; retrieval via signed URL.</p>
+          <div class="card-links"><a href="01-file-uploading.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/01-file-uploading.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="02-account-creation.html" title="Creación de cuenta preview" loading="lazy"></iframe><a class="preview-link" href="02-account-creation.html" target="_blank" rel="noopener" aria-label="Open Creación de cuenta"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">02</span></div>
+          <h3 class="card-title">Creación de cuenta (invitación de ADMIN)</h3>
+          <p class="card-desc">ADMIN invite → Resend email → /activate → PENDING_ACTIVATION to ACTIVE.</p>
+          <div class="card-links"><a href="02-account-creation.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/02-account-creation.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="03-requests-flow.html" title="Flujo de solicitudes de fondos preview" loading="lazy"></iframe><a class="preview-link" href="03-requests-flow.html" target="_blank" rel="noopener" aria-label="Open Flujo de solicitudes de fondos"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">03</span></div>
+          <h3 class="card-title">Flujo de solicitudes de fondos</h3>
+          <p class="card-desc">Draft → submit → review → transfer or reimbursement → settlement (with correction loop) → settlement review → movement.</p>
+          <div class="card-links"><a href="03-requests-flow.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/03-requests-flow.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="04-password-recovery.html" title="Recuperación de contraseña preview" loading="lazy"></iframe><a class="preview-link" href="04-password-recovery.html" target="_blank" rel="noopener" aria-label="Open Recuperación de contraseña"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">04</span></div>
+          <h3 class="card-title">Recuperación de contraseña</h3>
+          <p class="card-desc">Forgot-password → recovery link → /activate (PENDING_RESET to ACTIVE), no-enumeration behavior on unknown/inactive emails.</p>
+          <div class="card-links"><a href="04-password-recovery.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/04-password-recovery.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="05-email-send-receive.html" title="Envío y recepción de correo preview" loading="lazy"></iframe><a class="preview-link" href="05-email-send-receive.html" target="_blank" rel="noopener" aria-label="Open Envío y recepción de correo"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">05</span></div>
+          <h3 class="card-title">Envío y recepción de correo</h3>
+          <p class="card-desc">Outbound notifications via Resend/React Email, plus inbound alias forwarding via the Resend inbound webhook.</p>
+          <div class="card-links"><a href="05-email-send-receive.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/05-email-send-receive.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="06-roles-and-permissions.html" title="Resolución de permisos por request preview" loading="lazy"></iframe><a class="preview-link" href="06-roles-and-permissions.html" target="_blank" rel="noopener" aria-label="Open Resolución de permisos"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">06</span></div>
+          <h3 class="card-title">Resolución de permisos por request</h3>
+          <p class="card-desc">How getCurrentUser() resolves and caches a user's effective permissions on every request.</p>
+          <div class="card-links"><a href="06-roles-and-permissions.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/06-roles-and-permissions.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="sequence">
+        <div class="preview"><iframe class="pv" data-src="06-permission-matrix-edit.html" title="Edición de la matriz de permisos preview" loading="lazy"></iframe><a class="preview-link" href="06-permission-matrix-edit.html" target="_blank" rel="noopener" aria-label="Open Edición de la matriz de permisos"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-sequence">Sequence</span><span class="card-index">06b</span></div>
+          <h3 class="card-title">Edición de la matriz de permisos</h3>
+          <p class="card-desc">How an ADMIN edits the live permission matrix and how the 24h cache gets invalidated instantly.</p>
+          <div class="card-links"><a href="06-permission-matrix-edit.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/06-permission-matrix-edit.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="07a-login.html" title="Inicio de sesión preview" loading="lazy"></iframe><a class="preview-link" href="07a-login.html" target="_blank" rel="noopener" aria-label="Open Inicio de sesión"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">07a</span></div>
+          <h3 class="card-title">Inicio de sesión</h3>
+          <p class="card-desc">Login via signInWithPassword and route protection in proxy.ts.</p>
+          <div class="card-links"><a href="07a-login.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/07a-login.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="sequence">
+        <div class="preview"><iframe class="pv" data-src="07b-impersonation-start.html" title="Inicio de suplantación preview" loading="lazy"></iframe><a class="preview-link" href="07b-impersonation-start.html" target="_blank" rel="noopener" aria-label="Open Inicio de suplantación"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-sequence">Sequence</span><span class="card-index">07b</span></div>
+          <h3 class="card-title">Inicio de suplantación de usuario</h3>
+          <p class="card-desc">An ADMIN starting an impersonation session.</p>
+          <div class="card-links"><a href="07b-impersonation-start.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/07b-impersonation-start.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+      <article class="card" data-type="workflow">
+        <div class="preview"><iframe class="pv" data-src="07c-impersonation-resolve.html" title="Resolución de identidad preview" loading="lazy"></iframe><a class="preview-link" href="07c-impersonation-resolve.html" target="_blank" rel="noopener" aria-label="Open Resolución de identidad"></a></div>
+        <div class="card-body">
+          <div class="card-meta"><span class="badge badge-workflow">Workflow</span><span class="card-index">07c</span></div>
+          <h3 class="card-title">Resolución de identidad (getCurrentUser)</h3>
+          <p class="card-desc">How every request resolves real vs. impersonated identity, including auto-expiry and auto-termination.</p>
+          <div class="card-links"><a href="07c-impersonation-resolve.html" target="_blank" rel="noopener">Open diagram ↗</a><a href="src/07c-impersonation-resolve.json" target="_blank" rel="noopener">View spec</a></div>
+        </div>
+      </article>
+
+    </div>
+
+    <footer>
+      Generated with the <code>archify</code> skill from specs in <code>docs/diagrams/src/*.json</code>.
+      After changing app behavior, regenerate the affected diagram rather than hand-editing the HTML —
+      see <a href="README.md">README.md</a> for the file layout.
+    </footer>
+  </div>
+
+<script>
+  (function () {
+    "use strict";
+
+    function readStoredTheme() {
+      try { return localStorage.getItem("holly-money-gallery-theme"); } catch (e) { return null; }
+    }
+    function storeTheme(value) {
+      try { localStorage.setItem("holly-money-gallery-theme", value); } catch (e) { /* ignore */ }
+    }
+
+    var root = document.documentElement;
+    var initial = readStoredTheme() || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    root.setAttribute("data-theme", initial);
+
+    var iframes = Array.prototype.slice.call(document.querySelectorAll(".pv"));
+
+    function fitPreviewToDiagram(frame) {
+      try {
+        var svg = frame.contentDocument && frame.contentDocument.querySelector(".diagram-container svg, svg");
+        if (!svg) return;
+        var viewBox = svg.getAttribute("viewBox");
+        if (!viewBox) return;
+        var parts = viewBox.split(/\s+/).map(Number);
+        var w = parts[2], h = parts[3];
+        if (!w || !h) return;
+        frame.parentElement.style.aspectRatio = w + " / " + h;
+      } catch (e) {
+        /* cross-origin or not-yet-ready — keep the default 16:9 box */
+      }
+    }
+
+    function applyPreviewTheme(theme) {
+      iframes.forEach(function (frame) {
+        var base = frame.getAttribute("data-src");
+        frame.src = base + "?embed=1&theme=" + theme;
+        frame.onload = function () { fitPreviewToDiagram(frame); };
+      });
+    }
+
+    var toggle = document.getElementById("theme-toggle");
+    function setTheme(theme) {
+      root.setAttribute("data-theme", theme);
+      storeTheme(theme);
+      toggle.textContent = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+      applyPreviewTheme(theme);
+    }
+    toggle.addEventListener("click", function () {
+      setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    });
+    setTheme(initial);
+
+    var filters = document.querySelectorAll("#filters .pill");
+    var cards = document.querySelectorAll("#grid .card");
+    filters.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        filters.forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+        btn.setAttribute("aria-pressed", "true");
+        var wanted = btn.getAttribute("data-filter");
+        cards.forEach(function (card) {
+          var show = wanted === "all" || card.getAttribute("data-type") === wanted;
+          card.hidden = !show;
+        });
+      });
+    });
+  })();
+</script>
+</body>
+</html>

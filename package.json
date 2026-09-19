@@ -15,7 +15,7 @@
     "test:e2e": "playwright test",
     "ci": "pnpm run lint && pnpm run typecheck",
     "email:dev": "email dev --dir emails --port 3001",
-    "docs": "node scripts/open-diagrams.mjs"
+    "docs": "node scripts/serve-diagrams.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

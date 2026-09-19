@@ -37,7 +37,7 @@ pnpm types:generate
 # React Email dev server (emails/ directory, port 3001)
 pnpm email:dev
 
-# Open an index of all architecture/flow diagrams (docs/diagrams/) in the browser
+# Serve docs/diagrams/ and open the diagram gallery in the browser
 pnpm docs
 ```
 

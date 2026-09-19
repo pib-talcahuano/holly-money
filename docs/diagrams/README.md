@@ -8,11 +8,16 @@ render them inline, so review them locally with:
 pnpm docs
 ```
 
-which opens a small index page linking to every diagram in this folder. Or open one directly
-(double-click, or `open docs/diagrams/00-architecture.html`).
+which serves this folder locally and opens [`gallery.html`](gallery.html) — a browsable, filterable
+gallery with a live (not screenshotted) preview of every diagram, in light or dark. A plain
+`open gallery.html` also works for a quick look, but its embedded previews are more reliable
+served over `http://` than `file://` (some browsers restrict nested `file://` iframes), which is
+exactly what `pnpm docs` does. Or open one diagram directly, e.g.
+`open docs/diagrams/00-architecture.html`.
 
 Each diagram's authoring spec lives alongside in [`src/`](src/) so it can be edited without
-reverse-engineering the rendered SVG — regenerate with the `archify` skill/CLI after editing a spec.
+reverse-engineering the rendered SVG — regenerate with the `archify` skill/CLI after editing a spec,
+then update its card in `gallery.html` if the title/description/type changed.
 
 - [`00-architecture.html`](00-architecture.html) — system architecture: Next.js App Router → service layer → Supabase (Postgres/Auth/Storage), RBAC, and the Resend/admin-client side-effects.
 - [`01-file-uploading.html`](01-file-uploading.html) — attachment upload: client-side compression → server action → server-side (sharp) re-compression → Supabase Storage; retrieval via signed URL through `/api/attachments/[bucket]/[...path]`.
