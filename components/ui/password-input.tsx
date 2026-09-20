@@ -4,7 +4,7 @@ import { useState, forwardRef } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupInlineEnd } from "@/components/ui/input-group"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 
 export const PasswordInput = forwardRef<HTMLInputElement, React.ComponentProps<typeof Input>>(
   ({ className, ...props }, ref) => {
@@ -12,13 +12,13 @@ export const PasswordInput = forwardRef<HTMLInputElement, React.ComponentProps<t
 
     return (
       <InputGroup>
-        <Input
+        <InputGroupInput
           ref={ref}
           type={show ? "text" : "password"}
-          className={cn("pr-10", className)}
+          className={cn(className)}
           {...props}
         />
-        <InputGroupInlineEnd>
+        <InputGroupAddon align="inline-end">
           <button
             type="button"
             onClick={() => setShow((v) => !v)}
@@ -27,7 +27,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, React.ComponentProps<t
           >
             {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
-        </InputGroupInlineEnd>
+        </InputGroupAddon>
       </InputGroup>
     )
   }

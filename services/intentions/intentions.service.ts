@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { unstable_cache, revalidateTag } from "next/cache"
 import type { Database } from "@/types/database.types"
 import { auditService } from "@/services/audit/audit.service"
 import {
@@ -7,6 +8,7 @@ import {
   sendTransferNotification
 } from "@/services/email/workflow-emails.service"
 import { insertMovementAttachments } from "@/services/movements/movements.service"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import type {
   CreateIntentionInput,
   ReviewIntentionInput,
@@ -17,6 +19,7 @@ import type {
 type DB = SupabaseClient<Database>
 
 const CANCELLABLE_STATUSES = ["DRAFT", "PENDING"] as const
+const RECENT_PURPOSES_TAG = "recent-purposes"
 
 export const intentionsService = {
   async list(db: DB, filters?: { ministryId?: string; status?: string }) {
@@ -61,6 +64,28 @@ export const intentionsService = {
       .single()
     if (error) throw error
     return data
+  },
+
+  async listRecentPurposes(db: DB, userId: string, limit = 8) {
+    const { data, error } = await db
+      .from("budget_intentions")
+      .select("purpose")
+      .eq("requested_by", userId)
+      .order("created_at", { ascending: false })
+      .limit(50)
+    if (error) throw error
+
+    const seen = new Set<string>()
+    const purposes: string[] = []
+    for (const row of data) {
+      if (!row.purpose) continue
+      const key = row.purpose.trim().toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      purposes.push(row.purpose.trim())
+      if (purposes.length >= limit) break
+    }
+    return purposes
   },
 
   async create(db: DB, input: CreateIntentionInput, userId: string, ministryId: string) {
@@ -364,4 +389,21 @@ export const intentionsService = {
     const transferredIds = new Set((transfers ?? []).map((t) => t.intention_id))
     return approvedIds.filter((id) => !transferredIds.has(id)).length
   }
+}
+
+// Cached across requests per user for 15 min. Tag-invalidated when a request is created.
+// Uses the admin client (bypasses RLS, scoped explicitly by userId instead) because
+// unstable_cache cannot call cookies() internally — same constraint and shape as
+// getPermissionsForRole in lib/supabase/server.ts.
+export const getCachedRecentPurposes = unstable_cache(
+  async (userId: string) => {
+    const admin = createSupabaseAdminClient()
+    return intentionsService.listRecentPurposes(admin, userId)
+  },
+  ["recent-purposes"],
+  { tags: [RECENT_PURPOSES_TAG], revalidate: 900 }
+)
+
+export function revalidateRecentPurposes() {
+  revalidateTag(RECENT_PURPOSES_TAG, "minutes")
 }

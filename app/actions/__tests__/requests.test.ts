@@ -1,4 +1,11 @@
-import { createRequest, reviewRequest, submitRequest, cancelRequest, addComment } from "../requests"
+import {
+  createRequest,
+  reviewRequest,
+  submitRequest,
+  cancelRequest,
+  addComment,
+  getRecentPurposes
+} from "../requests"
 
 const mockGetCurrentUser = jest.fn()
 const mockDb = {}
@@ -12,6 +19,8 @@ const mockCancel = jest.fn()
 const mockRegisterTransfer = jest.fn()
 const mockAddComment = jest.fn()
 const mockRevalidatePath = jest.fn()
+const mockGetCachedRecentPurposes = jest.fn()
+const mockRevalidateRecentPurposes = jest.fn()
 
 jest.mock("@/lib/supabase/server", () => ({
   getCurrentUser: () => mockGetCurrentUser(),
@@ -38,7 +47,9 @@ jest.mock("@/services/intentions/intentions.service", () => ({
     cancel: (...args: unknown[]) => mockCancel(...args),
     registerTransfer: (...args: unknown[]) => mockRegisterTransfer(...args),
     addComment: (...args: unknown[]) => mockAddComment(...args)
-  }
+  },
+  getCachedRecentPurposes: (...args: unknown[]) => mockGetCachedRecentPurposes(...args),
+  revalidateRecentPurposes: (...args: unknown[]) => mockRevalidateRecentPurposes(...args)
 }))
 
 jest.mock("@/services/ministries/ministries.service", () => ({
@@ -90,7 +101,42 @@ describe("createRequest", () => {
 
     expect(mockCreate).toHaveBeenCalledWith(mockDb, requestInput, mockUser.id, "m-1")
     expect(mockRevalidatePath).toHaveBeenCalledWith("/requests")
+    expect(mockRevalidateRecentPurposes).toHaveBeenCalled()
     expect(data).toEqual(created)
+  })
+})
+
+describe("getRecentPurposes", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("returns [] when unauthenticated", async () => {
+    mockGetCurrentUser.mockResolvedValue(null)
+
+    const result = await getRecentPurposes()
+
+    expect(result).toEqual([])
+    expect(mockGetCachedRecentPurposes).not.toHaveBeenCalled()
+  })
+
+  it("returns [] when lacking CREATE_REQUEST permission", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(false)
+
+    const result = await getRecentPurposes()
+
+    expect(result).toEqual([])
+    expect(mockGetCachedRecentPurposes).not.toHaveBeenCalled()
+  })
+
+  it("delegates to the cached lookup for the current user", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockGetCachedRecentPurposes.mockResolvedValue(["Campamento"])
+
+    const result = await getRecentPurposes()
+
+    expect(mockGetCachedRecentPurposes).toHaveBeenCalledWith(mockUser.id)
+    expect(result).toEqual(["Campamento"])
   })
 })
 

@@ -1,13 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm, Controller, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { Plus, Target, Calendar, Wallet, DollarSign, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
+import {
+  Autocomplete,
+  AutocompleteInput,
+  AutocompleteContent,
+  AutocompleteList,
+  AutocompleteItem,
+  AutocompleteEmpty
+} from "@/components/ui/autocomplete"
 import {
   Dialog,
   DialogContent,
@@ -22,7 +29,7 @@ import { DatePicker } from "@/components/ui/date-picker"
 import { createIntentionSchema } from "@/lib/validators/intention"
 import type { CreateIntentionInput } from "@/lib/validators/intention"
 import { MIN_REQUEST_AMOUNT, MAX_REQUEST_AMOUNT } from "@/lib/constants/requests"
-import { createRequest } from "@/app/actions/requests"
+import { createRequest, getRecentPurposes } from "@/app/actions/requests"
 
 type IntentionFormValues = Omit<CreateIntentionInput, "amount"> & { amount: string }
 
@@ -40,6 +47,14 @@ export function NewRequestDialog({
   onCreated?: (created: Awaited<ReturnType<typeof createRequest>>) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [recentPurposes, setRecentPurposes] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!open) return
+    getRecentPurposes()
+      .then(setRecentPurposes)
+      .catch(() => setRecentPurposes([]))
+  }, [open])
 
   const form = useForm<IntentionFormValues, unknown, CreateIntentionInput>({
     resolver: zodResolver(createIntentionSchema) as Resolver<
@@ -99,10 +114,27 @@ export function NewRequestDialog({
               <Target className="size-3.5" />
               Propósito *
             </FieldLabel>
-            <Input
-              id="int-purpose"
-              placeholder="Ej: Materiales para campamento de jóvenes"
-              {...form.register("purpose")}
+            <Controller
+              control={form.control}
+              name="purpose"
+              render={({ field }) => (
+                <Autocomplete items={recentPurposes} value={field.value} onValueChange={field.onChange}>
+                  <AutocompleteInput
+                    id="int-purpose"
+                    placeholder="Ej: Materiales para campamento de jóvenes"
+                    onBlur={field.onBlur}
+                    showTrigger={recentPurposes.length > 0}
+                  />
+                  {recentPurposes.length > 0 && (
+                    <AutocompleteContent>
+                      <AutocompleteEmpty>Sin coincidencias</AutocompleteEmpty>
+                      <AutocompleteList>
+                        {(item: string) => <AutocompleteItem key={item} value={item}>{item}</AutocompleteItem>}
+                      </AutocompleteList>
+                    </AutocompleteContent>
+                  )}
+                </Autocomplete>
+              )}
             />
             <FieldError errors={[form.formState.errors.purpose]} />
           </Field>

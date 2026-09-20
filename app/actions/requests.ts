@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache"
 import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/server"
 import { PERMISSIONS, can, canAccessWorkflow } from "@/lib/permissions/rbac"
-import { intentionsService } from "@/services/intentions/intentions.service"
+import {
+  intentionsService,
+  getCachedRecentPurposes,
+  revalidateRecentPurposes
+} from "@/services/intentions/intentions.service"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import { registerTransferSchema } from "@/lib/validators/intention"
 import type {
@@ -28,7 +32,16 @@ export async function createRequest(input: CreateIntentionInput) {
   const created = await intentionsService.create(db, input, user.id, assignment.ministry_id)
   revalidatePath("/requests")
   revalidatePath(`/ministries/${assignment.ministry_id}`)
+  revalidateRecentPurposes()
   return created
+}
+
+export async function getRecentPurposes() {
+  const user = await getCurrentUser()
+  if (!user || !can(user.permissions, PERMISSIONS.CREATE_REQUEST)) {
+    return []
+  }
+  return getCachedRecentPurposes(user.id)
 }
 
 export async function submitRequest(id: string) {
