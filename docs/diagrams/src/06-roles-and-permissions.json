@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Resolución de permisos por request",
+    "output": "06-roles-and-permissions.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "identity", "label": "Identidad", "focus": ["req", "realUser", "impCheck", "identity"], "note": "getRealUser() siempre resuelve la identidad autenticada; la suplantación la superpone después." },
+      { "id": "authorization", "label": "Permisos y autorización", "focus": ["identity", "getPerm", "permsSet"], "note": "can() es el único punto de verdad — nunca se compara el string del rol." }
+    ]
+  },
+  "lanes": [
+    { "id": "request", "label": "Solicitud" },
+    { "id": "identidad", "label": "Identidad" },
+    { "id": "permisos", "label": "Permisos" }
+  ],
+  "mainPath": ["req", "realUser", "impCheck", "identity", "getPerm", "permsSet"],
+  "nodes": [
+    { "id": "req", "lane": "request", "col": 0, "type": "external", "label": "Llega un request", "sublabel": "API, acción o página", "width": 150 },
+    { "id": "realUser", "lane": "identidad", "col": 1, "type": "backend", "label": "getRealUser()", "sublabel": "sesión Supabase + public.users", "width": 150 },
+    { "id": "impCheck", "lane": "identidad", "col": 2, "type": "security", "label": "¿Suplantación activa?", "sublabel": "cookie impersonation_session", "width": 170 },
+    { "id": "identity", "lane": "identidad", "col": 3, "type": "backend", "label": "Identidad efectiva", "sublabel": "real o usuario suplantado", "width": 160 },
+    { "id": "getPerm", "lane": "permisos", "col": 4, "type": "backend", "label": "getPermissionsForRole(role)", "sublabel": "caché 24h; en miss consulta role_permissions", "tag": "unstable_cache", "width": 230 },
+    { "id": "permsSet", "lane": "permisos", "col": 5, "type": "security", "label": "user.permissions", "sublabel": "Set<Permission> → can(permissions, X)", "width": 190 }
+  ],
+  "edges": [
+    { "id": "req-realUser", "from": "req", "to": "realUser", "variant": "emphasis" },
+    { "id": "realUser-impCheck", "from": "realUser", "to": "impCheck" },
+    { "id": "impCheck-identity-no", "from": "impCheck", "to": "identity", "label": "no", "variant": "emphasis" },
+    { "id": "impCheck-identity-yes", "from": "impCheck", "to": "identity", "label": "sí, vigente", "variant": "dashed" },
+    { "id": "identity-getPerm", "from": "identity", "to": "getPerm", "variant": "emphasis" },
+    { "id": "getPerm-permsSet", "from": "getPerm", "to": "permsSet", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Alcance, no permisos extra", "items": ["VIEW_WORKFLOW existe pero no está en la matriz editable — el acceso real llega vía CREATE_REQUEST/CREATE_SETTLEMENT/REVIEW_INTENTIONS", "isMinisterWorkflowUser() (CREATE_REQUEST/CREATE_SETTLEMENT) + RLS limitan a un MINISTER a su propio ministerio"] },
+    { "dot": "emerald", "title": "Caché invalidable al instante", "items": ["TTL de 24h vía unstable_cache, tag role-permissions", "revalidateTag() la invalida de inmediato al editar la matriz — ver diagrama de edición"] }
+  ]
+}

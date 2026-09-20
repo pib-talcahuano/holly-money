@@ -1,0 +1,68 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Envío y recepción de correo",
+    "output": "05-email-send-receive.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "external": { "label": "Origen / servicio externo" },
+        "backend": { "label": "Lógica de servidor" },
+        "frontend": { "label": "Plantilla" },
+        "security": { "label": "Verificación" },
+        "messagebus": { "label": "Webhook" },
+        "database": { "label": "Estado persistido" }
+      }
+    },
+    "views": [
+      { "id": "salida", "label": "Salida", "focus": ["trigger", "integrations", "template", "resend_send", "recipients", "status"], "note": "Un evento del sistema termina en un correo transaccional enviado por Resend." },
+      { "id": "entrada", "label": "Entrada", "focus": ["inbound_trigger", "webhook", "verify", "lookup", "forward"], "note": "Un correo entrante se reenvía al buzón real solo si su firma y ruta son válidas." },
+      { "id": "excepciones", "label": "Casos sin envío", "focus": ["verify", "unauthorized", "lookup", "noroute", "status"], "note": "Ningún caso de error revela información: responde 200/estado normal sin filtrar detalles." }
+    ]
+  },
+  "lanes": [
+    { "id": "salida", "label": "Salida" },
+    { "id": "entrada", "label": "Entrada" },
+    { "id": "excepciones", "label": "Casos sin envío", "variant": "exception" }
+  ],
+  "mainPath": ["trigger", "integrations", "template", "resend_send", "recipients", "status"],
+  "nodes": [
+    { "id": "trigger", "lane": "salida", "col": 0, "type": "external", "label": "Evento", "sublabel": "movimiento/solicitud", "width": 128 },
+    { "id": "integrations", "lane": "salida", "col": 1, "type": "backend", "label": "movement-postprocess", "sublabel": "+ workflow-emails", "width": 160 },
+    { "id": "template", "lane": "salida", "col": 2, "type": "frontend", "label": "React Email", "sublabel": "emails/*.tsx", "width": 118 },
+    { "id": "resend_send", "lane": "salida", "col": 3, "type": "external", "label": "Resend send()", "sublabel": "SDK de Resend", "width": 128 },
+    { "id": "recipients", "lane": "salida", "col": 4, "type": "backend", "label": "Destinatarios", "sublabel": "NOTIFICATION_EMAIL", "width": 148 },
+    { "id": "status", "lane": "salida", "col": 5, "type": "database", "label": "notification_status", "sublabel": "SENT/SKIPPED/ERROR", "tag": "sin PDF ni Sheets", "width": 160 },
+
+    { "id": "inbound_trigger", "lane": "entrada", "col": 0, "type": "external", "label": "Correo entrante", "sublabel": "*@pibtalcahuano.com", "width": 138 },
+    { "id": "webhook", "lane": "entrada", "col": 1, "type": "messagebus", "label": "Webhook Resend", "sublabel": "email.received", "width": 128 },
+    { "id": "verify", "lane": "entrada", "col": 2, "type": "security", "label": "Verifica firma", "sublabel": "svix + secreto", "width": 128 },
+    { "id": "lookup", "lane": "entrada", "col": 3, "type": "backend", "label": "Busca ruta", "sublabel": "email_routes", "width": 118 },
+    { "id": "forward", "lane": "entrada", "col": 4, "type": "external", "label": "forward()", "sublabel": "buzón mapeado", "width": 118 },
+
+    { "id": "unauthorized", "lane": "excepciones", "col": 2, "type": "security", "label": "401", "sublabel": "firma inválida", "width": 118 },
+    { "id": "noroute", "lane": "excepciones", "col": 3, "type": "external", "label": "200 sin acción", "sublabel": "sin ruta", "width": 128 }
+  ],
+  "edges": [
+    { "from": "trigger", "to": "integrations", "variant": "emphasis" },
+    { "from": "integrations", "to": "template" },
+    { "from": "template", "to": "resend_send" },
+    { "from": "resend_send", "to": "recipients" },
+    { "from": "recipients", "to": "status", "label": "persiste resultado" },
+
+    { "from": "inbound_trigger", "to": "webhook", "variant": "emphasis" },
+    { "from": "webhook", "to": "verify" },
+    { "from": "verify", "to": "lookup", "label": "firma válida" },
+    { "from": "lookup", "to": "forward", "label": "ruta encontrada" },
+
+    { "from": "verify", "to": "unauthorized", "label": "firma inválida", "variant": "security", "role": "error" },
+    { "from": "lookup", "to": "noroute", "label": "sin mapeo", "variant": "dashed", "role": "error" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Salida", "items": ["Un solo canal: Resend. El pipeline de PDF + Sheets fue removido", "El estado siempre se persiste en notification_status, incluso sin destinatario (SKIPPED)"] },
+    { "dot": "emerald", "title": "Entrada", "items": ["Solo @pibtalcahuano.com activa una búsqueda de ruta", "Un correo puede reenviarse a varios destinatarios a la vez"] },
+    { "dot": "rose", "title": "Seguridad", "items": ["Toda request se verifica con svix antes de leer el payload", "Sin ruta configurada responde 200 igual — no hay enumeración posible"] },
+    { "dot": "amber", "title": "Nombre heredado", "items": ["regenerate-pdf ya no genera PDF — solo reintenta el envío del correo"] }
+  ]
+}

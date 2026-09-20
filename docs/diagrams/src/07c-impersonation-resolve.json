@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Resolución de identidad (getCurrentUser)",
+    "output": "07c-impersonation-resolve.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "request", "label": "Request" },
+    { "id": "server", "label": "getCurrentUser()" },
+    { "id": "active", "label": "Identidad resuelta" },
+    { "id": "fallback", "label": "Identidad real (fallback)", "variant": "exception" }
+  ],
+  "mainPath": ["request_in", "load_real", "check_cookie", "resolve_session", "load_target", "identity_target"],
+  "nodes": [
+    { "id": "request_in", "lane": "request", "col": 0, "type": "external", "label": "Llega un request", "sublabel": "API route, action o página", "width": 160 },
+    { "id": "load_real", "lane": "server", "col": 1, "type": "backend", "label": "getRealUser()", "sublabel": "identidad real del admin", "width": 160 },
+    { "id": "check_cookie", "lane": "server", "col": 2, "type": "backend", "label": "¿Cookie presente?", "sublabel": "impersonation_session", "width": 160 },
+    { "id": "resolve_session", "lane": "server", "col": 3, "type": "backend", "label": "Busca y valida sesión", "sublabel": "id + impersonator_id, expires_at", "width": 190 },
+    { "id": "load_target", "lane": "server", "col": 4, "type": "backend", "label": "Carga perfil objetivo", "sublabel": "loadIdentity(target_user_id)", "width": 180 },
+    { "id": "identity_target", "lane": "active", "col": 5, "type": "security", "label": "Identidad = objetivo", "sublabel": "impersonatorId = admin real", "width": 170 },
+    { "id": "fallback_real", "lane": "fallback", "col": 5, "type": "security", "label": "Identidad = admin real", "sublabel": "impersonatorId: null", "width": 175 }
+  ],
+  "edges": [
+    { "id": "e1", "from": "request_in", "to": "load_real", "variant": "default" },
+    { "id": "e2", "from": "load_real", "to": "check_cookie", "variant": "default" },
+    { "id": "e3", "from": "check_cookie", "to": "resolve_session", "label": "sí", "variant": "default" },
+    { "id": "e4", "from": "check_cookie", "to": "fallback_real", "label": "no", "variant": "dashed", "role": "branch" },
+    { "id": "e5", "from": "resolve_session", "to": "load_target", "label": "vigente", "variant": "emphasis" },
+    { "id": "e6", "from": "resolve_session", "to": "fallback_real", "label": "no existe o expiró", "variant": "dashed", "role": "branch" },
+    { "id": "e7", "from": "load_target", "to": "identity_target", "label": "objetivo ACTIVE", "variant": "emphasis" },
+    { "id": "e8", "from": "load_target", "to": "fallback_real", "label": "objetivo ya no ACTIVE", "variant": "dashed", "role": "branch" }
+  ],
+  "cards": [
+    { "dot": "amber", "title": "Motivos de cierre (ended_reason)", "items": ["expired, target_inactive — automáticos, sin error para el usuario", "manual — el admin la detiene; forced — reservado, no usado aún"] },
+    { "dot": "rose", "title": "MANAGE_USERS queda bloqueado", "items": ["isImpersonating(user) en rbac.ts lo bloquea aunque el rol lo permita", "Se aplica en cada ruta de gestión de usuarios, no en esta resolución"] },
+    { "dot": "cyan", "title": "Ver también", "items": ["07b-impersonation-start.html — cómo se crea la sesión", "06-roles-and-permissions.html — permisos del rol"] }
+  ]
+}

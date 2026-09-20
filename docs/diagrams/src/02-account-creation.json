@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Creación de cuenta (invitación de ADMIN)",
+    "output": "02-account-creation.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "admin", "label": "ADMIN" },
+    { "id": "backend", "label": "Backend" },
+    { "id": "newuser", "label": "Nuevo usuario" },
+    { "id": "exceptions", "label": "Casos de error", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "invite", "label": "Invitación", "fromCol": 0, "toCol": 2 },
+    { "id": "onboard", "label": "Activación", "fromCol": 3, "toCol": 5 }
+  ],
+  "mainPath": ["invite_form", "check_access", "check_existing", "create_invite", "notify", "activate"],
+  "nodes": [
+    { "id": "invite_form", "lane": "admin", "col": 0, "type": "frontend", "label": "Invitar usuario", "sublabel": "inviteUser()", "width": 150 },
+    { "id": "check_access", "lane": "backend", "col": 1, "type": "security", "label": "Verifica acceso", "sublabel": "can(MANAGE_USERS)", "width": 140 },
+    { "id": "access_denied", "lane": "exceptions", "col": 1, "type": "security", "label": "Acceso denegado", "sublabel": "sin cambios", "width": 130 },
+    { "id": "check_existing", "lane": "backend", "col": 2, "type": "backend", "label": "¿Email duplicado?", "sublabel": "usersService.invite()", "width": 150 },
+    { "id": "already_invited", "lane": "exceptions", "col": 2, "type": "security", "label": "Ya invitado", "sublabel": "email duplicado", "width": 130 },
+    { "id": "create_invite", "lane": "backend", "col": 3, "type": "database", "label": "Crea invitación", "sublabel": "generateLink + PENDING_ACTIVATION", "width": 180 },
+    { "id": "notify", "lane": "backend", "col": 4, "type": "external", "label": "Envía el correo", "sublabel": "sendInviteEmail + auditService", "tag": "Resend", "width": 170 },
+    { "id": "activate", "lane": "newuser", "col": 5, "type": "frontend", "label": "Activa su cuenta", "sublabel": "verifyOtp → activateAccount()", "tag": "status: ACTIVE", "width": 180 },
+    { "id": "link_expired", "lane": "exceptions", "col": 5, "type": "security", "label": "Token inválido", "sublabel": "redirige a /", "width": 130 }
+  ],
+  "edges": [
+    { "from": "invite_form", "to": "check_access", "label": "envía datos del formulario" },
+    { "from": "check_access", "to": "access_denied", "variant": "security", "role": "branch", "route": "straight", "fromSide": "bottom", "toSide": "top" },
+    { "from": "check_access", "to": "check_existing", "label": "autorizado" },
+    { "from": "check_existing", "to": "already_invited", "variant": "security", "role": "branch", "route": "straight", "fromSide": "bottom", "toSide": "top" },
+    { "from": "check_existing", "to": "create_invite", "label": "email disponible" },
+    { "from": "create_invite", "to": "notify", "label": "usuario creado" },
+    { "from": "notify", "to": "activate", "label": "usuario hace clic en el enlace del correo" },
+    { "from": "activate", "to": "link_expired", "variant": "dashed", "role": "error", "route": "straight", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Sin registro público", "items": ["Solo un ADMIN con MANAGE_USERS puede crear cuentas", "Un ADMIN suplantando a otro usuario no puede invitar (isImpersonating)"] },
+    { "dot": "emerald", "title": "El usuario define su propia contraseña", "items": ["El ADMIN nunca ve ni asigna una contraseña", "generateLink({type:'invite'}) crea auth.users; public.users queda en PENDING_ACTIVATION"] },
+    { "dot": "rose", "title": "El enlace pasa por nuestra propia verificación", "items": ["wrapAuthLink reescribe el link de Supabase hacia /api/auth/verify", "verifyOtp(token_hash, type) valida el token antes de dejar definir contraseña"] }
+  ]
+}

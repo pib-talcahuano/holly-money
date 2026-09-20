@@ -1,5 +1,8 @@
 # System Architecture
 
+See also the interactive diagram: [`docs/diagrams/00-architecture.html`](diagrams/00-architecture.html)
+(open locally in a browser — GitHub doesn't render standalone HTML inline).
+
 ## Overview
 
 Next.js 16 App Router application backed by Supabase (PostgreSQL + Auth).
@@ -41,8 +44,6 @@ API route or server action
       → service uses Supabase server client
       → service calls auditService (audit log)
   → (movements) call processMovementIntegrations
-      → PDF via Google Apps Script
-      → Sheets sync via Google Apps Script
       → Email notification via Resend
 ```
 
@@ -116,16 +117,12 @@ Services:
 
 See [email.md](email.md) for configuration and template details.
 
-## Google integrations (optional)
+## Movement post-processing
 
-Three outbound webhooks via Google Apps Script:
-
-1. PDF generation + Google Drive storage
-2. Email notification (legacy — superseded by Resend for transactional email)
-3. Google Sheets sync
-
-All triggered in `services/google/movement-postprocess.ts` after movement create/edit.
-Integration state tracked on `movements` (`pdf_status`, `synced_to_sheet`, `notification_status`).
+`services/google/movement-postprocess.ts` runs after a movement is created/edited. The earlier
+Google Apps Script pipeline (PDF generation + Google Drive storage, Google Sheets sync) has been
+removed entirely — it now only sends an email notification via Resend (`sendMovementEmail`).
+Integration state is tracked on `movements` via `notification_status` / `notification_error`.
 
 ## Database schema
 
