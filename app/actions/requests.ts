@@ -27,6 +27,7 @@ export async function createRequest(input: CreateIntentionInput) {
 
   const created = await intentionsService.create(db, input, user.id, assignment.ministry_id)
   revalidatePath("/requests")
+  revalidatePath(`/ministries/${assignment.ministry_id}`)
   return created
 }
 
