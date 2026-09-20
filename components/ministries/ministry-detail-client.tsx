@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
@@ -58,6 +59,7 @@ import { USER_ROLES } from "@/lib/constants/roles"
 import type { MinistryLeftoverRow } from "@/services/ministries/ministry-leftover.service"
 import type { intentionsService } from "@/services/intentions/intentions.service"
 import type { ministriesService } from "@/services/ministries/ministries.service"
+import { NewRequestDialog } from "@/components/intentions/new-request-dialog"
 
 type Ministry = {
   id: string
@@ -106,6 +108,7 @@ type Props = {
   associatedMovements: AssociatedMovement[]
   canManage: boolean
   isAssignedMinister: boolean
+  canCreateRequest: boolean
 }
 
 const INTENTION_STATUS_BADGE = {
@@ -126,8 +129,10 @@ export function MinistryDetailClient({
   intentions,
   associatedMovements,
   canManage,
-  isAssignedMinister
+  isAssignedMinister,
+  canCreateRequest
 }: Props) {
+  const router = useRouter()
   const [ministry, setMinistry] = useState<Ministry>(initialMinistry)
   const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments)
   const [current, setCurrent] = useState<Assignment | null>(initialCurrent)
@@ -440,67 +445,72 @@ export function MinistryDetailClient({
           </div>
         </div>
 
-        {canManage && (
+        {(canManage || canCreateRequest) && (
           <div className="flex items-center gap-3">
-            <Dialog
-              open={editOpen}
-              onOpenChange={(o) => {
-                setEditOpen(o)
-                if (!o)
-                  editForm.reset({
-                    name: ministry.name,
-                    description: ministry.description ?? "",
-                    is_active: ministry.is_active
-                  })
-              }}
-            >
-              <DialogTrigger
-                render={
-                  <Button variant="outline">
-                    <Pencil className="size-4" />
-                    Editar
-                  </Button>
-                }
-              />
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Editar ministerio</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={editForm.handleSubmit(handleEdit)} className="space-y-4 pt-2">
-                  <Field>
-                    <FieldLabel htmlFor="edit-name">Nombre *</FieldLabel>
-                    <Input id="edit-name" {...editForm.register("name")} />
-                    <FieldError errors={[editForm.formState.errors.name]} />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="edit-description">Descripción</FieldLabel>
-                    <Input id="edit-description" {...editForm.register("description")} />
-                    <FieldError errors={[editForm.formState.errors.description]} />
-                  </Field>
-                  <Field>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        {...editForm.register("is_active")}
-                        className="size-4"
-                      />
-                      Ministerio activo
-                    </label>
-                  </Field>
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={editForm.formState.isSubmitting}
-                  >
-                    {editForm.formState.isSubmitting ? "Guardando..." : "Guardar cambios"}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-            <Button render={<Link href="/movements/new" />} nativeButton={false}>
-              <ArrowLeftRight className="size-4" />
-              Transferir fondos
-            </Button>
+            {canCreateRequest && <NewRequestDialog onCreated={() => router.refresh()} />}
+            {canManage && (
+              <>
+                <Dialog
+                  open={editOpen}
+                  onOpenChange={(o) => {
+                    setEditOpen(o)
+                    if (!o)
+                      editForm.reset({
+                        name: ministry.name,
+                        description: ministry.description ?? "",
+                        is_active: ministry.is_active
+                      })
+                  }}
+                >
+                  <DialogTrigger
+                    render={
+                      <Button variant="outline">
+                        <Pencil className="size-4" />
+                        Editar
+                      </Button>
+                    }
+                  />
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Editar ministerio</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={editForm.handleSubmit(handleEdit)} className="space-y-4 pt-2">
+                      <Field>
+                        <FieldLabel htmlFor="edit-name">Nombre *</FieldLabel>
+                        <Input id="edit-name" {...editForm.register("name")} />
+                        <FieldError errors={[editForm.formState.errors.name]} />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="edit-description">Descripción</FieldLabel>
+                        <Input id="edit-description" {...editForm.register("description")} />
+                        <FieldError errors={[editForm.formState.errors.description]} />
+                      </Field>
+                      <Field>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            {...editForm.register("is_active")}
+                            className="size-4"
+                          />
+                          Ministerio activo
+                        </label>
+                      </Field>
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={editForm.formState.isSubmitting}
+                      >
+                        {editForm.formState.isSubmitting ? "Guardando..." : "Guardar cambios"}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+                <Button render={<Link href="/movements/new" />} nativeButton={false}>
+                  <ArrowLeftRight className="size-4" />
+                  Transferir fondos
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -666,8 +676,8 @@ export function MinistryDetailClient({
                 </Dialog>
               </div>
               <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                Pueden actuar en nombre del ministerio. El ministro asignado también puede
-                gestionar sus propios delegados.
+                Pueden actuar en nombre del ministerio. El ministro asignado también puede gestionar
+                sus propios delegados.
               </p>
               {delegates.length === 0 ? (
                 <p className="text-[12.5px] text-faint py-1">Sin delegados asignados.</p>

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation"
 import { dashboardService } from "@/services/dashboard/dashboard.service"
-import { getCurrentUser } from "@/lib/supabase/server"
+import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/server"
 import { PERMISSIONS, can } from "@/lib/permissions/rbac"
+import { ministriesService } from "@/services/ministries/ministries.service"
 import {
   IncomeExpenseChart,
   CategoryChart,
@@ -28,7 +29,13 @@ export default async function DashboardPage({
   const to = (await searchParams)?.to
   const user = await getCurrentUser()
   if (!user) redirect("/")
-  if (!can(user.permissions, PERMISSIONS.VIEW_DASHBOARD)) redirect("/requests")
+  if (!can(user.permissions, PERMISSIONS.VIEW_DASHBOARD)) {
+    // MINISTER/DELEGATE lack VIEW_DASHBOARD by default — land them on their own
+    // ministry page instead of the general dashboard they can't see.
+    const db = await createSupabaseServerClient()
+    const assignment = await ministriesService.getMinistryForUser(db, user.id)
+    redirect(assignment ? `/ministries/${assignment.ministry_id}` : "/requests")
+  }
   const canWrite = can(user?.permissions, PERMISSIONS.CREATE_MOVEMENT) ?? false
   const canViewFinanceWidgets = can(user?.permissions, PERMISSIONS.VIEW_MOVEMENT) ?? false
   const data = await dashboardService.getSummary(

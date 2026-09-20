@@ -45,6 +45,10 @@ type NavGroup = {
   links: NavLink[]
 }
 
+// Placeholder href swapped for the user's own ministry id at render time — the only
+// nav link whose destination isn't static (see visibleGroups below).
+const MY_MINISTRY_HREF = "/ministries/__mine__"
+
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Principal",
@@ -78,6 +82,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Ministerios",
     links: [
       { href: "/ministries", label: "Ministerios", icon: Landmark, roles: ["ADMIN", "BURSAR"] },
+      {
+        href: MY_MINISTRY_HREF,
+        label: "Mi ministerio",
+        icon: Landmark,
+        roles: ["MINISTER", "DELEGATE"]
+      },
       {
         href: "/requests",
         label: "Solicitudes",
@@ -120,6 +130,7 @@ export function AppSidebar({
     email: string
     initials: string
     role: string
+    ministryId?: string | null
   }
 }) {
   const pathname = usePathname()
@@ -129,9 +140,14 @@ export function AppSidebar({
     () =>
       NAV_GROUPS.map((group) => ({
         ...group,
-        links: group.links.filter((l) => !l.roles || l.roles.includes(user.role))
+        links: group.links
+          .filter((l) => !l.roles || l.roles.includes(user.role))
+          .filter((l) => l.href !== MY_MINISTRY_HREF || user.ministryId)
+          .map((l) =>
+            l.href === MY_MINISTRY_HREF ? { ...l, href: `/ministries/${user.ministryId}` } : l
+          )
       })).filter((group) => group.links.length > 0),
-    [user.role]
+    [user.role, user.ministryId]
   )
 
   const useGroups = useMemo(
