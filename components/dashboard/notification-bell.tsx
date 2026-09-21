@@ -18,19 +18,15 @@ import {
 } from "@/lib/notifications"
 
 export function NotificationBell() {
-  const [count, setCount] = useState(0)
   const [items, setItems] = useState<NotificationItem[]>([])
   const [readKeys, setReadKeys] = useState<Set<string>>(() => loadReadSet())
   const [open, setOpen] = useState(false)
 
   const fetchNotifications = useCallback(() => {
     fetch("/api/notifications")
-      .then((res) =>
-        res.ok ? (res.json() as Promise<{ count?: number; items?: NotificationItem[] }>) : null
-      )
+      .then((res) => (res.ok ? (res.json() as Promise<{ items?: NotificationItem[] }>) : null))
       .then((data) => {
         if (!data) return
-        setCount(data.count ?? 0)
         setItems(data.items ?? [])
       })
       .catch(() => null)
@@ -67,9 +63,9 @@ export function NotificationBell() {
             aria-label="Notificaciones"
           >
             <Bell className="size-4" />
-            {count > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute -top-[3px] -right-[3px] flex size-[15px] items-center justify-center rounded-full bg-expense text-[9px] font-bold text-white">
-                {count > 9 ? "9+" : count}
+                {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </Button>
@@ -110,7 +106,7 @@ export function NotificationBell() {
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="max-h-[360px] divide-y divide-border overflow-y-auto">
             {items.map((item, i) => {
               const meta = NOTIFICATION_META[item.type]
               const Icon = meta.icon
