@@ -211,19 +211,26 @@
 
 ---
 
-### Task 8: Documentación
-- [ ] `docs/flows.md`: nueva sección "presupuesto por ministerio: carga inicial + consumo automático", mismo formato que la sección de remanente (Etapa 7). Documentar explícitamente que editar las fechas de un período recalcula el consumo histórico (no es un valor congelado — ver Risks en `tasks/plan.md`)
-- [ ] Diagrama vía `/archify`, committeado en `docs/diagrams/` (no un artifact de Claude)
+### Task 8: Documentación — ✅ DONE
+- [x] `docs/flows.md`: nueva sección "Ministry Budget (Presupuesto por Ministerio — Etapa 10)", mismo formato que la sección de remanente (Etapa 7): fórmula en prosa + mermaid + dos callouts explícitos (recálculo retroactivo al editar fechas; constraint de no-solapamiento a nivel DB)
+- [x] Diagrama vía `/archify` (workflow, schema v2): `docs/diagrams/src/08-ministry-budget.json` → `docs/diagrams/08-ministry-budget.html`. Validación showcase: 9/9 checks, 0 errores, 0 warnings. `visual-check` en Chrome real: `pass` en 1440×900/1600×1000/1920×1080/2048×1320, light y dark. Revisión visual manual de las capturas (luz y oscuro) — legible, sin overflow, cards de contexto abajo. Sidecars de `visual-check` (PNGs/HTML/JSON de evidencia) borrados tras revisar — no se commitean, mismo patrón que el resto de `docs/diagrams/`.
+- [x] `docs/diagrams/README.md` y `docs/diagrams/gallery.html` actualizados con la entrada `08-ministry-budget`
 
 **Acceptance:**
-- [ ] La sección nueva de `docs/flows.md` referencia el spec (`docs/plans/10-presupuesto-por-ministerio.md`) y explica la fórmula de `usado` en prosa, no solo SQL
+- [x] La sección nueva de `docs/flows.md` referencia el spec (`docs/plans/10-presupuesto-por-ministerio.md`) y explica la fórmula de `usado` en prosa, no solo SQL
 
 **Verify:**
-- [ ] Revisión visual del diagrama generado (`pnpm docs`)
+- [x] `node archify.mjs validate workflow ... --quality showcase` → pass
+- [x] `node archify.mjs deliver workflow ...` → pass (SHA-256 + bytes reportados)
+- [x] `node archify.mjs visual-check ...` → pass, contención OK en los 4 viewports × 2 temas
+- [x] `pnpm run ci` — verde (sin impacto en lint/typecheck, son archivos estáticos)
 
 **Files:**
 - `docs/flows.md`
-- `docs/diagrams/` (nuevo archivo)
+- `docs/diagrams/08-ministry-budget.html` (nuevo)
+- `docs/diagrams/src/08-ministry-budget.json` (nuevo)
+- `docs/diagrams/README.md`
+- `docs/diagrams/gallery.html`
 
 **Dependencies:** Task 5, Task 6
 

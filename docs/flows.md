@@ -254,6 +254,57 @@ flowchart TD
 
 ---
 
+## Ministry Budget (Presupuesto por Ministerio — Etapa 10)
+
+See [`docs/plans/10-presupuesto-por-ministerio.md`](plans/10-presupuesto-por-ministerio.md) for
+the full spec. Reintroduces per-ministry budgets (`budget_periods` + `ministry_budgets`, removed
+in `supabase/migrations/20260709022754_remove_budget_feature.sql`) **without** the FK coupling
+that caused that removal — `budget_intentions` gains no columns. A global `budget_periods` row
+(no overlapping date ranges — DB-level `EXCLUDE` constraint) holds a date range; each ministry
+gets its own `assigned_amount` + `initial_used_amount` (the "already spent before using the app"
+seed value) per period, loaded once by ADMIN/BURSAR. Purely informational — no request is
+blocked for exceeding budget.
+
+```
+usado = initial_used_amount
+      + SUMA(monto de transferencias TRANSFER aprobadas y registradas, transfer_date en el período)
+      + SUMA(monto de solicitudes REIMBURSEMENT aprobadas, reviewed_at en el período)
+
+remanente = assigned_amount − usado
+```
+
+The two funding-method branches mirror the same distinction the leftover calculation above
+makes: `TRANSFER` only counts once money actually left the ministry (transfer registered, not
+just approved), while `REIMBURSEMENT` counts at approval — the ministry never holds the money in
+that path (`docs/flows.md`'s own settlement section, line ~230 in the previous revision).
+
+```mermaid
+flowchart TD
+    A(["Se carga /ministries o /ministries/:id"]) --> B["RPC get_ministry_budget_summary(period_id?)"]
+    B --> C{"¿period_id es NULL?"}
+    C -- Sí --> D["Resuelve al período cuyo rango contiene CURRENT_DATE"]
+    C -- No --> E["Usa el period_id dado"]
+    D --> F{"¿Hay período vigente?"}
+    F -- No --> G(["'[]' — la UI muestra 'no hay período vigente, crear uno'"])
+    F -- Sí --> H["Por cada ministry_budgets del período: suma TRANSFER aprobado+transferido y REIMBURSEMENT aprobado, dentro del rango de fechas"]
+    E --> H
+    H --> I(["assigned_amount, used_amount, remaining — por ministerio"])
+```
+
+Two things worth calling out explicitly:
+
+- **Editing a period's dates recalculates its usage retroactively.** `used_amount` isn't a
+  stored ledger value — it's computed on every read from the period's current `start_date`/
+  `end_date` against `intention_transfers`/`budget_intentions`. Shortening or extending a period
+  changes what counts, immediately, for everyone. This is a deliberate consequence of the
+  "informational, no state machine" design (see the plan's Boundaries section), not a bug.
+- **No overlap between periods is enforced at the database level** (`budget_periods_no_overlap`,
+  a GiST exclusion constraint on `daterange(start_date, end_date, '[]')`), not just in the UI —
+  this is what lets "the current period" resolve unambiguously without a `status` flag to keep
+  in sync.
+
+---
+
 ## Scheduled Reminders
 
 A Supabase cron job (`supabase/migrations/20260426000002_reminder_cron.sql`) runs periodically

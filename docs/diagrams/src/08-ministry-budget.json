@@ -1,0 +1,54 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Presupuesto por Ministerio",
+    "subtitle": "Carga inicial + consumo automático (Etapa 10)",
+    "quality_profile": "showcase",
+    "output": "../08-ministry-budget.html"
+  },
+  "lanes": [
+    { "id": "origen", "label": "Origen" },
+    { "id": "rpc", "label": "RPC de lectura" },
+    { "id": "excepcion", "label": "Casos borde", "variant": "exception" },
+    { "id": "escritura", "label": "Carga inicial (ADMIN/BURSAR)" }
+  ],
+  "phases": [
+    { "id": "carga", "label": "Origen", "fromCol": 0, "toCol": 0 },
+    { "id": "calculo", "label": "Se recalcula en cada lectura", "fromCol": 1, "toCol": 4, "variant": "emphasis" },
+    { "id": "resultado", "label": "UI", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "write_group", "label": "Una vez, o al extender/acortar el período", "lane": "escritura", "fromCol": 0, "toCol": 1, "variant": "dashed" }
+  ],
+  "mainPath": ["viewer", "call_rpc", "resolve_period", "sum_amounts", "compute", "ui_result"],
+  "nodes": [
+    { "id": "viewer", "lane": "origen", "col": 0, "type": "external", "label": "Se abre la página", "sublabel": "ministerios", "width": 132 },
+    { "id": "admin_write", "lane": "escritura", "col": 0, "type": "external", "label": "ADMIN / BURSAR", "sublabel": "MANAGE_BUDGETS", "width": 132 },
+    { "id": "write_tables", "lane": "escritura", "col": 1, "type": "database", "label": "budget_periods", "sublabel": "+ ministry_budgets", "tag": "assigned + initial_used", "width": 132 },
+    { "id": "overlap_guard", "lane": "excepcion", "col": 1, "type": "security", "label": "Sin solapamiento", "sublabel": "EXCLUDE gist, a nivel DB", "width": 132 },
+    { "id": "call_rpc", "lane": "rpc", "col": 1, "type": "backend", "label": "RPC de lectura", "sublabel": "get_ministry_budget_summary", "width": 132 },
+    { "id": "resolve_period", "lane": "rpc", "col": 2, "type": "backend", "label": "Resuelve período", "sublabel": "rango que contiene hoy", "width": 132 },
+    { "id": "no_period", "lane": "excepcion", "col": 3, "type": "security", "label": "Sin período vigente", "sublabel": "gap entre períodos", "width": 132 },
+    { "id": "sum_amounts", "lane": "rpc", "col": 3, "type": "backend", "label": "Suma consumo", "sublabel": "transferido + reembolsado", "width": 132 },
+    { "id": "compute", "lane": "rpc", "col": 4, "type": "backend", "label": "Calcula remanente", "sublabel": "assigned − usado", "width": 132 },
+    { "id": "ui_result", "lane": "origen", "col": 5, "type": "frontend", "label": "Tarjeta / tabla", "sublabel": "assigned, usado, remanente", "width": 132 },
+    { "id": "ui_empty", "lane": "excepcion", "col": 5, "type": "frontend", "label": "\"Crear período\"", "sublabel": "estado vacío explícito", "width": 132 }
+  ],
+  "edges": [
+    { "id": "viewer-rpc", "from": "viewer", "to": "call_rpc", "variant": "default" },
+    { "id": "admin-write", "from": "admin_write", "to": "write_tables", "label": "crea período + monto", "variant": "emphasis" },
+    { "id": "write-guard", "from": "write_tables", "to": "overlap_guard", "label": "protegido por", "variant": "dashed" },
+    { "id": "rpc-resolve", "from": "call_rpc", "to": "resolve_period", "variant": "default" },
+    { "id": "resolve-no-period", "from": "resolve_period", "to": "no_period", "label": "sin período", "variant": "security", "role": "error" },
+    { "id": "no-period-empty", "from": "no_period", "to": "ui_empty", "variant": "dashed", "role": "branch" },
+    { "id": "resolve-sum", "from": "resolve_period", "to": "sum_amounts", "label": "período encontrado", "variant": "emphasis" },
+    { "id": "sum-compute", "from": "sum_amounts", "to": "compute", "variant": "default" },
+    { "id": "compute-ui", "from": "compute", "to": "ui_result", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Sin acoplamiento a intentions", "items": ["budget_intentions no gana columnas", "El cruce con el período es por rango de fechas, no por FK (evita el error de diseño que se eliminó en 20260709022754_remove_budget_feature.sql)"] },
+    { "dot": "amber", "title": "TRANSFER vs REIMBURSEMENT", "items": ["TRANSFER cuenta al aprobar y transferir (dinero ya salió)", "REIMBURSEMENT cuenta al aprobar (nunca hay dinero retenido)"] },
+    { "dot": "rose", "title": "Solo informativo", "items": ["Ninguna solicitud se bloquea por exceder presupuesto", "Editar las fechas de un período recalcula el consumo retroactivamente — no es un valor congelado"] }
+  ]
+}
