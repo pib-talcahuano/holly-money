@@ -151,6 +151,7 @@ export function MinistryDetailClient({
   const totalTransferred = leftover.reduce((sum, row) => sum + row.transferred_amount, 0)
   const totalSettled = leftover.reduce((sum, row) => sum + row.settled_amount, 0)
   const settledPct = totalTransferred > 0 ? Math.round((totalSettled / totalTransferred) * 100) : 0
+  const totalLeftover = leftover.reduce((sum, row) => sum + row.leftover, 0)
   const pendingCount = intentions.filter((i) => i.status === "PENDING").length
   const approvedCount = intentions.filter((i) => i.status === "APPROVED").length
   const rejectedCount = intentions.filter((i) => i.status === "REJECTED").length
@@ -515,7 +516,7 @@ export function MinistryDetailClient({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-[18px] bg-card border border-border px-5 py-[18px] flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint">
@@ -564,6 +565,24 @@ export function MinistryDetailClient({
               {approvedCount === 1 ? "" : "s"} · {rejectedCount} rechazada
               {rejectedCount === 1 ? "" : "s"}
             </p>
+          </div>
+        </div>
+        <div className="rounded-[18px] bg-card border border-border px-5 py-[18px] flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint">
+              Remanente a devolver
+            </span>
+            <div className="flex size-[26px] items-center justify-center rounded-[8px] bg-warn-surface">
+              <HandCoins className="size-3.5 text-on-warn" />
+            </div>
+          </div>
+          <div>
+            <p
+              className={`text-2xl font-extrabold tabular-nums ${totalLeftover > 0 ? "text-warn" : totalLeftover < 0 ? "text-destructive" : ""}`}
+            >
+              {formatCLP(totalLeftover)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Al final del período</p>
           </div>
         </div>
       </div>
