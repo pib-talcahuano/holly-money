@@ -27,9 +27,12 @@ import {
 } from "@/components/ui/item"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { avatarColorFor, initialsFor } from "@/lib/utils"
 import { createMinistrySchema, type CreateMinistryInput } from "@/lib/validators/ministry"
 import { createMinistry, assignMinister } from "@/app/actions/ministries"
+import { MinistryBudgetAdmin } from "@/components/ministries/ministry-budget-admin"
+import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 
 type Ministry = {
   id: string
@@ -50,16 +53,24 @@ type MinistryUser = {
   email: string
 }
 
+type BudgetPeriod = { id: string; label: string; start_date: string; end_date: string }
+
 type Props = {
   initialMinistries: Ministry[]
   initialCurrentAssignments: CurrentAssignment[]
   ministers: MinistryUser[]
+  canManageBudgets: boolean
+  currentBudgetPeriod: BudgetPeriod | null
+  budgetSummary: MinistryBudgetSummaryRow[]
 }
 
 export function MinistriesClient({
   initialMinistries,
   initialCurrentAssignments,
-  ministers
+  ministers,
+  canManageBudgets,
+  currentBudgetPeriod,
+  budgetSummary
 }: Props) {
   const [ministries, setMinistries] = useState<Ministry[]>(initialMinistries)
   const [currentAssignments, setCurrentAssignments] =
@@ -104,6 +115,64 @@ export function MinistriesClient({
       toast.error(err instanceof Error ? err.message : "Error al crear ministerio")
     }
   }
+
+  const ministriesList =
+    ministries.length === 0 ? (
+      <Empty>
+        <EmptyMedia>
+          <Users className="size-10 text-muted-foreground" />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle>Sin ministerios</EmptyTitle>
+          <EmptyDescription>Crea el primer ministerio para comenzar.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    ) : (
+      <ItemGroup>
+        {ministries.map((m) => {
+          const ministerName = getMinister(m.id)?.full_name ?? null
+          return (
+            <Item
+              key={m.id}
+              variant="outline"
+              render={<Link href={`/ministries/${m.id}`} />}
+              className="rounded-2xl px-5 py-5 gap-4"
+            >
+              <ItemMedia>
+                <div
+                  className="flex size-[42px] items-center justify-center rounded-[13px] text-[13px] font-extrabold text-white"
+                  style={{ background: avatarColorFor(m.name) }}
+                >
+                  {initialsFor(m.name)}
+                </div>
+              </ItemMedia>
+              <ItemContent>
+                <div className="flex items-center gap-2">
+                  <ItemTitle className="text-[15px] font-bold">{m.name}</ItemTitle>
+                  {!m.is_active && (
+                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      Inactivo
+                    </span>
+                  )}
+                </div>
+                {m.description && <ItemDescription>{m.description}</ItemDescription>}
+              </ItemContent>
+              <ItemActions>
+                {ministerName ? (
+                  <span className="inline-flex items-center gap-1.5 text-[11.5px] bg-primary-soft text-primary px-[11px] py-1 rounded-full font-bold">
+                    <UserRound className="size-3" />
+                    {ministerName}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Sin ministro</span>
+                )}
+                <ChevronRight className="size-4 text-muted-foreground" />
+              </ItemActions>
+            </Item>
+          )
+        })}
+      </ItemGroup>
+    )
 
   return (
     <div className="space-y-6">
@@ -186,61 +255,25 @@ export function MinistriesClient({
         </Dialog>
       </div>
 
-      {ministries.length === 0 ? (
-        <Empty>
-          <EmptyMedia>
-            <Users className="size-10 text-muted-foreground" />
-          </EmptyMedia>
-          <EmptyHeader>
-            <EmptyTitle>Sin ministerios</EmptyTitle>
-            <EmptyDescription>Crea el primer ministerio para comenzar.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+      {canManageBudgets ? (
+        <Tabs defaultValue="ministerios">
+          <TabsList>
+            <TabsTrigger value="ministerios">Ministerios</TabsTrigger>
+            <TabsTrigger value="presupuesto">Presupuesto</TabsTrigger>
+          </TabsList>
+          <TabsContent value="ministerios" className="pt-4">
+            {ministriesList}
+          </TabsContent>
+          <TabsContent value="presupuesto" className="pt-4">
+            <MinistryBudgetAdmin
+              ministries={ministries}
+              currentPeriod={currentBudgetPeriod}
+              summary={budgetSummary}
+            />
+          </TabsContent>
+        </Tabs>
       ) : (
-        <ItemGroup>
-          {ministries.map((m) => {
-            const ministerName = getMinister(m.id)?.full_name ?? null
-            return (
-              <Item
-                key={m.id}
-                variant="outline"
-                render={<Link href={`/ministries/${m.id}`} />}
-                className="rounded-2xl px-5 py-5 gap-4"
-              >
-                <ItemMedia>
-                  <div
-                    className="flex size-[42px] items-center justify-center rounded-[13px] text-[13px] font-extrabold text-white"
-                    style={{ background: avatarColorFor(m.name) }}
-                  >
-                    {initialsFor(m.name)}
-                  </div>
-                </ItemMedia>
-                <ItemContent>
-                  <div className="flex items-center gap-2">
-                    <ItemTitle className="text-[15px] font-bold">{m.name}</ItemTitle>
-                    {!m.is_active && (
-                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        Inactivo
-                      </span>
-                    )}
-                  </div>
-                  {m.description && <ItemDescription>{m.description}</ItemDescription>}
-                </ItemContent>
-                <ItemActions>
-                  {ministerName ? (
-                    <span className="inline-flex items-center gap-1.5 text-[11.5px] bg-primary-soft text-primary px-[11px] py-1 rounded-full font-bold">
-                      <UserRound className="size-3" />
-                      {ministerName}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Sin ministro</span>
-                  )}
-                  <ChevronRight className="size-4 text-muted-foreground" />
-                </ItemActions>
-              </Item>
-            )
-          })}
-        </ItemGroup>
+        ministriesList
       )}
     </div>
   )

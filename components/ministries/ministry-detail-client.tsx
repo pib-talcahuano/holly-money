@@ -18,6 +18,7 @@ import {
   UserPlus,
   UserMinus,
   UserRound,
+  Wallet,
   X
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -57,6 +58,7 @@ import {
 } from "@/app/actions/ministries"
 import { USER_ROLES } from "@/lib/constants/roles"
 import type { MinistryLeftoverRow } from "@/services/ministries/ministry-leftover.service"
+import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { intentionsService } from "@/services/intentions/intentions.service"
 import type { ministriesService } from "@/services/ministries/ministries.service"
 import { NewRequestDialog } from "@/components/intentions/new-request-dialog"
@@ -106,6 +108,7 @@ type Props = {
   leftover: MinistryLeftoverRow[]
   intentions: MinistryIntention[]
   associatedMovements: AssociatedMovement[]
+  budget: MinistryBudgetSummaryRow | null
   canManage: boolean
   isAssignedMinister: boolean
   canCreateRequest: boolean
@@ -128,6 +131,7 @@ export function MinistryDetailClient({
   leftover,
   intentions,
   associatedMovements,
+  budget,
   canManage,
   isAssignedMinister,
   canCreateRequest
@@ -516,7 +520,7 @@ export function MinistryDetailClient({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="rounded-[18px] bg-card border border-border px-5 py-[18px] flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint">
@@ -584,6 +588,33 @@ export function MinistryDetailClient({
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">Al final del período</p>
           </div>
+        </div>
+        <div className="rounded-[18px] bg-card border border-border px-5 py-[18px] flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint">
+              Presupuesto
+            </span>
+            <div className="flex size-[26px] items-center justify-center rounded-[8px] bg-primary-soft">
+              <Wallet className="size-3.5 text-primary" />
+            </div>
+          </div>
+          {budget ? (
+            <div>
+              <p
+                className={`text-2xl font-extrabold tabular-nums ${budget.remaining < 0 ? "text-destructive" : ""}`}
+              >
+                {formatCLP(budget.remaining)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Remanente de {formatCLP(budget.assigned_amount)} · {budget.period_label}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-2xl font-extrabold tabular-nums text-muted-foreground">—</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Sin presupuesto cargado</p>
+            </div>
+          )}
         </div>
       </div>
 
