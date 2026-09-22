@@ -3,6 +3,7 @@ import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/serve
 import { PERMISSIONS, can, isMinisterWorkflowUser } from "@/lib/permissions/rbac"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import { ministryLeftoverService } from "@/services/ministries/ministry-leftover.service"
+import { ministryBudgetService } from "@/services/ministries/ministry-budget.service"
 import { intentionsService } from "@/services/intentions/intentions.service"
 import { usersService } from "@/services/users/users.service"
 import { MinistryDetailClient } from "@/components/ministries/ministry-detail-client"
@@ -23,7 +24,7 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
     if (assignment?.ministry_id !== id) redirect("/dashboard")
   }
 
-  const [ministry, assignments, delegates, users, leftover, intentions, associatedMovements] =
+  const [ministry, assignments, delegates, users, leftover, intentions, associatedMovements, budgetSummary] =
     await Promise.all([
       ministriesService.getById(db, id).catch(() => null),
       ministriesService.getAssignments(db, id),
@@ -33,10 +34,13 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
       canManage ? usersService.list() : Promise.resolve([]),
       ministryLeftoverService.getSummary(id),
       intentionsService.list(db, { ministryId: id }),
-      ministriesService.getAssociatedMovements(db, id)
+      ministriesService.getAssociatedMovements(db, id),
+      ministryBudgetService.getSummary()
     ])
 
   if (!ministry) notFound()
+
+  const ministryBudget = budgetSummary.find((row) => row.ministry_id === id) ?? null
 
   const currentAssignment = assignments.find((a) => a.unassigned_at === null) ?? null
   const isAssignedMinister = currentAssignment?.user_id === user.id
@@ -54,6 +58,7 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
       associatedMovements={
         associatedMovements as Parameters<typeof MinistryDetailClient>[0]["associatedMovements"]
       }
+      budget={ministryBudget}
       canManage={canManage}
       isAssignedMinister={isAssignedMinister}
       canCreateRequest={canCreateRequest}

@@ -30,6 +30,7 @@ then update its card in `gallery.html` if the title/description/type changed.
 - [`07a-login.html`](07a-login.html) — login via `signInWithPassword` + route protection in `proxy.ts`.
 - [`07b-impersonation-start.html`](07b-impersonation-start.html) — an ADMIN starting an impersonation session.
 - [`07c-impersonation-resolve.html`](07c-impersonation-resolve.html) — how every request resolves real vs. impersonated identity, including auto-expiry and auto-termination.
+- [`08-ministry-budget.html`](08-ministry-budget.html) — per-ministry budget periods (Etapa 10): `get_ministry_budget_summary` resolving the current period and summing TRANSFER vs. REIMBURSEMENT consumption, the DB-level no-overlap constraint, and the initial-load admin path.
 
 Diagrams reflect the code as of this branch; see `docs/flows.md`, `docs/roles.md`, and
 `docs/architecture.md` for the prose version. The permission matrix table itself lives in
