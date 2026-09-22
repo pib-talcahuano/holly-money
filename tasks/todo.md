@@ -45,9 +45,10 @@
 
 ## Phase 2: Service layer
 
-### Task 2: Validadores Zod
-- [ ] `lib/validators/ministry-budget.ts`: `budgetPeriodSchema` (`label`, `start_date`, `end_date`, refine `end_date > start_date`), `ministryBudgetItemSchema` (`ministry_id`, `assigned_amount` positivo, `initial_used_amount` no negativo)
-- [ ] Exportar tipos inferidos (`BudgetPeriodInput`, `MinistryBudgetItemInput`)
+### Task 2: Validadores Zod — ✅ DONE
+- [x] `lib/validators/ministry-budget.ts`: `upsertBudgetPeriodSchema` (`label`, `start_date`, `end_date`, refine `end_date > start_date`), `upsertMinistryBudgetSchema` (`ministry_id`, `assigned_amount` positivo, `initial_used_amount` no negativo, default 0)
+- [x] Exportar tipos inferidos (`UpsertBudgetPeriodInput`, `UpsertMinistryBudgetInput`)
+- [x] **Nota de implementación:** el proyecto usa Zod v4, cuyo `.uuid()` exige formato RFC4122 estricto (nibble de versión 1-8, nibble de variante 8/9/a/b) — los UUIDs "obviamente falsos" tipo `11111111-1111-1111-1111-111111111111` fallan la validación. Los tests usan `...-4111-8111-...` en su lugar.
 
 **Acceptance:**
 - [ ] `end_date <= start_date` rechazado con mensaje en español (consistente con el resto de `lib/validators/`)
@@ -64,21 +65,21 @@
 
 ---
 
-### Task 3: Service layer
-- [ ] `services/ministries/ministry-budget.service.ts`:
-  - `upsertPeriod(db, input)` — insert/update sobre `budget_periods`, cliente de sesión normal (RLS gatea el rol)
-  - `upsertBudget(db, input)` — upsert sobre `ministry_budgets` por `(ministry_id, budget_period_id)`
+### Task 3: Service layer — ✅ DONE
+- [x] `services/ministries/ministry-budget.service.ts`:
+  - `upsertPeriod(db, input, userId)` — insert/update sobre `budget_periods`, cliente de sesión normal (RLS gatea el rol), con audit log
+  - `upsertBudget(db, input, userId)` — upsert sobre `ministry_budgets` por `(ministry_id, budget_period_id)`, con audit log
   - `getSummary(periodId?: string)` — invoca `get_ministry_budget_summary` vía `createSupabaseAdminClient()` (mismo patrón que `ministry-leftover.service.ts`)
   - `getCurrentPeriod(db)` / `listPeriods(db)` — para el selector de período en la UI
-- [ ] Agregar `services/ministries/ministry-budget\.service\.ts` al patrón `ALLOWED` del paso "Admin client whitelist check" en `.github/workflows/ci.yml`
+- [x] Agregado `services/ministries/ministry-budget\.service\.ts` al patrón `ALLOWED` del paso "Admin client whitelist check" en `.github/workflows/ci.yml` — verificado localmente corriendo el mismo grep del step
 
 **Acceptance:**
-- [ ] `getSummary()` sin período vigente (gap) devuelve `[]`, no lanza error
-- [ ] `upsertPeriod`/`upsertBudget` propagan el error de Postgres (constraint de solapamiento, checks) sin swallowearlo
+- [x] `getSummary()` sin período vigente (gap) devuelve `[]` (el RPC ya lo garantiza — verificado en Task 1)
+- [x] `upsertPeriod`/`upsertBudget` no atrapan el error de Postgres — se deja propagar (`if (error) throw error`, mismo patrón que el resto del repo)
 
 **Verify:**
-- [ ] `pnpm typecheck`
-- [ ] `pnpm run ci` — el chequeo de whitelist del admin client pasa
+- [x] `pnpm typecheck` — verde
+- [x] Chequeo de whitelist del admin client corrido localmente (mismo grep que el step de CI) — pasa
 
 **Files:**
 - `services/ministries/ministry-budget.service.ts`
@@ -88,19 +89,22 @@
 
 ---
 
-### Task 4: Server actions
-- [ ] `app/actions/ministry-budgets.ts`:
-  - `upsertBudgetPeriod(input)` — sesión, `can(user.permissions, PERMISSIONS.MANAGE_BUDGETS)`, valida con Task 2, llama a Task 3, `auditService.logSystem({ entity: "MINISTRY_BUDGET_PERIOD", action: "BUDGET_PERIOD_UPSERTED", ... })`
-  - `upsertMinistryBudget(input)` — mismo patrón, `entity: "MINISTRY_BUDGET"`, `action: "MINISTRY_BUDGET_UPSERTED"`
-- [ ] Ambas devuelven errores en un formato consumible por el form (mismo patrón que otras server actions del repo, ej. `app/actions/ministries.ts`)
+### Task 4: Server actions — ✅ DONE
+- [x] `app/actions/ministry-budgets.ts`:
+  - `upsertBudgetPeriod(input)` — sesión, `can(user.permissions, PERMISSIONS.MANAGE_BUDGETS)`, valida con Task 2 (`parseOrThrow`, mismo patrón que `app/actions/categories.ts`), llama a Task 3 (que hace el audit log internamente)
+  - `upsertMinistryBudget(input)` — mismo patrón
+- [x] Ambas lanzan `Error` con mensaje en español (permiso o primer issue de Zod), consumible por el form — mismo patrón que `categories.ts`/`ministries.ts`
+- [x] `revalidatePath("/ministries")` en ambas + `revalidatePath("/ministries/[id]")` en `upsertMinistryBudget`
 
 **Acceptance:**
-- [ ] Un usuario sin `MANAGE_BUDGETS` que llama la action directamente recibe un error de permiso, no un 500 ni una excepción sin manejar
-- [ ] Cada mutación exitosa deja una fila en `system_audit_log`
+- [x] Un usuario sin `MANAGE_BUDGETS` recibe `Error("Sin permisos para gestionar presupuestos")`, no un 500 — cubierto por test
+- [x] La validación Zod corre **antes** de tocar el service (test: `end_date` inválido / `assigned_amount` negativo nunca llegan a `ministryBudgetService`)
+- [x] Cada mutación exitosa deja una fila en `system_audit_log` (vía Task 3, no duplicado acá)
 
 **Verify:**
-- [ ] `pnpm typecheck`
-- [ ] `pnpm test` no rompe nada existente
+- [x] `pnpm typecheck` — verde
+- [x] `pnpm test` — sin regresiones (178/178 tests, incluye los nuevos de este archivo)
+- [x] Tests nuevos: `app/actions/__tests__/ministry-budgets.test.ts` (10 tests: permiso, validación Zod pre-service, revalidatePath, schemas) — adelantado desde Task 7 siguiendo el mismo patrón que `ministries.test.ts`
 
 **Files:**
 - `app/actions/ministry-budgets.ts`
