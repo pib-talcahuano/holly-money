@@ -72,14 +72,17 @@ type UserRow = {
   updated_at: string | Date | null
 }
 
+// Supabase's email-link expiry (otp_expiry in supabase/config.toml) is shared by every email
+// link type — invite, magiclink, recovery — so both statuses expire after the same window.
+const LINK_EXPIRY_MS = 2 * 24 * 60 * 60 * 1000
+
 function isLinkExpired(user: UserRow): boolean {
   if (user.status !== "PENDING_ACTIVATION" && user.status !== "PENDING_RESET") return false
-  const expiryMs = user.status === "PENDING_ACTIVATION" ? 24 * 60 * 60 * 1000 : 60 * 60 * 1000
   const lastAction = Math.max(
     new Date(user.created_at).getTime(),
     user.updated_at ? new Date(user.updated_at).getTime() : 0
   )
-  return Date.now() - lastAction > expiryMs
+  return Date.now() - lastAction > LINK_EXPIRY_MS
 }
 
 type BadgeVariant = ComponentProps<typeof Badge>["variant"]
@@ -674,7 +677,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
             </DialogTitle>
             <DialogDescription className="text-[12.5px]">
               Comparte este enlace con el usuario para que active su cuenta. Expira en{" "}
-              <strong>24 horas</strong>.
+              <strong>2 días</strong>.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 items-center pt-2">

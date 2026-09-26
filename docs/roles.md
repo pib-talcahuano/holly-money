@@ -125,7 +125,7 @@ Flow:
 1. ADMIN opens **Usuarios** (`/users`) and invites a new user (name, email, role).
 2. `admin.auth.admin.generateLink({ type: "invite" })` creates the `auth.users` row and an
    activation link; `public.users` gets a new row with `status: PENDING_ACTIVATION`.
-3. Resend sends the invite email (24 h link) via `sendInviteEmail` (`emails/auth-email.tsx`).
+3. Resend sends the invite email (2-day link) via `sendInviteEmail` (`emails/auth-email.tsx`).
 4. The user clicks the link → `GET /api/auth/verify` validates the token and redirects to
    `/activate` → the user sets a password → `POST /api/auth/activate` flips `status` to `ACTIVE`.
 
