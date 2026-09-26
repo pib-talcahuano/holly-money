@@ -167,9 +167,20 @@ export const usersService = {
 
     if (fetchError || !user) throw new Error("Usuario no encontrado")
 
-    // Deleting from auth.users cascades to public.users
-    const { error } = await admin.auth.admin.deleteUser(userId)
+    // Hard-deleting from auth.users cascades to public.users (ON DELETE CASCADE), but that row
+    // is protected by ON DELETE RESTRICT/NO ACTION foreign keys from movements, audit logs,
+    // intentions, settlements, payroll, etc. — so a hard delete fails for any user who has ever
+    // done anything in the system. Soft delete keeps the auth.users row (invalidating sessions
+    // and scrambling the login email) so those references stay valid, and we deactivate the
+    // profile below to fully block access, consistent with the "no physical deletion" convention
+    // used elsewhere (movements are cancelled, never deleted).
+    const { error } = await admin.auth.admin.deleteUser(userId, true)
     if (error) throw error
+
+    await admin
+      .from("users")
+      .update({ status: "INACTIVE", updated_at: new Date().toISOString() })
+      .eq("id", userId)
 
     await auditService.logSystem({
       entity: "users",
@@ -177,7 +188,7 @@ export const usersService = {
       entity_id: userId,
       user_id: actingUserId,
       previous_value: user,
-      note: "Usuario eliminado por administrador"
+      note: "Usuario eliminado por administrador (cuenta desactivada, historial preservado)"
     })
   },
 
