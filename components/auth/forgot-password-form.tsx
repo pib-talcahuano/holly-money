@@ -65,7 +65,7 @@ export function ForgotPasswordForm() {
         </h1>
         <p className="text-[13.5px] leading-[1.55] text-muted-foreground mb-[22px]">
           Enviamos un enlace de recuperación a{" "}
-          <strong className="text-foreground">{sentEmail}</strong>. El enlace vence en 1 hora.
+          <strong className="text-foreground">{sentEmail}</strong>. El enlace vence en 2 días.
         </p>
 
         <Alert variant="info" className="mb-[22px]">

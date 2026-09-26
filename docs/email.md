@@ -29,9 +29,9 @@ verified in your Resend account.
 
 | Trigger                  | Recipients | Template                              |
 | ------------------------ | ---------- | ------------------------------------- |
-| User invited by ADMIN    | New user   | Account activation link (24 h expiry) |
-| Password reset requested | User       | Reset link (1 h expiry)               |
-| Forgot password flow     | User       | Recovery link (1 h expiry)            |
+| User invited by ADMIN    | New user   | Account activation link (2 d expiry)  |
+| Password reset requested | User       | Reset link (2 d expiry)               |
+| Forgot password flow     | User       | Recovery link (2 d expiry)            |
 
 ### Movement notifications
 

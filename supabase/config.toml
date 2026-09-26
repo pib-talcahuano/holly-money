@@ -229,8 +229,11 @@ secure_password_change = false
 max_frequency = "1s"
 # Number of characters used in the email OTP.
 otp_length = 6
-# Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+# Number of seconds before the email OTP expires (defaults to 1 hour). Shared by all email link
+# types (invite, magiclink, recovery, email change) — Supabase/GoTrue has no per-flow expiry.
+# Set to 2 days so invitation links stay usable long enough for a minister to get to activating
+# their account.
+otp_expiry = 172800
 
 # Use a production-ready SMTP server
 # [auth.email.smtp]
