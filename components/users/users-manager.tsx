@@ -183,6 +183,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const [createOpen, setCreateOpen] = useState(inviteMinister)
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
   const [deletingUser, setDeletingUser] = useState<UserRow | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [search, setSearch] = useState("")
   const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
@@ -290,17 +291,22 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   }
 
   const handleDelete = () => {
-    if (!deletingUser) return
+    if (!deletingUser || isDeleting) return
     const { id: userId, full_name: name } = deletingUser
-    setDeletingUser(null)
+    setIsDeleting(true)
 
     toast.promise(deleteUser(userId), {
       loading: "Eliminando usuario...",
       success: () => {
         setUsers((prev) => prev.filter((u) => u.id !== userId))
+        setDeletingUser(null)
+        setIsDeleting(false)
         return `${name} fue eliminado`
       },
-      error: (e: Error) => e.message
+      error: (e: Error) => {
+        setIsDeleting(false)
+        return e.message
+      }
     })
   }
 
@@ -611,6 +617,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isDeleting}
                     className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => {
                       setDeletingUser(editingUser)
@@ -640,7 +647,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
       <Dialog
         open={!!deletingUser}
         onOpenChange={(o) => {
-          if (!o) setDeletingUser(null)
+          if (!o && !isDeleting) setDeletingUser(null)
         }}
       >
         <DialogContent>
@@ -652,11 +659,11 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeletingUser(null)}>
+            <Button variant="outline" disabled={isDeleting} onClick={() => setDeletingUser(null)}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={() => void handleDelete()}>
-              Sí, eliminar
+            <Button variant="destructive" disabled={isDeleting} onClick={() => void handleDelete()}>
+              {isDeleting ? "Eliminando..." : "Sí, eliminar"}
             </Button>
           </div>
         </DialogContent>
