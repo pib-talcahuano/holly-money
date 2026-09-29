@@ -96,14 +96,36 @@ describe("updateUser", () => {
 describe("deleteUser", () => {
   beforeEach(() => jest.clearAllMocks())
 
-  it("deletes user and revalidates", async () => {
+  it("deletes user (soft) and revalidates", async () => {
     mockGetCurrentUser.mockResolvedValue(mockUser)
     mockCan.mockReturnValue(true)
     mockDelete.mockResolvedValue(undefined)
 
     await deleteUser("u-1")
 
-    expect(mockDelete).toHaveBeenCalledWith("u-1", mockUser.id)
+    expect(mockDelete).toHaveBeenCalledWith("u-1", mockUser.id, { hardDelete: false })
     expect(mockRevalidatePath).toHaveBeenCalledWith("/users")
+  })
+
+  it("passes hardDelete through for an ADMIN caller", async () => {
+    const admin = { ...mockUser, role: "ADMIN" }
+    mockGetCurrentUser.mockResolvedValue(admin)
+    mockCan.mockReturnValue(true)
+    mockDelete.mockResolvedValue(undefined)
+
+    await deleteUser("u-1", { hardDelete: true })
+
+    expect(mockDelete).toHaveBeenCalledWith("u-1", admin.id, { hardDelete: true })
+  })
+
+  it("rejects hardDelete for a non-ADMIN caller even with MANAGE_USERS", async () => {
+    const bursar = { ...mockUser, role: "BURSAR" }
+    mockGetCurrentUser.mockResolvedValue(bursar)
+    mockCan.mockReturnValue(true)
+
+    await expect(deleteUser("u-1", { hardDelete: true })).rejects.toThrow(
+      "Solo un administrador puede eliminar usuarios permanentemente"
+    )
+    expect(mockDelete).not.toHaveBeenCalled()
   })
 })

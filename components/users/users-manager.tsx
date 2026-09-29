@@ -59,6 +59,7 @@ import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { toast } from "sonner"
 import { inviteUser, updateUser, deleteUser, resendInvite, resetUser } from "@/app/actions/users"
 import { startImpersonation } from "@/app/actions/impersonation"
+import { useUser } from "@/components/providers/user-provider"
 
 type UserStatus = "ACTIVE" | "INACTIVE" | "PENDING_ACTIVATION" | "PENDING_RESET"
 
@@ -178,11 +179,13 @@ function UserListItem({
 export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const currentUser = useUser()
   const inviteMinister = searchParams.get("invite") === USER_ROLES.MINISTER
   const [users, setUsers] = useState<UserRow[]>(initialUsers)
   const [createOpen, setCreateOpen] = useState(inviteMinister)
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [hardDelete, setHardDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [search, setSearch] = useState("")
   const [inviteLink, setInviteLink] = useState<string | null>(null)
@@ -269,6 +272,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   function openEdit(user: UserRow) {
     setEditingUser(user)
     setConfirmDelete(false)
+    setHardDelete(false)
     editForm.reset({
       id: user.id,
       full_name: user.full_name,
@@ -294,14 +298,16 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const handleDelete = () => {
     if (!editingUser || isDeleting) return
     const { id: userId, full_name: name } = editingUser
+    const wantsHardDelete = hardDelete && currentUser.role === USER_ROLES.ADMIN
     setIsDeleting(true)
 
-    toast.promise(deleteUser(userId), {
-      loading: "Eliminando usuario...",
+    toast.promise(deleteUser(userId, { hardDelete: wantsHardDelete }), {
+      loading: wantsHardDelete ? "Eliminando usuario permanentemente..." : "Eliminando usuario...",
       success: () => {
         setUsers((prev) => prev.filter((u) => u.id !== userId))
         setEditingUser(null)
         setConfirmDelete(false)
+        setHardDelete(false)
         setIsDeleting(false)
         return `${name} fue eliminado`
       },
@@ -533,6 +539,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
           if (!o && !isDeleting) {
             setEditingUser(null)
             setConfirmDelete(false)
+            setHardDelete(false)
           }
         }}
       >
@@ -546,11 +553,35 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   acción no se puede deshacer. Se cancelará cualquier invitación pendiente.
                 </DialogDescription>
               </DialogHeader>
+
+              {currentUser.role === USER_ROLES.ADMIN && (
+                <label className="flex items-start gap-2 text-[12.5px] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-4"
+                    disabled={isDeleting}
+                    checked={hardDelete}
+                    onChange={(e) => setHardDelete(e.target.checked)}
+                  />
+                  <span>
+                    Eliminar permanentemente (borra el registro por completo)
+                    <span className="block text-[11px] font-normal text-muted-foreground">
+                      Solo funciona si el usuario nunca tuvo movimientos ni otros registros
+                      asociados. En cualquier otro caso, usa la opción estándar de arriba, que
+                      desactiva la cuenta y conserva el historial.
+                    </span>
+                  </span>
+                </label>
+              )}
+
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
                 <Button
                   variant="outline"
                   disabled={isDeleting}
-                  onClick={() => setConfirmDelete(false)}
+                  onClick={() => {
+                    setConfirmDelete(false)
+                    setHardDelete(false)
+                  }}
                 >
                   Cancelar
                 </Button>
@@ -559,7 +590,11 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   disabled={isDeleting}
                   onClick={() => void handleDelete()}
                 >
-                  {isDeleting ? "Eliminando..." : "Sí, eliminar"}
+                  {isDeleting
+                    ? "Eliminando..."
+                    : hardDelete
+                      ? "Sí, eliminar permanentemente"
+                      : "Sí, eliminar"}
                 </Button>
               </div>
             </>

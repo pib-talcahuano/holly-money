@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { getCurrentUser } from "@/lib/supabase/server"
 import { PERMISSIONS, can, isImpersonating } from "@/lib/permissions/rbac"
+import { USER_ROLES } from "@/lib/constants/roles"
 import { usersService } from "@/services/users/users.service"
 import type { CreateUserInput, UpdateUserInput, UpdateOwnProfileInput } from "@/lib/validators/user"
 
@@ -27,9 +28,12 @@ export async function updateUser(input: UpdateUserInput) {
   return updated
 }
 
-export async function deleteUser(id: string) {
+export async function deleteUser(id: string, options?: { hardDelete?: boolean }) {
   const user = assertUserAccess(await getCurrentUser())
-  await usersService.delete(id, user.id)
+  if (options?.hardDelete && user.role !== USER_ROLES.ADMIN) {
+    throw new Error("Solo un administrador puede eliminar usuarios permanentemente")
+  }
+  await usersService.delete(id, user.id, { hardDelete: options?.hardDelete ?? false })
   revalidatePath("/users")
 }
 
