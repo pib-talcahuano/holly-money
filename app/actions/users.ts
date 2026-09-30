@@ -28,13 +28,25 @@ export async function updateUser(input: UpdateUserInput) {
   return updated
 }
 
-export async function deleteUser(id: string, options?: { hardDelete?: boolean }) {
-  const user = assertUserAccess(await getCurrentUser())
-  if (options?.hardDelete && user.role !== USER_ROLES.ADMIN) {
-    throw new Error("Solo un administrador puede eliminar usuarios permanentemente")
+// Returns { error } instead of throwing: in production Next.js replaces the message of any
+// error thrown from a server action with a generic "Server Components render" one (React
+// error #441), so a thrown Spanish message would never reach the toast.
+export async function deleteUser(
+  id: string,
+  options?: { hardDelete?: boolean }
+): Promise<{ ok: true } | { error: string }> {
+  try {
+    const user = assertUserAccess(await getCurrentUser())
+    if (options?.hardDelete && user.role !== USER_ROLES.ADMIN) {
+      return { error: "Solo un administrador puede eliminar usuarios permanentemente" }
+    }
+    await usersService.delete(id, user.id, { hardDelete: options?.hardDelete ?? false })
+    revalidatePath("/users")
+    return { ok: true }
+  } catch (e) {
+    console.error("deleteUser failed", e)
+    return { error: e instanceof Error ? e.message : "No se pudo eliminar el usuario" }
   }
-  await usersService.delete(id, user.id, { hardDelete: options?.hardDelete ?? false })
-  revalidatePath("/users")
 }
 
 export async function resendInvite(id: string) {

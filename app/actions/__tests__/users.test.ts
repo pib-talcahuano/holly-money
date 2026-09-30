@@ -49,7 +49,6 @@ describe("users actions — auth guard", () => {
   it.each([
     ["inviteUser", () => inviteUser(createInput)],
     ["updateUser", () => updateUser(updateInput)],
-    ["deleteUser", () => deleteUser("u-1")],
     ["resendInvite", () => resendInvite("u-1")],
     ["resetUser", () => resetUser("u-1")]
   ])("%s throws when unauthenticated", async (_name, fn) => {
@@ -101,8 +100,9 @@ describe("deleteUser", () => {
     mockCan.mockReturnValue(true)
     mockDelete.mockResolvedValue(undefined)
 
-    await deleteUser("u-1")
+    const result = await deleteUser("u-1")
 
+    expect(result).toEqual({ ok: true })
     expect(mockDelete).toHaveBeenCalledWith("u-1", mockUser.id, { hardDelete: false })
     expect(mockRevalidatePath).toHaveBeenCalledWith("/users")
   })
@@ -123,9 +123,31 @@ describe("deleteUser", () => {
     mockGetCurrentUser.mockResolvedValue(bursar)
     mockCan.mockReturnValue(true)
 
-    await expect(deleteUser("u-1", { hardDelete: true })).rejects.toThrow(
-      "Solo un administrador puede eliminar usuarios permanentemente"
-    )
+    await expect(deleteUser("u-1", { hardDelete: true })).resolves.toEqual({
+      error: "Solo un administrador puede eliminar usuarios permanentemente"
+    })
     expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it("returns the error message instead of throwing (prod redacts thrown messages)", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => {})
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, role: "ADMIN" })
+    mockCan.mockReturnValue(true)
+    mockDelete.mockRejectedValue(new Error("No se pudo eliminar permanentemente"))
+
+    await expect(deleteUser("u-1", { hardDelete: true })).resolves.toEqual({
+      error: "No se pudo eliminar permanentemente"
+    })
+    expect(mockRevalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("returns an error when unauthenticated", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => {})
+    mockGetCurrentUser.mockResolvedValue(null)
+    mockCan.mockReturnValue(false)
+
+    await expect(deleteUser("u-1")).resolves.toEqual({
+      error: "Sin permisos para gestionar usuarios"
+    })
   })
 })
