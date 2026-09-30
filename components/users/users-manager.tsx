@@ -185,20 +185,20 @@ function UserListItem({
 }
 
 const PURGE_LABELS: Record<string, string> = {
-  movements: "movimientos",
-  movement_attachments: "adjuntos de movimientos",
-  movement_audit_entries: "registros de auditoría de movimientos",
-  intentions: "intenciones",
-  intention_attachments: "adjuntos de intenciones",
-  transfers: "transferencias",
-  settlements: "rendiciones",
-  settlement_attachments: "adjuntos de rendiciones",
-  comments: "comentarios",
-  payroll_records: "registros de remuneraciones",
-  severance_adjustments: "ajustes de reserva de finiquitos",
-  ministry_assignments: "asignaciones a ministerios",
-  ministry_delegates: "delegaciones",
-  system_audit_entries: "registros de auditoría del sistema"
+  movements: "Movimientos",
+  movement_attachments: "Adjuntos de movimientos",
+  movement_audit_entries: "Registros de auditoría de movimientos",
+  intentions: "Intenciones",
+  intention_attachments: "Adjuntos de intenciones",
+  transfers: "Transferencias",
+  settlements: "Rendiciones",
+  settlement_attachments: "Adjuntos de rendiciones",
+  comments: "Comentarios",
+  payroll_records: "Registros de remuneraciones",
+  severance_adjustments: "Ajustes de reserva de finiquitos",
+  ministry_assignments: "Asignaciones a ministerios",
+  ministry_delegates: "Delegaciones",
+  system_audit_entries: "Registros de auditoría del sistema"
 }
 
 export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
@@ -639,7 +639,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                           .filter(([, n]) => n > 0)
                           .map(([key, n]) => (
                             <li key={key}>
-                              {n} {PURGE_LABELS[key] ?? key}
+                              {PURGE_LABELS[key] ?? key}: {n}
                             </li>
                           ))}
                         {Object.values(purgePreview.counts).every((n) => n === 0) && (
