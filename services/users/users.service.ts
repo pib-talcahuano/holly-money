@@ -178,6 +178,11 @@ export const usersService = {
       // broke the delete flow entirely before this was caught.
       const { error } = await admin.auth.admin.deleteUser(userId)
       if (error) {
+        console.error("Hard delete failed", {
+          userId,
+          message: error.message,
+          status: error.status
+        })
         throw new Error(
           "No se pudo eliminar permanentemente: el usuario tiene movimientos u otros registros " +
             "asociados en el sistema. Usa la eliminación estándar, que desactiva la cuenta y " +
