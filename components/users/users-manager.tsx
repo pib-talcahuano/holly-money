@@ -301,7 +301,11 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     const wantsHardDelete = hardDelete && currentUser.role === USER_ROLES.ADMIN
     setIsDeleting(true)
 
-    toast.promise(deleteUser(userId, { hardDelete: wantsHardDelete }), {
+    const request = deleteUser(userId, { hardDelete: wantsHardDelete }).then((result) => {
+      if ("error" in result) throw new Error(result.error)
+    })
+
+    toast.promise(request, {
       loading: wantsHardDelete ? "Eliminando usuario permanentemente..." : "Eliminando usuario...",
       success: () => {
         setUsers((prev) => prev.filter((u) => u.id !== userId))
