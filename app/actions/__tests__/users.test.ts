@@ -1,10 +1,18 @@
-import { inviteUser, updateUser, deleteUser, resendInvite, resetUser } from "../users"
+import {
+  inviteUser,
+  updateUser,
+  deleteUser,
+  getUserPurgePreview,
+  resendInvite,
+  resetUser
+} from "../users"
 
 const mockGetCurrentUser = jest.fn()
 const mockCan = jest.fn()
 const mockInvite = jest.fn()
 const mockUpdate = jest.fn()
 const mockDelete = jest.fn()
+const mockPreviewPurge = jest.fn()
 const mockResendInvite = jest.fn()
 const mockResetAccount = jest.fn()
 const mockRevalidatePath = jest.fn()
@@ -25,6 +33,7 @@ jest.mock("@/services/users/users.service", () => ({
     invite: (...args: unknown[]) => mockInvite(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
+    previewPurge: (...args: unknown[]) => mockPreviewPurge(...args),
     resendInvite: (...args: unknown[]) => mockResendInvite(...args),
     resetAccount: (...args: unknown[]) => mockResetAccount(...args)
   }
@@ -148,6 +157,47 @@ describe("deleteUser", () => {
 
     await expect(deleteUser("u-1")).resolves.toEqual({
       error: "Sin permisos para gestionar usuarios"
+    })
+  })
+})
+
+describe("getUserPurgePreview", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const preview = {
+    counts: { movements: 2 },
+    foreign_reach: { movements: 0, transfers: 0, settlements: 0 },
+    storage_paths: []
+  }
+
+  it("returns the preview for an ADMIN caller", async () => {
+    const admin = { ...mockUser, role: "ADMIN" }
+    mockGetCurrentUser.mockResolvedValue(admin)
+    mockCan.mockReturnValue(true)
+    mockPreviewPurge.mockResolvedValue(preview)
+
+    await expect(getUserPurgePreview("u-1")).resolves.toEqual({ preview })
+    expect(mockPreviewPurge).toHaveBeenCalledWith("u-1", admin.id)
+  })
+
+  it("rejects a non-ADMIN caller even with MANAGE_USERS", async () => {
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, role: "BURSAR" })
+    mockCan.mockReturnValue(true)
+
+    await expect(getUserPurgePreview("u-1")).resolves.toEqual({
+      error: "Solo un administrador puede eliminar usuarios permanentemente"
+    })
+    expect(mockPreviewPurge).not.toHaveBeenCalled()
+  })
+
+  it("returns the error message instead of throwing", async () => {
+    jest.spyOn(console, "error").mockImplementation(() => {})
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, role: "ADMIN" })
+    mockCan.mockReturnValue(true)
+    mockPreviewPurge.mockRejectedValue(new Error("No puedes eliminar tu propia cuenta"))
+
+    await expect(getUserPurgePreview("admin-1")).resolves.toEqual({
+      error: "No puedes eliminar tu propia cuenta"
     })
   })
 })

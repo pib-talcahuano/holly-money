@@ -115,7 +115,7 @@ Always make sure that types are up to date with `pnpm types:generate`
 - Always use `pnpm`, never `npm` or `yarn`.
 - All Zod schemas live in `lib/validators/` and are shared between API routes and forms.
 - UI components in `components/ui/` are shadcn-style built on `@base-ui/react` (not Radix). Don't swap to Radix primitives.
-- No deletions: `movements` records are logically cancelled (`status: 'CANCELLED'`) with `cancellation_reason`. Physical deletion is not supported.
+- No deletions: `movements` records are logically cancelled (`status: 'CANCELLED'`) with `cancellation_reason`. Physical deletion is not supported, with one exception: an ADMIN can permanently purge a mistakenly created user from Users → Editar → Eliminar → "Eliminar permanentemente", which calls the `purge_user` RPC (`services/users/users.service.ts`) and deletes everything tied to that user (movements, intentions, settlements, payroll, attachments, audit rows). The dialog previews the counts first and requires typing the user's email.
 - Every mutation on a movement must insert a `movement_audit_log` entry via `auditService`. Use the service role client for audit inserts (bypasses RLS).
 - **Language rule:** All code identifiers, DB column names, table names, enum values, file/folder names, API routes, variable names, and service layer are strictly English. Spanish appears only in UI text, Zod validation messages, and toast notifications shown to the user.
 - DB field names are English snake_case matching the Postgres schema (e.g. `INCOME` → "Ingreso" in UI, `BURSAR` → "Tesorero" in UI).

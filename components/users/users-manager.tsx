@@ -57,7 +57,15 @@ import type { CreateUserInput, UpdateUserInput } from "@/lib/validators/user"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { toast } from "sonner"
-import { inviteUser, updateUser, deleteUser, resendInvite, resetUser } from "@/app/actions/users"
+import {
+  inviteUser,
+  updateUser,
+  deleteUser,
+  getUserPurgePreview,
+  resendInvite,
+  resetUser
+} from "@/app/actions/users"
+import type { UserPurgePreview } from "@/services/users/users.service"
 import { startImpersonation } from "@/app/actions/impersonation"
 import { useUser } from "@/components/providers/user-provider"
 
@@ -176,6 +184,23 @@ function UserListItem({
   )
 }
 
+const PURGE_LABELS: Record<string, string> = {
+  movements: "Movimientos",
+  movement_attachments: "Adjuntos de movimientos",
+  movement_audit_entries: "Registros de auditoría de movimientos",
+  intentions: "Intenciones",
+  intention_attachments: "Adjuntos de intenciones",
+  transfers: "Transferencias",
+  settlements: "Rendiciones",
+  settlement_attachments: "Adjuntos de rendiciones",
+  comments: "Comentarios",
+  payroll_records: "Registros de remuneraciones",
+  severance_adjustments: "Ajustes de reserva de finiquitos",
+  ministry_assignments: "Asignaciones a ministerios",
+  ministry_delegates: "Delegaciones",
+  system_audit_entries: "Registros de auditoría del sistema"
+}
+
 export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -186,6 +211,9 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [hardDelete, setHardDelete] = useState(false)
+  const [purgePreview, setPurgePreview] = useState<UserPurgePreview | null>(null)
+  const [purgePreviewError, setPurgePreviewError] = useState<string | null>(null)
+  const [emailConfirmation, setEmailConfirmation] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
   const [search, setSearch] = useState("")
   const [inviteLink, setInviteLink] = useState<string | null>(null)
@@ -295,6 +323,27 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     })
   }
 
+  const resetDeleteState = () => {
+    setConfirmDelete(false)
+    setHardDelete(false)
+    setPurgePreview(null)
+    setPurgePreviewError(null)
+    setEmailConfirmation("")
+  }
+
+  const handleHardDeleteToggle = (checked: boolean) => {
+    setHardDelete(checked)
+    setPurgePreview(null)
+    setPurgePreviewError(null)
+    setEmailConfirmation("")
+    if (!checked || !editingUser) return
+    const userId = editingUser.id
+    void getUserPurgePreview(userId).then((result) => {
+      if ("error" in result) setPurgePreviewError(result.error)
+      else setPurgePreview(result.preview)
+    })
+  }
+
   const handleDelete = () => {
     if (!editingUser || isDeleting) return
     const { id: userId, full_name: name } = editingUser
@@ -310,8 +359,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
       success: () => {
         setUsers((prev) => prev.filter((u) => u.id !== userId))
         setEditingUser(null)
-        setConfirmDelete(false)
-        setHardDelete(false)
+        resetDeleteState()
         setIsDeleting(false)
         return `${name} fue eliminado`
       },
@@ -542,8 +590,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
         onOpenChange={(o) => {
           if (!o && !isDeleting) {
             setEditingUser(null)
-            setConfirmDelete(false)
-            setHardDelete(false)
+            resetDeleteState()
           }
         }}
       >
@@ -565,33 +612,82 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                     className="mt-0.5 size-4"
                     disabled={isDeleting}
                     checked={hardDelete}
-                    onChange={(e) => setHardDelete(e.target.checked)}
+                    onChange={(e) => handleHardDeleteToggle(e.target.checked)}
                   />
                   <span>
-                    Eliminar permanentemente (borra el registro por completo)
+                    Eliminar permanentemente (borra el usuario y todos sus registros)
                     <span className="block text-[11px] font-normal text-muted-foreground">
-                      Solo funciona si el usuario nunca tuvo movimientos ni otros registros
-                      asociados. En cualquier otro caso, usa la opción estándar de arriba, que
-                      desactiva la cuenta y conserva el historial.
+                      Elimina también los movimientos, intenciones, rendiciones, adjuntos y demás
+                      registros asociados. No se puede deshacer. La opción estándar desactiva la
+                      cuenta y conserva el historial.
                     </span>
                   </span>
                 </label>
               )}
 
+              {hardDelete && (
+                <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-[12px]">
+                  {purgePreviewError ? (
+                    <p className="text-destructive">{purgePreviewError}</p>
+                  ) : !purgePreview ? (
+                    <p className="text-muted-foreground">Calculando registros a eliminar...</p>
+                  ) : (
+                    <>
+                      <p className="font-semibold">Se eliminará permanentemente:</p>
+                      <ul className="list-disc pl-5">
+                        {Object.entries(purgePreview.counts)
+                          .filter(([, n]) => n > 0)
+                          .map(([key, n]) => (
+                            <li key={key}>
+                              {PURGE_LABELS[key] ?? key}: {n}
+                            </li>
+                          ))}
+                        {Object.values(purgePreview.counts).every((n) => n === 0) && (
+                          <li>Solo la cuenta (no tiene otros registros)</li>
+                        )}
+                      </ul>
+                      {purgePreview.storage_paths.length > 0 && (
+                        <p>{purgePreview.storage_paths.length} archivos adjuntos serán borrados.</p>
+                      )}
+                      {(purgePreview.foreign_reach.movements > 0 ||
+                        purgePreview.foreign_reach.transfers > 0 ||
+                        purgePreview.foreign_reach.settlements > 0) && (
+                        <p className="font-semibold text-destructive">
+                          Incluye registros de otros usuarios vinculados:{" "}
+                          {purgePreview.foreign_reach.movements} movimientos,{" "}
+                          {purgePreview.foreign_reach.transfers} transferencias y{" "}
+                          {purgePreview.foreign_reach.settlements} rendiciones.
+                        </p>
+                      )}
+                      <label className="block pt-1">
+                        Escribe <strong>{editingUser?.email}</strong> para confirmar
+                        <input
+                          type="text"
+                          autoComplete="off"
+                          className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-[12.5px]"
+                          disabled={isDeleting}
+                          value={emailConfirmation}
+                          onChange={(e) => setEmailConfirmation(e.target.value)}
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  disabled={isDeleting}
-                  onClick={() => {
-                    setConfirmDelete(false)
-                    setHardDelete(false)
-                  }}
-                >
+                <Button variant="outline" disabled={isDeleting} onClick={resetDeleteState}>
                   Cancelar
                 </Button>
                 <Button
                   variant="destructive"
-                  disabled={isDeleting}
+                  disabled={
+                    isDeleting ||
+                    (hardDelete &&
+                      (!purgePreview ||
+                        emailConfirmation.trim().toLowerCase() !==
+                          editingUser?.email.toLowerCase()))
+                  }
                   onClick={() => void handleDelete()}
                 >
                   {isDeleting

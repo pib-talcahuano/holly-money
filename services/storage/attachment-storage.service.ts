@@ -24,5 +24,12 @@ export const attachmentStorageService = {
     const admin = createSupabaseAdminClient()
     const { error } = await admin.storage.from(BUCKET).remove([path])
     if (error) throw error
+  },
+
+  async removeMany(paths: string[]): Promise<void> {
+    if (paths.length === 0) return
+    const admin = createSupabaseAdminClient()
+    const { error } = await admin.storage.from(BUCKET).remove(paths)
+    if (error) throw error
   }
 }
