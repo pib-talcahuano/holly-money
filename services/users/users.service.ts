@@ -176,6 +176,26 @@ export const usersService = {
       // never done anything in the system (e.g. an invite created by mistake). Never surface the
       // raw driver error to the caller: it isn't guaranteed to be serializable and, unhandled,
       // broke the delete flow entirely before this was caught.
+      // Minister assignments are kept as history (unassigned_at), so they block the delete too.
+      // Name that case explicitly instead of the generic message.
+      const [assignments, delegations] = await Promise.all([
+        admin
+          .from("ministry_assignments")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId),
+        admin
+          .from("ministry_delegates")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+      ])
+      if ((assignments.count ?? 0) > 0 || (delegations.count ?? 0) > 0) {
+        throw new Error(
+          "No se pudo eliminar permanentemente: el usuario está o estuvo asignado a un " +
+            "ministerio (el historial de asignaciones se conserva). Usa la eliminación " +
+            "estándar, que desactiva la cuenta."
+        )
+      }
+
       const { error } = await admin.auth.admin.deleteUser(userId)
       if (error) {
         console.error("Hard delete failed", {
