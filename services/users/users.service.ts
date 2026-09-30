@@ -2,8 +2,35 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { auditService } from "@/services/audit/audit.service"
 import { sendInviteEmail, sendResetEmail } from "@/services/email/resend.service"
 import { wrapAuthLink } from "@/services/auth/link-wrapper"
+import { attachmentStorageService } from "@/services/storage/attachment-storage.service"
 import { getSiteUrl } from "@/lib/utils"
 import type { CreateUserInput, UpdateUserInput, UpdateOwnProfileInput } from "@/lib/validators/user"
+
+export type UserPurgePreview = {
+  counts: Record<string, number>
+  foreign_reach: { movements: number; transfers: number; settlements: number }
+  storage_paths: string[]
+}
+
+async function runPurge(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  dryRun: boolean
+): Promise<UserPurgePreview> {
+  const { data, error } = await admin.rpc("purge_user", {
+    p_user_id: userId,
+    p_dry_run: dryRun
+  })
+  if (error || !data) {
+    console.error("purge_user failed", { userId, dryRun, message: error?.message })
+    throw new Error(
+      dryRun
+        ? "No se pudo calcular los registros a eliminar"
+        : "No se pudo eliminar permanentemente el usuario. No se realizaron cambios."
+    )
+  }
+  return data as unknown as UserPurgePreview
+}
 
 export const usersService = {
   async getById(userId: string) {
@@ -169,45 +196,19 @@ export const usersService = {
 
     const hardDelete = options?.hardDelete ?? false
 
+    let purge: UserPurgePreview | null = null
     if (hardDelete) {
-      // Hard-deleting from auth.users cascades to public.users (ON DELETE CASCADE), but that
-      // row is protected by ON DELETE RESTRICT/NO ACTION foreign keys from movements, audit
-      // logs, intentions, settlements, payroll, etc. — so this only succeeds for a user who has
-      // never done anything in the system (e.g. an invite created by mistake). Never surface the
-      // raw driver error to the caller: it isn't guaranteed to be serializable and, unhandled,
-      // broke the delete flow entirely before this was caught.
-      // Minister assignments are kept as history (unassigned_at), so they block the delete too.
-      // Name that case explicitly instead of the generic message.
-      const [assignments, delegations] = await Promise.all([
-        admin
-          .from("ministry_assignments")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId),
-        admin
-          .from("ministry_delegates")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", userId)
-      ])
-      if ((assignments.count ?? 0) > 0 || (delegations.count ?? 0) > 0) {
-        throw new Error(
-          "No se pudo eliminar permanentemente: el usuario está o estuvo asignado a un " +
-            "ministerio (el historial de asignaciones se conserva). Usa la eliminación " +
-            "estándar, que desactiva la cuenta."
-        )
-      }
-
-      const { error } = await admin.auth.admin.deleteUser(userId)
-      if (error) {
-        console.error("Hard delete failed", {
-          userId,
-          message: error.message,
-          status: error.status
-        })
-        throw new Error(
-          "No se pudo eliminar permanentemente: el usuario tiene movimientos u otros registros " +
-            "asociados en el sistema. Usa la eliminación estándar, que desactiva la cuenta y " +
-            "conserva el historial."
-        )
+      // purge_user deletes everything tied to the user (movements, intentions, settlements,
+      // payroll, audit rows...) and the auth.users row in one transaction. Never surface the raw
+      // driver error to the caller: it isn't guaranteed to be serializable and, unhandled, broke
+      // the delete flow entirely before this was caught.
+      purge = await runPurge(admin, userId, false)
+      // Storage objects can't be removed from SQL. The DB is already committed, so a failure here
+      // only leaves orphaned files: log it instead of reporting the delete as failed.
+      try {
+        await attachmentStorageService.removeMany(purge.storage_paths)
+      } catch (error) {
+        console.error("Purge: failed to remove storage objects", { userId, error })
       }
     } else {
       // Soft delete keeps the auth.users row (invalidating sessions and scrambling the login
@@ -229,10 +230,16 @@ export const usersService = {
       entity_id: userId,
       user_id: actingUserId,
       previous_value: user,
+      new_value: purge ? { counts: purge.counts, foreign_reach: purge.foreign_reach } : undefined,
       note: hardDelete
-        ? "Usuario eliminado permanentemente por administrador (sin registros asociados)"
+        ? "Usuario y todos sus registros eliminados permanentemente por administrador"
         : "Usuario eliminado por administrador (cuenta desactivada, historial preservado)"
     })
+  },
+
+  async previewPurge(userId: string, actingUserId: string): Promise<UserPurgePreview> {
+    if (userId === actingUserId) throw new Error("No puedes eliminar tu propia cuenta")
+    return runPurge(createSupabaseAdminClient(), userId, true)
   },
 
   async resendInvite(userId: string, actingUserId: string) {

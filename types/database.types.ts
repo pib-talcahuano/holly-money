@@ -1332,6 +1332,7 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       get_pending_reminders: { Args: never; Returns: Json }
+      purge_user: { Args: { p_dry_run?: boolean; p_user_id: string }; Returns: Json }
       register_payroll: {
         Args: {
           p_category_id: string

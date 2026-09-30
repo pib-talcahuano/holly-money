@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { getCurrentUser } from "@/lib/supabase/server"
 import { PERMISSIONS, can, isImpersonating } from "@/lib/permissions/rbac"
 import { USER_ROLES } from "@/lib/constants/roles"
-import { usersService } from "@/services/users/users.service"
+import { usersService, type UserPurgePreview } from "@/services/users/users.service"
 import type { CreateUserInput, UpdateUserInput, UpdateOwnProfileInput } from "@/lib/validators/user"
 
 function assertUserAccess(user: Awaited<ReturnType<typeof getCurrentUser>>) {
@@ -46,6 +46,21 @@ export async function deleteUser(
   } catch (e) {
     console.error("deleteUser failed", e)
     return { error: e instanceof Error ? e.message : "No se pudo eliminar el usuario" }
+  }
+}
+
+export async function getUserPurgePreview(
+  id: string
+): Promise<{ preview: UserPurgePreview } | { error: string }> {
+  try {
+    const user = assertUserAccess(await getCurrentUser())
+    if (user.role !== USER_ROLES.ADMIN) {
+      return { error: "Solo un administrador puede eliminar usuarios permanentemente" }
+    }
+    return { preview: await usersService.previewPurge(id, user.id) }
+  } catch (e) {
+    console.error("getUserPurgePreview failed", e)
+    return { error: e instanceof Error ? e.message : "No se pudo calcular el impacto" }
   }
 }
 
