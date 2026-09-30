@@ -154,7 +154,7 @@ export const usersService = {
     })
   },
 
-  async delete(userId: string, actingUserId: string) {
+  async delete(userId: string, actingUserId: string, options?: { hardDelete?: boolean }) {
     if (userId === actingUserId) throw new Error("No puedes eliminar tu propia cuenta")
 
     const admin = createSupabaseAdminClient()
@@ -167,28 +167,46 @@ export const usersService = {
 
     if (fetchError || !user) throw new Error("Usuario no encontrado")
 
-    // Hard-deleting from auth.users cascades to public.users (ON DELETE CASCADE), but that row
-    // is protected by ON DELETE RESTRICT/NO ACTION foreign keys from movements, audit logs,
-    // intentions, settlements, payroll, etc. — so a hard delete fails for any user who has ever
-    // done anything in the system. Soft delete keeps the auth.users row (invalidating sessions
-    // and scrambling the login email) so those references stay valid, and we deactivate the
-    // profile below to fully block access, consistent with the "no physical deletion" convention
-    // used elsewhere (movements are cancelled, never deleted).
-    const { error } = await admin.auth.admin.deleteUser(userId, true)
-    if (error) throw error
+    const hardDelete = options?.hardDelete ?? false
 
-    await admin
-      .from("users")
-      .update({ status: "INACTIVE", updated_at: new Date().toISOString() })
-      .eq("id", userId)
+    if (hardDelete) {
+      // Hard-deleting from auth.users cascades to public.users (ON DELETE CASCADE), but that
+      // row is protected by ON DELETE RESTRICT/NO ACTION foreign keys from movements, audit
+      // logs, intentions, settlements, payroll, etc. — so this only succeeds for a user who has
+      // never done anything in the system (e.g. an invite created by mistake). Never surface the
+      // raw driver error to the caller: it isn't guaranteed to be serializable and, unhandled,
+      // broke the delete flow entirely before this was caught.
+      const { error } = await admin.auth.admin.deleteUser(userId)
+      if (error) {
+        throw new Error(
+          "No se pudo eliminar permanentemente: el usuario tiene movimientos u otros registros " +
+            "asociados en el sistema. Usa la eliminación estándar, que desactiva la cuenta y " +
+            "conserva el historial."
+        )
+      }
+    } else {
+      // Soft delete keeps the auth.users row (invalidating sessions and scrambling the login
+      // email) so those references stay valid, and we deactivate the profile below to fully
+      // block access, consistent with the "no physical deletion" convention used elsewhere
+      // (movements are cancelled, never deleted).
+      const { error } = await admin.auth.admin.deleteUser(userId, true)
+      if (error) throw error
+
+      await admin
+        .from("users")
+        .update({ status: "INACTIVE", updated_at: new Date().toISOString() })
+        .eq("id", userId)
+    }
 
     await auditService.logSystem({
       entity: "users",
-      action: "Usuario eliminado",
+      action: hardDelete ? "Usuario eliminado permanentemente" : "Usuario eliminado",
       entity_id: userId,
       user_id: actingUserId,
       previous_value: user,
-      note: "Usuario eliminado por administrador (cuenta desactivada, historial preservado)"
+      note: hardDelete
+        ? "Usuario eliminado permanentemente por administrador (sin registros asociados)"
+        : "Usuario eliminado por administrador (cuenta desactivada, historial preservado)"
     })
   },
 

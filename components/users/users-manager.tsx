@@ -59,6 +59,7 @@ import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { toast } from "sonner"
 import { inviteUser, updateUser, deleteUser, resendInvite, resetUser } from "@/app/actions/users"
 import { startImpersonation } from "@/app/actions/impersonation"
+import { useUser } from "@/components/providers/user-provider"
 
 type UserStatus = "ACTIVE" | "INACTIVE" | "PENDING_ACTIVATION" | "PENDING_RESET"
 
@@ -178,11 +179,13 @@ function UserListItem({
 export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const currentUser = useUser()
   const inviteMinister = searchParams.get("invite") === USER_ROLES.MINISTER
   const [users, setUsers] = useState<UserRow[]>(initialUsers)
   const [createOpen, setCreateOpen] = useState(inviteMinister)
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
-  const [deletingUser, setDeletingUser] = useState<UserRow | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [hardDelete, setHardDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [search, setSearch] = useState("")
   const [inviteLink, setInviteLink] = useState<string | null>(null)
@@ -268,6 +271,8 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
 
   function openEdit(user: UserRow) {
     setEditingUser(user)
+    setConfirmDelete(false)
+    setHardDelete(false)
     editForm.reset({
       id: user.id,
       full_name: user.full_name,
@@ -291,15 +296,18 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   }
 
   const handleDelete = () => {
-    if (!deletingUser || isDeleting) return
-    const { id: userId, full_name: name } = deletingUser
+    if (!editingUser || isDeleting) return
+    const { id: userId, full_name: name } = editingUser
+    const wantsHardDelete = hardDelete && currentUser.role === USER_ROLES.ADMIN
     setIsDeleting(true)
 
-    toast.promise(deleteUser(userId), {
-      loading: "Eliminando usuario...",
+    toast.promise(deleteUser(userId, { hardDelete: wantsHardDelete }), {
+      loading: wantsHardDelete ? "Eliminando usuario permanentemente..." : "Eliminando usuario...",
       success: () => {
         setUsers((prev) => prev.filter((u) => u.id !== userId))
-        setDeletingUser(null)
+        setEditingUser(null)
+        setConfirmDelete(false)
+        setHardDelete(false)
         setIsDeleting(false)
         return `${name} fue eliminado`
       },
@@ -523,149 +531,187 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
         </div>
       </div>
 
-      {/* Edit dialog */}
+      {/* Edit dialog (also hosts the delete confirmation as an in-place view, so there is
+          only ever one dialog open — never two stacked/transitioning at once) */}
       <Dialog
         open={!!editingUser}
         onOpenChange={(o) => {
-          if (!o) setEditingUser(null)
+          if (!o && !isDeleting) {
+            setEditingUser(null)
+            setConfirmDelete(false)
+            setHardDelete(false)
+          }
         }}
       >
         <DialogContent className="sm:max-w-[460px]">
-          <DialogHeader>
-            <DialogTitle className="text-[17px] font-extrabold">Editar usuario</DialogTitle>
-            <DialogDescription className="text-[12.5px]">
-              Modifica los datos del usuario o realiza acciones sobre su cuenta.
-            </DialogDescription>
-          </DialogHeader>
+          {confirmDelete ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-[17px] font-extrabold">Eliminar usuario</DialogTitle>
+                <DialogDescription className="text-[12.5px]">
+                  ¿Eliminar a <strong>{editingUser?.full_name}</strong> ({editingUser?.email})? Esta
+                  acción no se puede deshacer. Se cancelará cualquier invitación pendiente.
+                </DialogDescription>
+              </DialogHeader>
 
-          <form onSubmit={editForm.handleSubmit(handleUpdate)} className="space-y-4 pt-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field data-invalid={!!editForm.formState.errors.full_name || undefined}>
-                <FieldLabel htmlFor="edit-full_name">Nombre</FieldLabel>
-                <Input
-                  id="edit-full_name"
-                  aria-invalid={!!editForm.formState.errors.full_name}
-                  {...editForm.register("full_name")}
-                />
-                <FieldError errors={[editForm.formState.errors.full_name]} />
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="edit-role">Rol</FieldLabel>
-                <NativeSelect id="edit-role" className="w-full" {...editForm.register("role")}>
-                  {ROLE_ORDER.map((role) => (
-                    <option key={role} value={role}>
-                      {ROLE_LABEL[role]}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-            </div>
-
-            <Field>
-              <FieldLabel htmlFor="edit-email">Correo</FieldLabel>
-              <div
-                id="edit-email"
-                className="flex h-9 items-center rounded-md border border-transparent bg-muted px-2.5 text-sm text-muted-foreground"
-              >
-                {editingUser?.email}
-              </div>
-            </Field>
-
-            <Field>
-              <FieldLabel htmlFor="edit-status">Estado de cuenta</FieldLabel>
-              <NativeSelect id="edit-status" className="w-full" {...editForm.register("status")}>
-                <option value="ACTIVE">Activo</option>
-                <option value="INACTIVE">Inactivo</option>
-              </NativeSelect>
-            </Field>
-
-            {editingUser && (
-              <div className="border-t border-border pt-4 space-y-2.5">
-                <h3 className="text-[10.5px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                  Acciones de cuenta
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {editingUser.role !== USER_ROLES.ADMIN && editingUser.status === "ACTIVE" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleImpersonate(editingUser.id)}
-                    >
-                      <VenetianMask className="size-3.5" />
-                      Impersonar
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleReset(editingUser.id)}
-                  >
-                    <RotateCcw className="size-3.5" />
-                    Resetear contraseña
-                  </Button>
-                  {editingUser.status === "PENDING_ACTIVATION" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void handleResendInvite(editingUser.id)}
-                    >
-                      <Send className="size-3.5" />
-                      Reenviar invitación
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
+              {currentUser.role === USER_ROLES.ADMIN && (
+                <label className="flex items-start gap-2 text-[12.5px] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-4"
                     disabled={isDeleting}
-                    className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => {
-                      setDeletingUser(editingUser)
-                      setEditingUser(null)
-                    }}
+                    checked={hardDelete}
+                    onChange={(e) => setHardDelete(e.target.checked)}
+                  />
+                  <span>
+                    Eliminar permanentemente (borra el registro por completo)
+                    <span className="block text-[11px] font-normal text-muted-foreground">
+                      Solo funciona si el usuario nunca tuvo movimientos ni otros registros
+                      asociados. En cualquier otro caso, usa la opción estándar de arriba, que
+                      desactiva la cuenta y conserva el historial.
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    setConfirmDelete(false)
+                    setHardDelete(false)
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={isDeleting}
+                  onClick={() => void handleDelete()}
+                >
+                  {isDeleting
+                    ? "Eliminando..."
+                    : hardDelete
+                      ? "Sí, eliminar permanentemente"
+                      : "Sí, eliminar"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-[17px] font-extrabold">Editar usuario</DialogTitle>
+                <DialogDescription className="text-[12.5px]">
+                  Modifica los datos del usuario o realiza acciones sobre su cuenta.
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={editForm.handleSubmit(handleUpdate)} className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field data-invalid={!!editForm.formState.errors.full_name || undefined}>
+                    <FieldLabel htmlFor="edit-full_name">Nombre</FieldLabel>
+                    <Input
+                      id="edit-full_name"
+                      aria-invalid={!!editForm.formState.errors.full_name}
+                      {...editForm.register("full_name")}
+                    />
+                    <FieldError errors={[editForm.formState.errors.full_name]} />
+                  </Field>
+
+                  <Field>
+                    <FieldLabel htmlFor="edit-role">Rol</FieldLabel>
+                    <NativeSelect id="edit-role" className="w-full" {...editForm.register("role")}>
+                      {ROLE_ORDER.map((role) => (
+                        <option key={role} value={role}>
+                          {ROLE_LABEL[role]}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                </div>
+
+                <Field>
+                  <FieldLabel htmlFor="edit-email">Correo</FieldLabel>
+                  <div
+                    id="edit-email"
+                    className="flex h-9 items-center rounded-md border border-transparent bg-muted px-2.5 text-sm text-muted-foreground"
                   >
-                    <Trash2 className="size-3.5" />
-                    Eliminar usuario
+                    {editingUser?.email}
+                  </div>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="edit-status">Estado de cuenta</FieldLabel>
+                  <NativeSelect
+                    id="edit-status"
+                    className="w-full"
+                    {...editForm.register("status")}
+                  >
+                    <option value="ACTIVE">Activo</option>
+                    <option value="INACTIVE">Inactivo</option>
+                  </NativeSelect>
+                </Field>
+
+                {editingUser && (
+                  <div className="border-t border-border pt-4 space-y-2.5">
+                    <h3 className="text-[10.5px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                      Acciones de cuenta
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {editingUser.role !== USER_ROLES.ADMIN && editingUser.status === "ACTIVE" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleImpersonate(editingUser.id)}
+                        >
+                          <VenetianMask className="size-3.5" />
+                          Impersonar
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void handleReset(editingUser.id)}
+                      >
+                        <RotateCcw className="size-3.5" />
+                        Resetear contraseña
+                      </Button>
+                      {editingUser.status === "PENDING_ACTIVATION" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleResendInvite(editingUser.id)}
+                        >
+                          <Send className="size-3.5" />
+                          Reenviar invitación
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isDeleting}
+                        className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setConfirmDelete(true)}
+                      >
+                        <Trash2 className="size-3.5" />
+                        Eliminar usuario
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+                  <Button variant="outline" type="button" onClick={() => setEditingUser(null)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={editForm.formState.isSubmitting}>
+                    {editForm.formState.isSubmitting ? "Guardando..." : "Guardar cambios"}
                   </Button>
                 </div>
-              </div>
-            )}
-
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-              <Button variant="outline" type="button" onClick={() => setEditingUser(null)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={editForm.formState.isSubmitting}>
-                {editForm.formState.isSubmitting ? "Guardando..." : "Guardar cambios"}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation dialog */}
-      <Dialog
-        open={!!deletingUser}
-        onOpenChange={(o) => {
-          if (!o && !isDeleting) setDeletingUser(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-[17px] font-extrabold">Eliminar usuario</DialogTitle>
-            <DialogDescription className="text-[12.5px]">
-              ¿Eliminar a <strong>{deletingUser?.full_name}</strong> ({deletingUser?.email})? Esta
-              acción no se puede deshacer. Se cancelará cualquier invitación pendiente.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-            <Button variant="outline" disabled={isDeleting} onClick={() => setDeletingUser(null)}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" disabled={isDeleting} onClick={() => void handleDelete()}>
-              {isDeleting ? "Eliminando..." : "Sí, eliminar"}
-            </Button>
-          </div>
+              </form>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
