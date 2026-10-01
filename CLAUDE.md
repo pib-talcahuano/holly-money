@@ -98,6 +98,9 @@ Emails sent to any `@pibtalcahuano.com` address are received via a Resend inboun
 **Reminders:**
 `app/api/reminders/route.ts` is called by an external scheduled job (cron), authenticated via a shared `CRON_SECRET` sent as `x-cron-secret` (constant-time compare). Summarizes pending intentions/settlements/missing transfers via the `get_pending_reminders` RPC and emails treasury.
 
+**Scheduled requests:**
+A minister can save a DRAFT request with `scheduled_send_date`; `app/api/cron/send-scheduled-requests/route.ts` (same `x-cron-secret` auth, triggered daily by `.github/workflows/scheduled-requests.yml`) calls `intentionsService.sendDueScheduled`, moving due drafts to PENDING (dates evaluated in America/Santiago) and notifying treasury. Manual submit/cancel clears the schedule.
+
 **Movement post-processing:**
 `services/google/movement-postprocess.ts` runs after a movement is created/edited — despite the directory name, it no longer does anything Google-specific; the earlier Google Apps Script pipeline (PDF generation + Sheets sync) has been removed entirely. It now only sends an email notification via Resend, tracked on `movements.notification_status`/`notification_error`. Email notifications go through Resend (`services/email/`), with React Email templates in `emails/`. See `docs/email.md` for the full list of emails sent and how to add a new one.
 
