@@ -56,7 +56,7 @@ import {
   inviteDelegate,
   removeDelegate
 } from "@/app/actions/ministries"
-import { USER_ROLES } from "@/lib/constants/roles"
+import { USER_ROLES, hasRole } from "@/lib/constants/roles"
 import type { MinistryLeftoverRow } from "@/services/ministries/ministry-leftover.service"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { intentionsService } from "@/services/intentions/intentions.service"
@@ -76,7 +76,7 @@ type MinistryUser = {
   id: string
   full_name: string
   email: string
-  role: string
+  roles: string[]
 }
 
 type Assignment = {
@@ -149,7 +149,7 @@ export function MinistryDetailClient({
 
   const canManageDelegates = canManage || isAssignedMinister
 
-  const ministers = users.filter((u) => u.role === USER_ROLES.MINISTER)
+  const ministers = users.filter((u) => hasRole(u.roles, USER_ROLES.MINISTER))
   const availableMinsters = ministers.filter((u) => u.id !== current?.user_id)
 
   const totalTransferred = leftover.reduce((sum, row) => sum + row.transferred_amount, 0)

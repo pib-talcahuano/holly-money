@@ -59,21 +59,25 @@ async function loadIdentity(userId: string) {
   const admin = createSupabaseAdminClient()
   const { data: profile } = await admin
     .from("users")
-    .select("id, full_name, email, role, status")
+    .select("id, full_name, email, role, roles, status")
     .eq("id", userId)
     .single()
 
   if (!profile || profile.status !== "ACTIVE") return null
 
-  const permList = await getPermissionsForRole(profile.role)
+  const roles = profile.roles.length ? profile.roles : [profile.role]
+  const permLists = await Promise.all(roles.map((role) => getPermissionsForRole(role)))
 
   return {
     id: profile.id,
     email: profile.email,
     name: profile.full_name,
+    // role is the primary role (display); authorization uses every role in `roles`.
     role: profile.role,
+    roles,
     status: profile.status,
-    permissions: new Set<string>(permList)
+    // Union of the permissions granted to each of the user's roles.
+    permissions: new Set<string>(permLists.flat())
   }
 }
 
@@ -143,6 +147,12 @@ export const getCurrentUser = cache(async function getCurrentUser() {
   return {
     ...target,
     impersonatorId: realUser.id,
-    realUser: { id: realUser.id, email: realUser.email, name: realUser.name, role: realUser.role }
+    realUser: {
+      id: realUser.id,
+      email: realUser.email,
+      name: realUser.name,
+      role: realUser.role,
+      roles: realUser.roles
+    }
   }
 })

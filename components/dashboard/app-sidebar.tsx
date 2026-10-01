@@ -129,7 +129,7 @@ export function AppSidebar({
     name: string
     email: string
     initials: string
-    role: string
+    roles: string[]
     ministryId?: string | null
   }
 }) {
@@ -141,13 +141,13 @@ export function AppSidebar({
       NAV_GROUPS.map((group) => ({
         ...group,
         links: group.links
-          .filter((l) => !l.roles || l.roles.includes(user.role))
+          .filter((l) => !l.roles || l.roles.some((role) => user.roles.includes(role)))
           .filter((l) => l.href !== MY_MINISTRY_HREF || user.ministryId)
           .map((l) =>
             l.href === MY_MINISTRY_HREF ? { ...l, href: `/ministries/${user.ministryId}` } : l
           )
       })).filter((group) => group.links.length > 0),
-    [user.role, user.ministryId]
+    [user.roles, user.ministryId]
   )
 
   const useGroups = useMemo(

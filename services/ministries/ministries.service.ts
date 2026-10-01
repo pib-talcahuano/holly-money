@@ -167,7 +167,7 @@ export const ministriesService = {
     assignedBy: string
   ) {
     const created = await usersService.invite(
-      { full_name: input.full_name, email: input.email, role: "DELEGATE" },
+      { full_name: input.full_name, email: input.email, roles: ["DELEGATE"] },
       assignedBy
     )
     if (!created.id) throw new Error("No se pudo crear la cuenta del delegado")
@@ -191,6 +191,17 @@ export const ministriesService = {
   },
 
   async assign(db: DB, ministryId: string, input: AssignMinisterInput, assignedBy: string) {
+    // Only users holding the MINISTER role (alone or alongside others, e.g. BURSAR) can be
+    // assigned — the picker already filters, this guards direct calls.
+    const { data: assignee } = await db
+      .from("users")
+      .select("roles, status")
+      .eq("id", input.user_id)
+      .single()
+    if (!assignee || assignee.status !== "ACTIVE" || !assignee.roles.includes("MINISTER")) {
+      throw new Error("El usuario seleccionado no tiene el rol de Ministro")
+    }
+
     // Close any existing active assignment
     await db
       .from("ministry_assignments")

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, type ComponentProps } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { useForm, useWatch } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { cn, avatarColorFor, initialsFor } from "@/lib/utils"
 import type { UserRole } from "@/types/auth"
@@ -11,7 +11,8 @@ import {
   ROLE_ORDER,
   ROLE_LABEL,
   ROLE_BADGE_VARIANT,
-  ROLE_DOT_CLASS
+  ROLE_DOT_CLASS,
+  hasRole
 } from "@/lib/constants/roles"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -68,14 +69,29 @@ import {
 import type { UserPurgePreview } from "@/services/users/users.service"
 import { startImpersonation } from "@/app/actions/impersonation"
 import { useUser } from "@/components/providers/user-provider"
+import { RolePicker } from "@/components/users/role-picker"
 
 type UserStatus = "ACTIVE" | "INACTIVE" | "PENDING_ACTIVATION" | "PENDING_RESET"
+
+const ROLE_OPTIONS: { role: UserRole; description: string }[] = [
+  { role: USER_ROLES.ADMIN, description: "Acceso total (no se combina con otros roles)" },
+  { role: USER_ROLES.FINANCE, description: "Gestión contable — solo lectura" },
+  { role: USER_ROLES.BURSAR, description: "Ingreso de movimientos y aprobación de solicitudes" },
+  { role: USER_ROLES.MINISTER, description: "Solicitudes de fondos de su ministerio" }
+]
+
+// Delegates are normally created from a ministry, but remain editable here.
+const EDIT_ROLE_OPTIONS = [
+  ...ROLE_OPTIONS,
+  { role: USER_ROLES.DELEGATE, description: "Colabora en las solicitudes de un ministerio" }
+]
 
 type UserRow = {
   id: string
   full_name: string
   email: string
   role: UserRole
+  roles: UserRole[]
   status: UserStatus
   created_at: string | Date
   updated_at: string | Date | null
@@ -147,12 +163,15 @@ function UserListItem({
         </div>
       </ItemContent>
       <ItemActions>
-        <Badge
-          variant={ROLE_BADGE_VARIANT[user.role]}
-          className="hidden sm:inline-flex uppercase tracking-wide"
-        >
-          {ROLE_LABEL[user.role]}
-        </Badge>
+        {user.roles.map((role) => (
+          <Badge
+            key={role}
+            variant={ROLE_BADGE_VARIANT[role]}
+            className="hidden sm:inline-flex uppercase tracking-wide"
+          >
+            {ROLE_LABEL[role]}
+          </Badge>
+        ))}
         {meta.variant && (
           <Badge variant={meta.variant} className="hidden sm:inline-flex">
             {meta.label}
@@ -163,7 +182,7 @@ function UserListItem({
             Enlace expirado
           </Badge>
         )}
-        {user.role !== USER_ROLES.ADMIN && user.status === "ACTIVE" && (
+        {!hasRole(user.roles, USER_ROLES.ADMIN) && user.status === "ACTIVE" && (
           <Button
             size="icon-sm"
             variant="outline"
@@ -250,7 +269,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const groups = useMemo(() => {
     return ROLE_ORDER.map((role) => ({
       role,
-      members: filtered.filter((u) => u.role === role)
+      members: filtered.filter((u) => u.roles.includes(role))
     })).filter((g) => g.members.length > 0)
   }, [filtered])
 
@@ -268,11 +287,11 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     defaultValues: {
       full_name: "",
       email: "",
-      role: inviteMinister ? USER_ROLES.MINISTER : USER_ROLES.BURSAR
+      roles: [inviteMinister ? USER_ROLES.MINISTER : USER_ROLES.BURSAR]
     }
   })
 
-  const selectedRole = useWatch({ control: createForm.control, name: "role" })
+  const selectedRoles = useWatch({ control: createForm.control, name: "roles" }) ?? []
 
   const handleCreate = (values: CreateUserInput) => {
     const promise = inviteUser(values)
@@ -304,7 +323,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     editForm.reset({
       id: user.id,
       full_name: user.full_name,
-      role: user.role,
+      roles: user.roles,
       status: user.status
     })
   }
@@ -482,17 +501,29 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                 <FieldError errors={[createForm.formState.errors.email]} />
               </Field>
 
-              <Field>
-                <FieldLabel htmlFor="new-role">Nivel de acceso</FieldLabel>
-                <NativeSelect id="new-role" className="w-full" {...createForm.register("role")}>
-                  <option value={USER_ROLES.ADMIN}>Administrador — Acceso total</option>
-                  <option value={USER_ROLES.FINANCE}>Finanzas — Gestión contable</option>
-                  <option value={USER_ROLES.BURSAR}>Tesorero — Ingreso y aprobación</option>
-                  <option value={USER_ROLES.MINISTER}>Ministro — Solicitudes de fondos</option>
-                </NativeSelect>
+              <Field data-invalid={!!createForm.formState.errors.roles || undefined}>
+                <FieldLabel htmlFor="new-roles">Roles</FieldLabel>
+                <Controller
+                  control={createForm.control}
+                  name="roles"
+                  render={({ field }) => (
+                    <RolePicker
+                      id="new-roles"
+                      value={field.value}
+                      onChange={field.onChange}
+                      options={ROLE_OPTIONS}
+                      invalid={!!createForm.formState.errors.roles}
+                    />
+                  )}
+                />
+                <FieldError
+                  errors={[
+                    createForm.formState.errors.roles?.root ?? createForm.formState.errors.roles
+                  ]}
+                />
               </Field>
 
-              {selectedRole === USER_ROLES.ADMIN && (
+              {selectedRoles.includes(USER_ROLES.ADMIN) && (
                 <Alert variant="info">
                   <AlertTitle>Acceso total al sistema</AlertTitle>
                   <AlertDescription>
@@ -502,7 +533,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   </AlertDescription>
                 </Alert>
               )}
-              {selectedRole === USER_ROLES.BURSAR && (
+              {selectedRoles.includes(USER_ROLES.BURSAR) && (
                 <Alert variant="info">
                   <AlertTitle>Tesorero — Ingreso y aprobación</AlertTitle>
                   <AlertDescription>
@@ -512,7 +543,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   </AlertDescription>
                 </Alert>
               )}
-              {selectedRole === USER_ROLES.FINANCE && (
+              {selectedRoles.includes(USER_ROLES.FINANCE) && (
                 <Alert variant="info">
                   <AlertTitle>Finanzas — Monitoreo de registros</AlertTitle>
                   <AlertDescription>
@@ -521,7 +552,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   </AlertDescription>
                 </Alert>
               )}
-              {selectedRole === USER_ROLES.MINISTER && (
+              {selectedRoles.includes(USER_ROLES.MINISTER) && (
                 <Alert variant="info">
                   <AlertTitle>Solicitudes de fondos</AlertTitle>
                   <AlertDescription>
@@ -530,6 +561,17 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   </AlertDescription>
                 </Alert>
               )}
+              {selectedRoles.includes(USER_ROLES.MINISTER) &&
+                selectedRoles.includes(USER_ROLES.BURSAR) && (
+                  <Alert variant="info">
+                    <AlertTitle>Ministro y Tesorero a la vez</AlertTitle>
+                    <AlertDescription>
+                      Se suman los permisos de ambos roles. Por separación de funciones, esta
+                      persona no podrá aprobar, rendir ni transferir los fondos de sus propias
+                      solicitudes.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
                 <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>
@@ -719,15 +761,26 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                     <FieldError errors={[editForm.formState.errors.full_name]} />
                   </Field>
 
-                  <Field>
-                    <FieldLabel htmlFor="edit-role">Rol</FieldLabel>
-                    <NativeSelect id="edit-role" className="w-full" {...editForm.register("role")}>
-                      {ROLE_ORDER.map((role) => (
-                        <option key={role} value={role}>
-                          {ROLE_LABEL[role]}
-                        </option>
-                      ))}
-                    </NativeSelect>
+                  <Field data-invalid={!!editForm.formState.errors.roles || undefined}>
+                    <FieldLabel htmlFor="edit-roles">Roles</FieldLabel>
+                    <Controller
+                      control={editForm.control}
+                      name="roles"
+                      render={({ field }) => (
+                        <RolePicker
+                          id="edit-roles"
+                          value={field.value ?? []}
+                          onChange={field.onChange}
+                          options={EDIT_ROLE_OPTIONS}
+                          invalid={!!editForm.formState.errors.roles}
+                        />
+                      )}
+                    />
+                    <FieldError
+                      errors={[
+                        editForm.formState.errors.roles?.root ?? editForm.formState.errors.roles
+                      ]}
+                    />
                   </Field>
                 </div>
 

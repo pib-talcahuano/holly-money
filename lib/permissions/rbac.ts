@@ -45,3 +45,11 @@ export function isMinisterWorkflowUser(permissions: Set<string> | undefined): bo
     can(permissions, PERMISSIONS.CREATE_REQUEST) || can(permissions, PERMISSIONS.CREATE_SETTLEMENT)
   )
 }
+
+// Whether request/settlement *visibility* is limited to the user's own ministry. Reviewers
+// (REVIEW_INTENTIONS) see every ministry's requests, so a user who is both a minister and a
+// reviewer (e.g. MINISTER + BURSAR) keeps the org-wide view and is only tied to their own
+// ministry for creating requests/settlements (see isMinisterWorkflowUser).
+export function isMinisterScoped(permissions: Set<string> | undefined): boolean {
+  return isMinisterWorkflowUser(permissions) && !can(permissions, PERMISSIONS.REVIEW_INTENTIONS)
+}

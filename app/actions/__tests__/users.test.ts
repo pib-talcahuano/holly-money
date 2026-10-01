@@ -44,11 +44,15 @@ jest.mock("next/cache", () => ({
 }))
 
 const mockUser = { id: "admin-1", permissions: ["MANAGE_USERS"] }
-const createInput = { email: "new@example.com", full_name: "New User", role: "MINISTER" as const }
+const createInput = {
+  email: "new@example.com",
+  full_name: "New User",
+  roles: ["MINISTER" as const, "BURSAR" as const]
+}
 const updateInput = {
   id: "u-1",
   full_name: "Updated",
-  role: "MINISTER" as const,
+  roles: ["MINISTER" as const, "BURSAR" as const],
   status: "ACTIVE" as const
 }
 

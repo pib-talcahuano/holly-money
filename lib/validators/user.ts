@@ -4,16 +4,25 @@ import type { UserRole } from "@/types/auth"
 
 const userRoleEnum = ROLE_ORDER as [UserRole, ...UserRole[]]
 
+// A user holds one or more roles. ADMIN is exclusive: it can't be combined with other roles.
+const rolesSchema = z
+  .array(z.enum(userRoleEnum))
+  .min(1, "Selecciona al menos un rol")
+  .refine((roles) => new Set(roles).size === roles.length, "Roles duplicados")
+  .refine((roles) => !roles.includes("ADMIN") || roles.length === 1, {
+    message: "El rol Admin no se puede combinar con otros roles"
+  })
+
 export const createUserSchema = z.object({
   full_name: z.string().min(3, "Nombre requerido"),
   email: z.email("Email inválido"),
-  role: z.enum(userRoleEnum)
+  roles: rolesSchema
 })
 
 export const updateUserSchema = z.object({
   id: z.string().min(1),
   full_name: z.string().min(3, "Nombre requerido"),
-  role: z.enum(userRoleEnum),
+  roles: rolesSchema,
   status: z.enum(["ACTIVE", "INACTIVE", "PENDING_ACTIVATION", "PENDING_RESET"])
 })
 

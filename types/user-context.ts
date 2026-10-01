@@ -5,6 +5,7 @@ export interface RealUser {
   email: string
   name: string
   role: UserRole
+  roles: UserRole[]
 }
 
 export interface SessionUser {
@@ -12,6 +13,7 @@ export interface SessionUser {
   email: string
   name: string
   role: UserRole
+  roles: UserRole[]
   status: string
   permissions: string[]
   impersonatorId: string | null

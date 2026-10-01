@@ -46,10 +46,13 @@ const FUNDING_METHOD_PILL = {
 
 export function IntentionsClient({
   canCreateRequest,
+  viewAll = false,
   intentions: initialIntentions,
   ministry
 }: {
   canCreateRequest: boolean
+  // Org-wide list (reviewer who can also create requests) rather than only the own ministry's.
+  viewAll?: boolean
   intentions: Intention[]
   ministry: Ministry
 }) {
@@ -65,7 +68,7 @@ export function IntentionsClient({
   }, [initialIntentions])
   useRealtimeRefresh([{ table: "budget_intentions" }])
 
-  const isMinister = canCreateRequest
+  const isMinister = canCreateRequest && !viewAll
 
   // Closed = rejected/cancelled outright, or its settlement flow was closed out
   // by tesorería (settlement_closed_at set). Everything else still needs
@@ -87,10 +90,10 @@ export function IntentionsClient({
             Solicitudes de Dinero
           </h1>
           <p className="mt-1 text-[13.5px] text-muted-foreground">
-            {isMinister ? (
+            {isMinister || (viewAll && ministry) ? (
               ministry ? (
                 <>
-                  Ministerio:{" "}
+                  {viewAll && "Todas las solicitudes · "}Ministerio:{" "}
                   <Link
                     href={`/ministries/${ministry.id}`}
                     className="font-semibold hover:underline"
@@ -106,7 +109,7 @@ export function IntentionsClient({
             )}
           </p>
         </div>
-        {isMinister && (
+        {canCreateRequest && (
           <NewRequestDialog
             onCreated={(created) =>
               setIntentions((prev) => [created as unknown as Intention, ...prev])

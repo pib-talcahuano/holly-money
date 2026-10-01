@@ -189,13 +189,18 @@ export const settlementsService = {
   async startReview(db: DB, id: string, reviewerId: string) {
     const { data: current, error: fetchError } = await db
       .from("expense_settlements")
-      .select("status")
+      .select("status, submitted_by")
       .eq("id", id)
       .single()
     if (fetchError) throw fetchError
 
     if (current.status !== "PENDING") {
       return { alreadyActioned: true }
+    }
+
+    // Segregation of duties: see the *_no_self_review triggers.
+    if (current.submitted_by === reviewerId) {
+      throw new Error("No puedes revisar tu propia rendición")
     }
 
     const now = new Date().toISOString()
@@ -265,13 +270,17 @@ export const settlementsService = {
     const { data: current } = await db
       .from("expense_settlements")
       .select(
-        "status, intention_id, amount, description, users!expense_settlements_submitted_by_fkey(email, full_name)"
+        "status, submitted_by, intention_id, amount, description, users!expense_settlements_submitted_by_fkey(email, full_name)"
       )
       .eq("id", id)
       .single()
 
     if (current?.status !== "IN_REVIEW") {
       return { alreadyActioned: true }
+    }
+
+    if (current.submitted_by === reviewerId) {
+      throw new Error("No puedes revisar tu propia rendición")
     }
 
     const ministerUser = current?.users
@@ -426,6 +435,16 @@ export const settlementsService = {
   // as settled — one closing transfer can cover several settlements, so this is
   // scoped to the intention rather than any single settlement.
   async closeIntention(db: DB, input: CloseIntentionInput, userId: string) {
+    const { data: intention, error: intentionError } = await db
+      .from("budget_intentions")
+      .select("requested_by")
+      .eq("id", input.intention_id)
+      .single()
+    if (intentionError) throw intentionError
+    if (intention.requested_by === userId) {
+      throw new Error("No puedes cerrar la rendición de tu propia solicitud")
+    }
+
     await insertIntentionAttachments(db, input.intention_id, input.attachments, userId)
 
     const now = new Date().toISOString()

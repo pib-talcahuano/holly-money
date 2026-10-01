@@ -1272,6 +1272,7 @@ export type Database = {
           full_name: string
           id: string
           role: Database["public"]["Enums"]["user_role"]
+          roles: Database["public"]["Enums"]["user_role"][]
           status: Database["public"]["Enums"]["user_status"]
           updated_at: string
         }
@@ -1281,6 +1282,7 @@ export type Database = {
           full_name: string
           id: string
           role?: Database["public"]["Enums"]["user_role"]
+          roles?: Database["public"]["Enums"]["user_role"][]
           status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
         }
@@ -1290,6 +1292,7 @@ export type Database = {
           full_name?: string
           id?: string
           role?: Database["public"]["Enums"]["user_role"]
+          roles?: Database["public"]["Enums"]["user_role"][]
           status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
         }
@@ -1331,7 +1334,15 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      get_my_roles: {
+        Args: never
+        Returns: Database["public"]["Enums"]["user_role"][]
+      }
       get_pending_reminders: { Args: never; Returns: Json }
+      has_any_role: {
+        Args: { p_roles: Database["public"]["Enums"]["user_role"][] }
+        Returns: boolean
+      }
       purge_user: { Args: { p_dry_run?: boolean; p_user_id: string }; Returns: Json }
       register_payroll: {
         Args: {

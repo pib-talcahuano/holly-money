@@ -4,6 +4,7 @@ import { sendInviteEmail, sendResetEmail } from "@/services/email/resend.service
 import { wrapAuthLink } from "@/services/auth/link-wrapper"
 import { attachmentStorageService } from "@/services/storage/attachment-storage.service"
 import { getSiteUrl } from "@/lib/utils"
+import { sortRoles } from "@/lib/constants/roles"
 import type { CreateUserInput, UpdateUserInput, UpdateOwnProfileInput } from "@/lib/validators/user"
 
 export type UserPurgePreview = {
@@ -37,7 +38,7 @@ export const usersService = {
     const admin = createSupabaseAdminClient()
     const { data, error } = await admin
       .from("users")
-      .select("id, full_name, email, role, status, created_at, updated_at")
+      .select("id, full_name, email, role, roles, status, created_at, updated_at")
       .eq("id", userId)
       .single()
 
@@ -49,7 +50,7 @@ export const usersService = {
     const admin = createSupabaseAdminClient()
     const { data, error } = await admin
       .from("users")
-      .select("id, full_name, email, role, status, created_at, updated_at")
+      .select("id, full_name, email, role, roles, status, created_at, updated_at")
       .order("created_at", { ascending: true })
       .limit(500)
 
@@ -95,12 +96,15 @@ export const usersService = {
 
     const userId = linkData.user.id
 
-    // Insert into public.users with PENDING_ACTIVATION status
+    // Insert into public.users with PENDING_ACTIVATION status. `role` is the primary role (the
+    // most privileged one); `roles` is the full set.
+    const roles = sortRoles(input.roles)
     const { error: insertError } = await admin.from("users").insert({
       id: userId,
       full_name: input.full_name.trim(),
       email,
-      role: input.role,
+      role: roles[0],
+      roles,
       status: "PENDING_ACTIVATION"
     })
 
@@ -120,13 +124,13 @@ export const usersService = {
       action: "Usuario invitado",
       entity_id: userId,
       user_id: actingUserId,
-      new_value: { email, full_name: input.full_name.trim(), role: input.role },
+      new_value: { email, full_name: input.full_name.trim(), roles },
       note: "Invitación enviada, pendiente de activación"
     })
 
     const { data: profile } = await admin
       .from("users")
-      .select("id, full_name, role, status, created_at, updated_at")
+      .select("id, full_name, role, roles, status, created_at, updated_at")
       .eq("id", userId)
       .single()
 
@@ -188,7 +192,7 @@ export const usersService = {
 
     const { data: user, error: fetchError } = await admin
       .from("users")
-      .select("full_name, email, role, status")
+      .select("full_name, email, role, roles, status")
       .eq("id", userId)
       .single()
 
@@ -304,16 +308,18 @@ export const usersService = {
 
     if (fetchError || !current) throw new Error("Usuario no encontrado")
 
+    const roles = sortRoles(input.roles)
     const { data: updated, error } = await admin
       .from("users")
       .update({
         full_name: input.full_name.trim(),
-        role: input.role,
+        role: roles[0],
+        roles,
         status: input.status,
         updated_at: new Date().toISOString()
       })
       .eq("id", input.id)
-      .select("id, full_name, role, status, created_at, updated_at")
+      .select("id, full_name, role, roles, status, created_at, updated_at")
       .single()
 
     if (error) throw error

@@ -30,6 +30,26 @@ export function roleLabel(role: string): string {
   return ROLE_LABEL[role as UserRole] ?? role
 }
 
+// A user can hold several roles (e.g. MINISTER + BURSAR). Authorization is permission-based and
+// uses the union of every role's permissions; these helpers are for the places that genuinely
+// need a role identity (sidebar visibility, who is assignable as a minister, ADMIN-only flows).
+export function hasRole(roles: readonly string[] | undefined, role: UserRole): boolean {
+  return roles?.includes(role) ?? false
+}
+
+export function hasAnyRole(roles: readonly string[] | undefined, wanted: readonly UserRole[]) {
+  return wanted.some((role) => hasRole(roles, role))
+}
+
+export function rolesLabel(roles: readonly string[]): string {
+  return roles.map(roleLabel).join(" + ")
+}
+
+// Roles in privilege order, de-duplicated; the first is the user's primary role.
+export function sortRoles(roles: readonly UserRole[]): UserRole[] {
+  return ROLE_ORDER.filter((role) => roles.includes(role))
+}
+
 export type RoleBadgeVariant = "primary" | "role" | "income" | "warn" | "neutral"
 
 export const ROLE_BADGE_VARIANT: Record<UserRole, RoleBadgeVariant> = {

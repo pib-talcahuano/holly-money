@@ -19,7 +19,7 @@ import Link from "next/link"
 import { stopImpersonation } from "@/app/actions/impersonation"
 import { useUser } from "@/components/providers/user-provider"
 import { useTheme } from "@/hooks/use-theme"
-import { roleLabel } from "@/lib/constants/roles"
+import { rolesLabel } from "@/lib/constants/roles"
 
 const ITEM_CLASS = "h-[38px] gap-2.5 rounded-[9px] px-2.5 text-[13px] font-semibold [&_svg]:text-muted-foreground"
 
@@ -30,7 +30,7 @@ export function NavUser({
     name: string
     email: string
     initials: string
-    role: string
+    roles: string[]
   }
 }) {
   const router = useRouter()
@@ -71,7 +71,7 @@ export function NavUser({
                 {user.name}
               </span>
               <span className="truncate text-[11px] text-sidebar-foreground/50">
-                {roleLabel(user.role)}
+                {rolesLabel(user.roles)}
               </span>
             </div>
             <ChevronsUpDown className="size-[15px] flex-none text-sidebar-foreground/50" />

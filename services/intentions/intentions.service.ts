@@ -205,12 +205,18 @@ export const intentionsService = {
 
     const { data: current } = await db
       .from("budget_intentions")
-      .select("status, users!budget_intentions_requested_by_fkey(email, full_name)")
+      .select("status, requested_by, users!budget_intentions_requested_by_fkey(email, full_name)")
       .eq("id", id)
       .single()
 
     if (current?.status !== "PENDING") {
       return { alreadyActioned: true }
+    }
+
+    // Segregation of duties for users holding both a requester and a reviewer role. The
+    // budget_intentions_no_self_review trigger enforces this too; this gives a clean message.
+    if (current.requested_by === reviewerId) {
+      throw new Error("No puedes revisar tu propia solicitud")
     }
 
     const { data, error } = await db
@@ -251,6 +257,10 @@ export const intentionsService = {
     userId: string
   ) {
     const intention = await this.getById(db, intentionId)
+
+    if (intention.requested_by === userId) {
+      throw new Error("No puedes registrar la transferencia de tu propia solicitud")
+    }
 
     const { data: category, error: categoryErr } = await db
       .from("movement_categories")

@@ -20,7 +20,12 @@ export async function GET(request: Request) {
 
   const db = await createSupabaseServerClient()
 
-  if (can(user.permissions, PERMISSIONS.CREATE_REQUEST)) {
+  // A user who is both a minister and a reviewer (e.g. MINISTER + BURSAR) is not scoped to
+  // their ministry: they fall through to the org-wide list below.
+  if (
+    can(user.permissions, PERMISSIONS.CREATE_REQUEST) &&
+    !can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS)
+  ) {
     const assignment = await ministriesService.getMinistryForUser(db, user.id)
     if (!assignment) return NextResponse.json([])
     const data = await intentionsService.list(db, {

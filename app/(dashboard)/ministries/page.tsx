@@ -5,7 +5,7 @@ import { ministriesService } from "@/services/ministries/ministries.service"
 import { ministryBudgetService } from "@/services/ministries/ministry-budget.service"
 import { usersService } from "@/services/users/users.service"
 import { MinistriesClient } from "@/components/ministries/ministries-client"
-import { USER_ROLES } from "@/lib/constants/roles"
+import { USER_ROLES, hasRole } from "@/lib/constants/roles"
 
 export default async function MinistriesPage() {
   const user = await getCurrentUser()
@@ -24,7 +24,7 @@ export default async function MinistriesPage() {
     canManageBudgets ? ministryBudgetService.getSummary() : Promise.resolve([])
   ])
 
-  const ministers = users.filter((u) => u.role === USER_ROLES.MINISTER)
+  const ministers = users.filter((u) => hasRole(u.roles, USER_ROLES.MINISTER))
 
   return (
     <MinistriesClient

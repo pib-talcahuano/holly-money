@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { VenetianMask } from "lucide-react"
 import { useUser } from "@/components/providers/user-provider"
 import { stopImpersonation } from "@/app/actions/impersonation"
-import { roleLabel } from "@/lib/constants/roles"
+import { rolesLabel } from "@/lib/constants/roles"
 
 export function ImpersonationBanner() {
   const user = useUser()
@@ -26,7 +26,7 @@ export function ImpersonationBanner() {
       <VenetianMask className="size-[15px] shrink-0" />
       <span>
         Estás viendo la aplicación como <strong className="text-white">{user.name}</strong> (
-        {roleLabel(user.role)}) — se aplican sus permisos.
+        {rolesLabel(user.roles)}) — se aplican sus permisos.
       </span>
       <button
         onClick={handleExit}
