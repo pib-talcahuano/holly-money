@@ -76,3 +76,32 @@ describe("intentionsService.listRecentPurposes", () => {
     await expect(intentionsService.listRecentPurposes(db, "user-1")).rejects.toThrow("boom")
   })
 })
+
+describe("intentionsService.sendDueScheduled", () => {
+  function dueDb(due: { id: string; requested_by: string }[]) {
+    const lte = jest.fn().mockResolvedValue({ data: due, error: null })
+    const not = jest.fn(() => ({ lte }))
+    const selectEq = jest.fn(() => ({ not }))
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null })
+    const updateSelect = jest.fn(() => ({ maybeSingle }))
+    const statusEq = jest.fn(() => ({ select: updateSelect }))
+    const idEq = jest.fn(() => ({ eq: statusEq }))
+    const update = jest.fn(() => ({ eq: idEq }))
+    const from = jest.fn(() => ({ select: jest.fn(() => ({ eq: selectEq })), update }))
+    return { db: { from } as never, lte, update, statusEq }
+  }
+
+  it("selects drafts due by today's date in Santiago", async () => {
+    const { db, lte } = dueDb([])
+    // 2026-10-02 02:00 UTC is still 2026-10-01 in Santiago (UTC-3)
+    await intentionsService.sendDueScheduled(db, new Date("2026-10-02T02:00:00Z"))
+    expect(lte).toHaveBeenCalledWith("scheduled_send_date", "2026-10-01")
+  })
+
+  it("only updates rows still in DRAFT and skips ones already actioned", async () => {
+    const { db, statusEq } = dueDb([{ id: "i1", requested_by: "u1" }])
+    const result = await intentionsService.sendDueScheduled(db)
+    expect(statusEq).toHaveBeenCalledWith("status", "DRAFT")
+    expect(result).toEqual({ sent: 0, failed: [] })
+  })
+})

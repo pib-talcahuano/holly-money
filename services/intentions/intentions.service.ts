@@ -20,6 +20,12 @@ type DB = SupabaseClient<Database>
 
 const CANCELLABLE_STATUSES = ["DRAFT", "PENDING"] as const
 const RECENT_PURPOSES_TAG = "recent-purposes"
+const CHURCH_TIME_ZONE = "America/Santiago"
+
+// Today's date (YYYY-MM-DD) in the church's time zone, so "send on the 5th" means the 5th in Chile
+function todayInChurchTimeZone(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: CHURCH_TIME_ZONE }).format(now)
+}
 
 export const intentionsService = {
   async list(db: DB, filters?: { ministryId?: string; status?: string }) {
@@ -100,6 +106,7 @@ export const intentionsService = {
         purpose: input.purpose,
         date_needed: input.date_needed ?? null,
         funding_method: input.funding_method,
+        scheduled_send_date: input.isDraft ? input.scheduled_send_date || null : null,
         status
       })
       .select()
@@ -142,7 +149,7 @@ export const intentionsService = {
     const now = new Date().toISOString()
     const { data, error } = await db
       .from("budget_intentions")
-      .update({ status: "PENDING", updated_at: now })
+      .update({ status: "PENDING", scheduled_send_date: null, updated_at: now })
       .eq("id", id)
       .select()
       .single()
@@ -160,6 +167,54 @@ export const intentionsService = {
     await sendIntentionNotification(data).catch(() => null)
 
     return { alreadyActioned: false, data }
+  },
+
+  // Called by the cron job: submits every DRAFT whose scheduled date has arrived.
+  // Takes the admin client because there is no user session; ownership was already
+  // established when the minister scheduled the draft.
+  async sendDueScheduled(db: DB, now = new Date()) {
+    const today = todayInChurchTimeZone(now)
+    const { data: due, error } = await db
+      .from("budget_intentions")
+      .select("id, requested_by")
+      .eq("status", "DRAFT")
+      .not("scheduled_send_date", "is", null)
+      .lte("scheduled_send_date", today)
+    if (error) throw error
+
+    let sent = 0
+    const failed: string[] = []
+    for (const row of due) {
+      // Status guard makes this idempotent if the minister submitted/cancelled in between
+      const { data, error: updateError } = await db
+        .from("budget_intentions")
+        .update({
+          status: "PENDING",
+          scheduled_send_date: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", row.id)
+        .eq("status", "DRAFT")
+        .select()
+        .maybeSingle()
+      if (updateError) {
+        failed.push(row.id)
+        continue
+      }
+      if (!data) continue
+
+      await auditService.logSystem({
+        entity: "BUDGET_INTENTION",
+        action: "INTENTION_SUBMITTED",
+        user_id: row.requested_by,
+        entity_id: row.id,
+        previous_value: { status: "DRAFT" },
+        new_value: { status: "PENDING", auto_sent: true }
+      })
+      await sendIntentionNotification(data).catch(() => null)
+      sent++
+    }
+    return { sent, failed }
   },
 
   // Only reachable from DRAFT or PENDING — once APPROVED or REJECTED, a
@@ -182,7 +237,7 @@ export const intentionsService = {
     const now = new Date().toISOString()
     const { data, error } = await db
       .from("budget_intentions")
-      .update({ status: "CANCELLED", updated_at: now })
+      .update({ status: "CANCELLED", scheduled_send_date: null, updated_at: now })
       .eq("id", id)
       .select()
       .single()

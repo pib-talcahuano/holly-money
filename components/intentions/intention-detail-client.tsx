@@ -663,7 +663,13 @@ export function IntentionDetailClient({
 
         {/* Actions for the minister who owns this request */}
         {isRequestOwner && CANCELLABLE_INTENTION_STATUSES.has(intention.status) && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {intention.status === "DRAFT" && intention.scheduled_send_date && (
+              <p className="text-xs text-muted-foreground">
+                Se enviará automáticamente el{" "}
+                {new Date(intention.scheduled_send_date + "T00:00:00").toLocaleDateString("es-CL")}
+              </p>
+            )}
             {intention.status === "DRAFT" && (
               <Button onClick={handleSubmitRequest}>
                 <Send className="size-4" />

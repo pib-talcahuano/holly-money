@@ -74,6 +74,7 @@ export type Database = {
           purpose: string
           requested_by: string
           review_message: string | null
+          scheduled_send_date: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           settlement_closed_at: string | null
@@ -91,6 +92,7 @@ export type Database = {
           purpose: string
           requested_by: string
           review_message?: string | null
+          scheduled_send_date?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           settlement_closed_at?: string | null
@@ -108,6 +110,7 @@ export type Database = {
           purpose?: string
           requested_by?: string
           review_message?: string | null
+          scheduled_send_date?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           settlement_closed_at?: string | null

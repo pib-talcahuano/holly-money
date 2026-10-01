@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useForm, Controller, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { Plus, Target, Calendar, Wallet, DollarSign, Send } from "lucide-react"
+import { Plus, Target, Calendar, Wallet, DollarSign, Send, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import {
@@ -38,6 +38,7 @@ const DEFAULT_VALUES: IntentionFormValues = {
   purpose: "",
   date_needed: "",
   funding_method: "REIMBURSEMENT",
+  scheduled_send_date: "",
   isDraft: false
 }
 
@@ -69,13 +70,18 @@ export function NewRequestDialog({
     try {
       const created = await createRequest({
         ...values,
-        date_needed: values.date_needed || undefined
+        date_needed: values.date_needed || undefined,
+        scheduled_send_date: values.isDraft ? values.scheduled_send_date || undefined : undefined
       })
       onCreated?.(created)
       setOpen(false)
       form.reset(DEFAULT_VALUES)
       toast.success(
-        values.isDraft ? "Borrador guardado" : "Solicitud enviada al equipo de tesorería"
+        values.isDraft
+          ? values.scheduled_send_date
+            ? "Solicitud programada"
+            : "Borrador guardado"
+          : "Solicitud enviada al equipo de tesorería"
       )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al enviar solicitud")
@@ -203,6 +209,33 @@ export function NewRequestDialog({
               {MAX_REQUEST_AMOUNT.toLocaleString("es-CL")}
             </p>
             <FieldError errors={[form.formState.errors.amount]} />
+          </Field>
+          <Field>
+            <FieldLabel className="flex items-center gap-1.5">
+              <Clock className="size-3.5" />
+              Programar envío (opcional)
+            </FieldLabel>
+            <Controller
+              control={form.control}
+              name="scheduled_send_date"
+              render={({ field }) => (
+                <DatePicker
+                  value={field.value ? new Date(field.value + "T00:00:00") : undefined}
+                  onChange={(date) =>
+                    field.onChange(
+                      date
+                        ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+                        : ""
+                    )
+                  }
+                />
+              )}
+            />
+            <p className="text-xs text-muted-foreground">
+              Se guarda como borrador y se envía a tesorería automáticamente ese día. Usa
+              &quot;Guardar borrador&quot;.
+            </p>
+            <FieldError errors={[form.formState.errors.scheduled_send_date]} />
           </Field>
           <div className="flex gap-2">
             <Button

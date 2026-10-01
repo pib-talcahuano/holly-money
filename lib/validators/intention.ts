@@ -20,6 +20,11 @@ export const createIntentionSchema = z.object({
     .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido"))
     .optional(),
   funding_method: z.enum(["REIMBURSEMENT", "TRANSFER"]),
+  // Draft only: the cron job auto-submits it to treasury on this date
+  scheduled_send_date: z
+    .literal("")
+    .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido"))
+    .optional(),
   isDraft: z.boolean().optional().default(false)
 })
 
