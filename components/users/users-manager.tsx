@@ -213,7 +213,6 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const [hardDelete, setHardDelete] = useState(false)
   const [purgePreview, setPurgePreview] = useState<UserPurgePreview | null>(null)
   const [purgePreviewError, setPurgePreviewError] = useState<string | null>(null)
-  const [emailConfirmation, setEmailConfirmation] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
   const [search, setSearch] = useState("")
   const [inviteLink, setInviteLink] = useState<string | null>(null)
@@ -328,14 +327,12 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     setHardDelete(false)
     setPurgePreview(null)
     setPurgePreviewError(null)
-    setEmailConfirmation("")
   }
 
   const handleHardDeleteToggle = (checked: boolean) => {
     setHardDelete(checked)
     setPurgePreview(null)
     setPurgePreviewError(null)
-    setEmailConfirmation("")
     if (!checked || !editingUser) return
     const userId = editingUser.id
     void getUserPurgePreview(userId).then((result) => {
@@ -659,17 +656,6 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                           {purgePreview.foreign_reach.settlements} rendiciones.
                         </p>
                       )}
-                      <label className="block pt-1">
-                        Escribe <strong>{editingUser?.email}</strong> para confirmar
-                        <input
-                          type="text"
-                          autoComplete="off"
-                          className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-[12.5px]"
-                          disabled={isDeleting}
-                          value={emailConfirmation}
-                          onChange={(e) => setEmailConfirmation(e.target.value)}
-                        />
-                      </label>
                     </>
                   )}
                 </div>
@@ -681,13 +667,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                 </Button>
                 <Button
                   variant="destructive"
-                  disabled={
-                    isDeleting ||
-                    (hardDelete &&
-                      (!purgePreview ||
-                        emailConfirmation.trim().toLowerCase() !==
-                          editingUser?.email.toLowerCase()))
-                  }
+                  disabled={isDeleting || (hardDelete && !purgePreview)}
                   onClick={() => void handleDelete()}
                 >
                   {isDeleting
