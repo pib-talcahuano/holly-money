@@ -106,7 +106,7 @@ export function IntentionsClient({
             )}
           </p>
         </div>
-        {isMinister && (
+        {isMinister && ministry && (
           <NewRequestDialog
             onCreated={(created) =>
               setIntentions((prev) => [created as unknown as Intention, ...prev])
@@ -124,7 +124,9 @@ export function IntentionsClient({
             <EmptyTitle>Sin solicitudes</EmptyTitle>
             <EmptyDescription>
               {isMinister
-                ? "Crea tu primera solicitud de dinero."
+                ? ministry
+                  ? "Crea tu primera solicitud de dinero."
+                  : "No tienes un ministerio asignado. Contacta a un administrador para poder crear solicitudes."
                 : "No hay solicitudes registradas."}
             </EmptyDescription>
           </EmptyHeader>

@@ -44,7 +44,8 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
 
   const currentAssignment = assignments.find((a) => a.unassigned_at === null) ?? null
   const isAssignedMinister = currentAssignment?.user_id === user.id
-  const canCreateRequest = !canManage && can(user.permissions, PERMISSIONS.CREATE_REQUEST)
+  const canCreateRequest =
+    !canManage && can(user.permissions, PERMISSIONS.CREATE_REQUEST) && isAssignedMinister
 
   return (
     <MinistryDetailClient
