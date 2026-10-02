@@ -15,6 +15,9 @@ the ministers list or be assigned to a ministry.
   still created by the ministries flow.
 - Effective permissions = union of the permissions of each of the user's roles.
 - Every "is this user a minister?" check must work when MINISTER is one of several roles.
+- Ministries become ADMIN-only: BURSAR loses the full ministries list and the ability to manage
+  ministries/assignments. A user who also has MINISTER sees only their own ministry, as a
+  minister. Budgets move to their own page so bursars keep them (section 5).
 - Out of scope: primary-role concept, per-user permission overrides, role-change notifications,
   self-service role requests.
 
@@ -90,3 +93,28 @@ the ministers list or be assigned to a ministry.
   actions and minister own-draft actions; `{FINANCE, MINISTER}` reads finance data but cannot
   review intentions; CHECK constraint rejects `{ADMIN, BURSAR}` and an empty array.
 - E2E (local only, not a CI gate): extend the user-management spec for the multi-select.
+
+## 5. Ministries become ADMIN-only; budgets get their own page
+
+Ministries (ADMIN-only):
+- Data migration removes `MANAGE_MINISTRIES` from BURSAR in `role_permissions`; ADMIN keeps it.
+- `ministries` insert/update and `ministry_assignments` insert/update/delete policies go from
+  `ADMIN, BURSAR` to `ADMIN` (part of the section 1 policy rewrite).
+- `/ministries` drops the budgets tab/tabs wrapper and renders only the ministries list.
+- Sidebar "Ministerios" is `roles: ["ADMIN"]`.
+- Minister picker uses `hasRole(MINISTER)`, so an admin can assign a bursar+minister.
+
+Budgets (new `/budgets` page):
+- Gated by `MANAGE_BUDGETS`; reuses `MinistryBudgetAdmin` and the existing
+  `ministryBudgetService` calls. Budget RLS and `app/actions/ministry-budgets.ts` are unchanged.
+- Sidebar "Presupuesto" link with `roles: ["ADMIN", "BURSAR"]`. FINANCE (can read summaries in
+  RLS, no `MANAGE_BUDGETS`) gets no page (YAGNI).
+
+Bursar+minister sees: full bursar access to requests, payroll and budgets, no ministries list,
+plus "Mi ministerio" and minister-scoped requests/settlements for their own assigned ministry.
+Ministry detail access is by own assignment, not `MANAGE_MINISTRIES`; the plan must verify the
+`ministries/[id]` page guard does not depend on that permission for ministers.
+
+Tests: RLS — BURSAR-only and `{BURSAR, MINISTER}` users cannot insert/update `ministries` or
+`ministry_assignments`. Unit/e2e — sidebar shows Ministerios only to ADMIN and Presupuesto to
+ADMIN and BURSAR; `/ministries` redirects a bursar.
