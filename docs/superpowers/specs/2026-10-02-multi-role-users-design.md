@@ -10,9 +10,11 @@ the ministers list or be assigned to a ministry.
 
 - Only ADMINs can set roles, in the create and edit user dialogs (page already requires
   `MANAGE_USERS`; server actions re-check).
-- Assignable roles: `BURSAR`, `FINANCE`, `MINISTER`. Any non-empty combination.
-- `ADMIN` and `DELEGATE` stay single-role and are not offered in the multi-select. DELEGATE is
-  still created by the ministries flow.
+- Combinable roles: `BURSAR`, `FINANCE`, `MINISTER`. Any non-empty combination.
+- `ADMIN` and `DELEGATE` stay single-role (never combined with another role). ADMIN is still
+  selectable in the create/edit dialogs as an exclusive choice (checking it clears the others),
+  so admins can still be created and promoted exactly as today. DELEGATE is created only by the
+  ministries flow and is read-only in the users dialogs.
 - Effective permissions = union of the permissions of each of the user's roles.
 - Every "is this user a minister?" check must work when MINISTER is one of several roles.
 - Ministries become ADMIN-only: BURSAR loses the full ministries list and the ability to manage
@@ -35,13 +37,14 @@ the ministers list or be assigned to a ministry.
   element; no duplicates.
 - New `has_any_role(text[])` helper (SECURITY DEFINER, STABLE, same grants as `get_my_role()`).
   Drop `get_my_role()` so any missed policy fails loudly.
-- Rewrite every live policy that uses `get_my_role()` (~100 expressions: mostly
-  `IN ('ADMIN','BURSAR')`, plus `= 'ADMIN'`, `IN ('ADMIN','FINANCE')`,
-  `= 'MINISTER' AND submitted_by/requested_by = auth.uid()`, `IN ('MINISTER','DELEGATE')`) with
-  explicit `DROP POLICY` / `CREATE POLICY`, not a regexp over `pg_policies`.
-  First plan step: enumerate live policies and functions from the local DB (25 migrations touch
-  them; history is not the source of truth).
-- `create_user_with_role` gets a `p_roles user_role[]` signature.
+- Rewrite every live policy that uses `get_my_role()` (44 policies in the local DB) with
+  explicit `DROP POLICY` / `CREATE POLICY` statements. The statements are generated once from the
+  live `pg_policies` definitions by a throwaway script, reviewed, and committed as static SQL;
+  there is no runtime regexp over `pg_policies` inside the migration.
+- `create_user_with_role` is dropped (nothing in the app calls it; users are created by
+  `usersService.invite`). `create_initial_admin` is recreated to insert `roles = ['ADMIN']`.
+- The no-duplicates rule needs a subquery, which CHECK constraints can't hold, so the constraint
+  calls an IMMUTABLE `users_roles_valid(user_role[])` function.
 - Created with `pnpm supabase migration new`, applied with `migration up` (never `db reset`),
   single transaction. Regenerate types with `pnpm types:generate`.
 - Behavior for a two-role user is the union of access. Draft-intentions owner-only rule applies
@@ -54,13 +57,16 @@ the ministers list or be assigned to a ministry.
 - `lib/constants/roles.ts`: add `hasRole(user, role)`, `hasAnyRole(user, roles)`,
   `rolesLabel(roles)` ("Tesorero · Ministro"), and `ASSIGNABLE_ROLES = [BURSAR, FINANCE,
   MINISTER]`. `hasRole`/`hasAnyRole` are the only way TS code asks about roles.
-- `loadIdentity` / `getCurrentUser()` fetches `roles` and loads permissions via
-  `getPermissionsForRoles(roles)` (single `IN` query) into the existing `Set<string>`. `can()`
-  and `rbac.ts` are unchanged; Settings → Permisos still edits per role.
-- Validators (`lib/validators/user.ts`): `roles: z.array(z.enum(ASSIGNABLE_ROLES)).min(1,
-  "Selecciona al menos un rol")`, deduplicated, for create and update. The service rejects role
-  edits on ADMIN and DELEGATE users.
-- Users service/actions write `roles`, pass `p_roles`, same ADMIN gate. Audit
+- `loadIdentity` fetches `roles` and unions the permissions of each role into the existing
+  `Set<string>` (the per-role `unstable_cache` lookup is kept; roles are fetched in parallel).
+  `can()` is unchanged; Settings → Permisos still edits per role. The cache key is bumped
+  (`role-permissions-v2`) so removing `MANAGE_MINISTRIES` from BURSAR takes effect on deploy
+  instead of after the 24 h cache TTL.
+- Validators (`lib/validators/user.ts`): `roles` is a non-empty, duplicate-free array;
+  ADMIN/DELEGATE can't be combined with anything. Create accepts ADMIN, BURSAR, FINANCE,
+  MINISTER; update accepts any role and the service refuses to change a DELEGATE user's roles or
+  to make anyone a DELEGATE.
+- Users service/actions write `roles`, same ADMIN gate. Audit
   `old_value`/`new_value` record `roles` as an array; audit-diff label becomes "Roles".
 - Impersonation, hard delete and other `user.role !== ADMIN` checks use `hasRole`.
 - Ministries page, ministry detail client and ministries service filter ministers with
@@ -72,11 +78,11 @@ the ministers list or be assigned to a ministry.
 
 ## 3. UI
 
-- Users manager create/edit dialogs: multi-select (checkbox/toggle chips, existing Base UI
-  patterns) of BURSAR, FINANCE, MINISTER; at least one required with inline Spanish message.
+- Users manager create/edit dialogs: multi-select (checkboxes, same plain-`<input>` pattern the
+  dialog already uses) of ADMIN (exclusive), BURSAR, FINANCE, MINISTER; at least one required with inline Spanish message.
   `inviteMinister` preselects `[MINISTER]`, otherwise default `[BURSAR]`.
-- Editing an ADMIN or DELEGATE user shows a read-only role badge and a note that it cannot be
-  combined.
+- ADMIN is offered as an exclusive option: checking it clears the other roles, checking another
+  role clears it. Editing a DELEGATE user shows a read-only role badge.
 - List rows: one badge per role (`ROLE_BADGE_VARIANT`). Grouped view uses
   `u.roles.includes(role)`, so a multi-role user appears under each of their groups.
 - Sidebar filters with `user.roles.some((r) => l.roles.includes(r))`; memo depends on
@@ -111,10 +117,32 @@ Budgets (new `/budgets` page):
   RLS, no `MANAGE_BUDGETS`) gets no page (YAGNI).
 
 Bursar+minister sees: full bursar access to requests, payroll and budgets, no ministries list,
-plus "Mi ministerio" and minister-scoped requests/settlements for their own assigned ministry.
-Ministry detail access is by own assignment, not `MANAGE_MINISTRIES`; the plan must verify the
-`ministries/[id]` page guard does not depend on that permission for ministers.
+plus "Mi ministerio" for their own assigned ministry, where they create requests and settle
+expenses as a minister (section 6). Verified: the `ministries/[id]` page already gates on own
+assignment when the user lacks `MANAGE_MINISTRIES`, so no guard change is needed there.
 
 Tests: RLS — BURSAR-only and `{BURSAR, MINISTER}` users cannot insert/update `ministries` or
 `ministry_assignments`. Unit/e2e — sidebar shows Ministerios only to ADMIN and Presupuesto to
 ADMIN and BURSAR; `/ministries` redirects a bursar.
+
+## 6. Workflow scoping for users who both review and request
+
+Several workflow pages/APIs use `can(CREATE_REQUEST)` / `isMinisterWorkflowUser` to mean "this
+user is a minister, scope them to their own ministry". With the permission union, a
+bursar+minister would silently lose the bursar's full request list and review view.
+
+Rule: **a user with `REVIEW_INTENTIONS` keeps the full reviewer view.** Own-ministry scoping
+applies only to workflow users who can't review. A bursar+minister creates requests and settles
+expenses for their own ministry from "Mi ministerio" (`/ministries/[id]`).
+
+- New helper `isOwnMinistryScoped(permissions)` in `lib/permissions/rbac.ts`:
+  `isMinisterWorkflowUser(p) && !can(p, REVIEW_INTENTIONS)`.
+- `/requests` page, `GET /api/requests`: minister mode only when
+  `can(CREATE_REQUEST) && !can(REVIEW_INTENTIONS)`.
+- `/requests/[id]` page: the own-ministry redirect uses `isOwnMinistryScoped`.
+- `GET /api/notifications`: minister-side items (approved intentions, own draft/returned
+  settlements) and reviewer-side counts are both returned when the user has both sides.
+- Side effect (intended): ADMIN holds `CREATE_REQUEST` and `REVIEW_INTENTIONS`, so ADMIN now gets
+  the full reviewer view on `/requests` instead of an own-ministry view that was always empty.
+- Not addressed (YAGNI, flagged for the owner): nothing stops a bursar+minister from reviewing
+  their own ministry's request.
