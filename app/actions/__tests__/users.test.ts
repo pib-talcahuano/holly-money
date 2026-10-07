@@ -1,3 +1,4 @@
+import type { UserRole } from "@/types/auth"
 import {
   inviteUser,
   updateUser,
@@ -44,11 +45,15 @@ jest.mock("next/cache", () => ({
 }))
 
 const mockUser = { id: "admin-1", permissions: ["MANAGE_USERS"] }
-const createInput = { email: "new@example.com", full_name: "New User", role: "MINISTER" as const }
+const createInput = {
+  email: "new@example.com",
+  full_name: "New User",
+  roles: ["MINISTER"] as UserRole[]
+}
 const updateInput = {
   id: "u-1",
   full_name: "Updated",
-  role: "MINISTER" as const,
+  roles: ["MINISTER"] as UserRole[],
   status: "ACTIVE" as const
 }
 
@@ -117,7 +122,7 @@ describe("deleteUser", () => {
   })
 
   it("passes hardDelete through for an ADMIN caller", async () => {
-    const admin = { ...mockUser, role: "ADMIN" }
+    const admin = { ...mockUser, roles: ["ADMIN"] }
     mockGetCurrentUser.mockResolvedValue(admin)
     mockCan.mockReturnValue(true)
     mockDelete.mockResolvedValue(undefined)
@@ -128,7 +133,7 @@ describe("deleteUser", () => {
   })
 
   it("rejects hardDelete for a non-ADMIN caller even with MANAGE_USERS", async () => {
-    const bursar = { ...mockUser, role: "BURSAR" }
+    const bursar = { ...mockUser, roles: ["BURSAR"] }
     mockGetCurrentUser.mockResolvedValue(bursar)
     mockCan.mockReturnValue(true)
 
@@ -138,9 +143,22 @@ describe("deleteUser", () => {
     expect(mockDelete).not.toHaveBeenCalled()
   })
 
+  it("rejects a hard delete from a user who has ADMIN nowhere in their roles", async () => {
+    const bursarMinister = { ...mockUser, roles: ["BURSAR", "MINISTER"] }
+    mockGetCurrentUser.mockResolvedValue(bursarMinister)
+    mockCan.mockReturnValue(true)
+
+    const result = await deleteUser("u-2", { hardDelete: true })
+
+    expect(result).toEqual({
+      error: "Solo un administrador puede eliminar usuarios permanentemente"
+    })
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
   it("returns the error message instead of throwing (prod redacts thrown messages)", async () => {
     jest.spyOn(console, "error").mockImplementation(() => {})
-    mockGetCurrentUser.mockResolvedValue({ ...mockUser, role: "ADMIN" })
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, roles: ["ADMIN"] })
     mockCan.mockReturnValue(true)
     mockDelete.mockRejectedValue(new Error("No se pudo eliminar permanentemente"))
 
@@ -171,7 +189,7 @@ describe("getUserPurgePreview", () => {
   }
 
   it("returns the preview for an ADMIN caller", async () => {
-    const admin = { ...mockUser, role: "ADMIN" }
+    const admin = { ...mockUser, roles: ["ADMIN"] }
     mockGetCurrentUser.mockResolvedValue(admin)
     mockCan.mockReturnValue(true)
     mockPreviewPurge.mockResolvedValue(preview)
@@ -181,7 +199,7 @@ describe("getUserPurgePreview", () => {
   })
 
   it("rejects a non-ADMIN caller even with MANAGE_USERS", async () => {
-    mockGetCurrentUser.mockResolvedValue({ ...mockUser, role: "BURSAR" })
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, roles: ["BURSAR"] })
     mockCan.mockReturnValue(true)
 
     await expect(getUserPurgePreview("u-1")).resolves.toEqual({
@@ -192,7 +210,7 @@ describe("getUserPurgePreview", () => {
 
   it("returns the error message instead of throwing", async () => {
     jest.spyOn(console, "error").mockImplementation(() => {})
-    mockGetCurrentUser.mockResolvedValue({ ...mockUser, role: "ADMIN" })
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, roles: ["ADMIN"] })
     mockCan.mockReturnValue(true)
     mockPreviewPurge.mockRejectedValue(new Error("No puedes eliminar tu propia cuenta"))
 

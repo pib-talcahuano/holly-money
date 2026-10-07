@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { getCurrentUser } from "@/lib/supabase/server"
 import { PERMISSIONS, can, isImpersonating } from "@/lib/permissions/rbac"
-import { USER_ROLES } from "@/lib/constants/roles"
+import { USER_ROLES, hasRole } from "@/lib/constants/roles"
 import { usersService, type UserPurgePreview } from "@/services/users/users.service"
 import type { CreateUserInput, UpdateUserInput, UpdateOwnProfileInput } from "@/lib/validators/user"
 
@@ -37,7 +37,7 @@ export async function deleteUser(
 ): Promise<{ ok: true } | { error: string }> {
   try {
     const user = assertUserAccess(await getCurrentUser())
-    if (options?.hardDelete && user.role !== USER_ROLES.ADMIN) {
+    if (options?.hardDelete && !hasRole(user, USER_ROLES.ADMIN)) {
       return { error: "Solo un administrador puede eliminar usuarios permanentemente" }
     }
     await usersService.delete(id, user.id, { hardDelete: options?.hardDelete ?? false })
@@ -54,7 +54,7 @@ export async function getUserPurgePreview(
 ): Promise<{ preview: UserPurgePreview } | { error: string }> {
   try {
     const user = assertUserAccess(await getCurrentUser())
-    if (user.role !== USER_ROLES.ADMIN) {
+    if (!hasRole(user, USER_ROLES.ADMIN)) {
       return { error: "Solo un administrador puede eliminar usuarios permanentemente" }
     }
     return { preview: await usersService.previewPurge(id, user.id) }

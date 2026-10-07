@@ -352,7 +352,7 @@ export const intentionsService = {
   async getComments(db: DB, entityId: string, entityType: "INTENTION" | "SETTLEMENT") {
     const { data, error } = await db
       .from("request_comments")
-      .select("*, users(id, full_name, role)")
+      .select("*, users(id, full_name, roles)")
       .eq("entity_id", entityId)
       .eq("entity_type", entityType)
       .order("created_at")

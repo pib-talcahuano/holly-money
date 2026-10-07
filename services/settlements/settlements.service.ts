@@ -454,7 +454,7 @@ export const settlementsService = {
     if (!settlementIds.length) return []
     const { data, error } = await db
       .from("request_comments")
-      .select("*, users(id, full_name, role)")
+      .select("*, users(id, full_name, roles)")
       .eq("entity_type", "SETTLEMENT")
       .in("entity_id", settlementIds)
       .order("created_at", { ascending: true })

@@ -73,7 +73,7 @@ export const auditService = {
     const { data, error } = await admin
       .from("system_audit_log")
       .select(
-        "*, users!system_audit_log_user_id_fkey(id, full_name, email, role), impersonator:users!system_audit_log_impersonator_id_fkey(id, full_name, email, role)"
+        "*, users!system_audit_log_user_id_fkey(id, full_name, email, roles), impersonator:users!system_audit_log_impersonator_id_fkey(id, full_name, email, roles)"
       )
       .order("event_date", { ascending: false })
       .limit(limit)
