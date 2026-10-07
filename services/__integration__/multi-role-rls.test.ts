@@ -24,6 +24,8 @@ describeIfLocal("RLS: users with several roles", () => {
   let adminClient: SupabaseClient<Database> | undefined
   const getAdmin = () => (adminClient ??= createClient<Database>(SUPABASE_URL, SECRET_KEY))
   const createdIds: string[] = []
+  // Auth users that never get a public.users row, so purge_user cannot find them.
+  const authOnlyIds: string[] = []
   const createdPaymentMethodIds: string[] = []
 
   // Creates an auth user + profile with the given roles and returns a client signed in as them.
@@ -53,12 +55,20 @@ describeIfLocal("RLS: users with several roles", () => {
   }
 
   afterAll(async () => {
+    const failures: string[] = []
     for (const id of createdPaymentMethodIds) {
-      await getAdmin().from("payment_methods").delete().eq("id", id)
+      const { error } = await getAdmin().from("payment_methods").delete().eq("id", id)
+      if (error) failures.push(`payment_methods ${id}: ${error.message}`)
     }
     for (const id of createdIds) {
-      await getAdmin().rpc("purge_user", { p_user_id: id })
+      const { error } = await getAdmin().rpc("purge_user", { p_user_id: id })
+      if (error) failures.push(`purge_user ${id}: ${error.message}`)
     }
+    for (const id of authOnlyIds) {
+      const { error } = await getAdmin().auth.admin.deleteUser(id)
+      if (error) failures.push(`deleteUser ${id}: ${error.message}`)
+    }
+    if (failures.length > 0) throw new Error(`Cleanup failed:\n${failures.join("\n")}`)
   })
 
   it("has_any_role matches when any one of the user's roles overlaps", async () => {
@@ -122,7 +132,7 @@ describeIfLocal("RLS: users with several roles", () => {
         email_confirm: true
       })
     ).data.user!.id
-    createdIds.push(id)
+    authOnlyIds.push(id)
 
     const base = {
       id,
