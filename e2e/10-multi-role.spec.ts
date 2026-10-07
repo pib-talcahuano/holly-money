@@ -2,7 +2,7 @@ import { test, expect, type Browser, type Page } from "@playwright/test"
 import { createClient } from "@supabase/supabase-js"
 import fs from "node:fs"
 import { login } from "./fixtures/helpers"
-import { MINISTRY_ID } from "./fixtures/users"
+import { MINISTRY_ID, USERS } from "./fixtures/users"
 
 // Seeds its own throwaway multi-role user + ministry with the local service key, so it never
 // touches the seeded e2e users/ministries and needs no db reset. Reads .env.local/.env because
@@ -27,6 +27,7 @@ const stamp = Date.now()
 const email = `e2e-multi-${stamp}@local.test`
 const password = "Testing123!"
 const ministryName = `Ministerio Multi E2E ${stamp}`
+const requestPurpose = `Multi E2E request ${stamp}`
 
 // Same hydration waits as helpers.login, for a user that isn't in the shared USERS fixture.
 async function loginAs(page: Page, userEmail: string, userPassword: string) {
@@ -72,6 +73,7 @@ test.describe("Multi-role users", () => {
 
   let userId = ""
   let ministryId = ""
+  let intentionId = ""
 
   test.beforeAll(async () => {
     const { data, error } = await admin.auth.admin.createUser({
@@ -92,9 +94,32 @@ test.describe("Multi-role users", () => {
       .single()
     expect(ministryError).toBeNull()
     ministryId = (ministry as { id: string }).id
+
+    // One request in the SEEDED ministry (not the multi-role user's own): visible only in the full
+    // reviewer view of /requests, never in the own-ministry-scoped minister view.
+    const { data: minister } = await admin
+      .from("users")
+      .select("id")
+      .eq("email", USERS.minister.email)
+      .single()
+    const { data: intention, error: intentionError } = await admin
+      .from("budget_intentions")
+      .insert({
+        ministry_id: MINISTRY_ID,
+        requested_by: (minister as { id: string }).id,
+        amount: 12345,
+        purpose: requestPurpose,
+        funding_method: "REIMBURSEMENT",
+        status: "PENDING"
+      })
+      .select("id")
+      .single()
+    expect(intentionError).toBeNull()
+    intentionId = (intention as { id: string }).id
   })
 
   test.afterAll(async () => {
+    if (intentionId) await admin.from("budget_intentions").delete().eq("id", intentionId)
     if (ministryId) {
       await admin.from("ministry_assignments").delete().eq("ministry_id", ministryId)
       await admin.from("ministries").delete().eq("id", ministryId)
@@ -213,23 +238,16 @@ test.describe("Multi-role users", () => {
     await page.goto(`/ministries/${MINISTRY_ID}`, { waitUntil: "networkidle" })
     await expect(page).toHaveURL(/\/dashboard/)
 
-    // Reviewer view: a BURSAR who also holds MINISTER keeps the full workflow list rather than the
-    // own-ministry-only minister view. Deterministic markers: the minister-mode header
-    // ("Ministerio: <name>") and empty-state are absent, and the page lists requests from the
-    // seeded e2e ministry, which are not the throwaway ministry's.
+    // Reviewer view: a BURSAR who also holds MINISTER keeps the full workflow list instead of the
+    // own-ministry-only minister view. The seeded-ministry request created in beforeAll is not the
+    // user's own ministry's, so seeing it proves the full view (minister mode would filter it out).
     await page.goto("/requests", { waitUntil: "networkidle" })
     await expect(page).toHaveURL(/\/requests$/)
     await expect(page.getByRole("heading", { name: "Solicitudes de Dinero" })).toBeVisible()
+    await expect(page.getByText(requestPurpose)).toBeVisible()
     await expect(page.getByText("No tienes un ministerio asignado")).toHaveCount(0)
     await expect(page.getByText("Crea tu primera solicitud")).toHaveCount(0)
     await expect(page.getByText(`Ministerio: ${ministryName}`)).toHaveCount(0)
-    const { count } = await admin
-      .from("budget_intentions")
-      .select("id", { count: "exact", head: true })
-      .eq("ministry_id", MINISTRY_ID)
-    if ((count ?? 0) > 0) {
-      await expect(page.getByText("Ministerio E2E").first()).toBeVisible()
-    }
 
     health.expectClean()
     await context.close()
