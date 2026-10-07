@@ -2,7 +2,7 @@
 
 The system has **four roles**. Authorization is **permission-based, not role-name-based**:
 business logic always checks `can(user.permissions, PERMISSIONS.X)` from
-`lib/permissions/rbac.ts` — it never compares `user.role === "ADMIN"` directly (the sidebar,
+`lib/permissions/rbac.ts` — it never compares `user.roles.includes("ADMIN")` directly (the sidebar,
 `components/dashboard/app-sidebar.tsx`, is the one deliberate exception, since it only controls
 navigation visibility, not access).
 
@@ -66,7 +66,7 @@ later migrations (`20260715143757`, `20260716172924`, `20260717025126`,
 | `CREATE_MOVEMENT`    |   ✓   |   ✓    |    —    |    —     |
 | `VIEW_MOVEMENT`      |   ✓   |   ✓    |    ✓    |    —     |
 | `VIEW_DASHBOARD`     |   ✓   |   ✓    |    ✓    |    —     |
-| `MANAGE_MINISTRIES`  |   ✓   |   ✓    |    —    |    —     |
+| `MANAGE_MINISTRIES`  |   ✓   |   —    |    —    |    —     |
 | `MANAGE_CATEGORIES`  |   ✓   |   ✓    |    —    |    —     |
 | `REVIEW_INTENTIONS`  |   ✓   |   ✓    |    —    |    —     |
 | `CREATE_REQUEST`     |   ✓   |   —    |    —    |    ✓     |
@@ -80,7 +80,7 @@ disabled checked box) — an ADMIN cannot lock themselves out. The other three r
 toggles; unchecking one takes effect on that role's *next* request (see caching below).
 
 `role_permissions` also has an RLS policy allowing every authenticated user to `SELECT` (needed
-to compute their own effective permission set) but only `ADMIN` (`get_my_role() = 'ADMIN'`) to
+to compute their own effective permission set) but only `ADMIN` (`has_any_role(ARRAY['ADMIN'])`) to
 write.
 
 ## How permissions are resolved (and cached)
@@ -122,7 +122,7 @@ sign-up.
 
 Flow:
 
-1. ADMIN opens **Usuarios** (`/users`) and invites a new user (name, email, role).
+1. ADMIN opens **Usuarios** (`/users`) and invites a new user (name, email, one or more roles).
 2. `admin.auth.admin.generateLink({ type: "invite" })` creates the `auth.users` row and an
    activation link; `public.users` gets a new row with `status: PENDING_ACTIVATION`.
 3. Resend sends the invite email (2-day link) via `sendInviteEmail` (`emails/auth-email.tsx`).
@@ -131,9 +131,14 @@ Flow:
 
 Full diagram: [`docs/diagrams/02-account-creation.md`](diagrams/02-account-creation.md).
 
-## Changing a role
+## Changing roles
 
-ADMIN can change a user's role at any time from the Users page. The change takes effect on the
+A user may hold several of `BURSAR`/`FINANCE`/`MINISTER` (`users.roles` is an array, enforced by
+the `users_roles_valid_check` constraint; `ADMIN` and `DELEGATE` are never combined) and their
+permissions are the union of those roles. The seeded `MANAGE_MINISTRIES` grant is ADMIN-only:
+BURSAR no longer holds it.
+
+ADMIN can change a user's roles at any time from the Users page. The change takes effect on the
 user's next request — the session token itself doesn't carry permissions; they're re-derived
 server-side from `role_permissions` on every call (subject to the 24 h/tag-invalidated cache
 above).
@@ -153,7 +158,7 @@ above).
 
 An ADMIN can temporarily act as another user — useful for reproducing a bug reported by a
 minister or bursar without needing their password. This is a session-scoped overlay, not a role
-change: it never touches `users.role` or the auth session itself.
+change: it never touches `users.roles` or the auth session itself.
 
 Key rules, enforced in `services/impersonation/impersonation.service.ts` and
 `app/actions/impersonation.ts`:

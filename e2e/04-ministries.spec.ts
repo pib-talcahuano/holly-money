@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test"
 import { login, shot } from "./fixtures/helpers"
 import { MINISTRY_ID } from "./fixtures/users"
 
-test.describe("Ministries (ADMIN/BURSAR) + Remanente (Etapa 7)", () => {
+test.describe("Ministries (ADMIN) + Remanente (Etapa 7)", () => {
   test.beforeEach(async ({ page }) => {
     await login(page, "admin")
   })

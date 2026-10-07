@@ -80,7 +80,7 @@ mapping in code:
 
 Business logic never compares role strings directly — it always calls
 `can(user.permissions, PERMISSIONS.X)`. See [roles.md](roles.md) for the full permission catalog,
-matrix, and caching model. Role is stored in `users.role`; RLS (Row Level Security) is enabled on
+matrix, and caching model. Roles are stored in the `users.roles` array (a user may combine `BURSAR`/`FINANCE`/`MINISTER`; permissions are the union) and RLS policies check them with `has_any_role(ARRAY[...])`; RLS (Row Level Security) is enabled on
 all tables as a second enforcement layer beneath the application-level permission checks.
 
 ## Supabase clients
@@ -99,8 +99,7 @@ password — the invited user sets their own password on activation. See
 [roles.md](roles.md#creating-users) and
 [`docs/diagrams/02-account-creation.md`](diagrams/02-account-creation.md) for the full flow.
 
-`create_user_with_role(email, password, full_name, role)` is an older RPC kept only for backward
-compatibility — the app no longer calls it.
+Users are created through `usersService.invite`; the old `create_user_with_role` RPC was dropped as unused.
 
 Bootstrap: call `create_initial_admin(email, password, full_name)` once from Supabase Studio SQL
 editor to create the first `ADMIN` account (fails if any user already exists).

@@ -29,7 +29,7 @@ test.describe("Permanent user purge (ADMIN)", () => {
     userId = data.user!.id
     await admin
       .from("users")
-      .insert({ id: userId, full_name: "Purge E2E", email, role: "FINANCE", status: "ACTIVE" })
+      .insert({ id: userId, full_name: "Purge E2E", email, roles: ["FINANCE"], status: "ACTIVE" })
     const { data: category } = await admin
       .from("movement_categories")
       .select("id")
