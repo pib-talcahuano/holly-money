@@ -104,9 +104,7 @@ export function AuditDiff({ previous, next }: { previous: unknown; next: unknown
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-        Datos
-      </p>
+      <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Datos</p>
       <div className="flex flex-col gap-1.5">
         {keys.map((key) => (
           <DiffRow key={key} label={humanizeKey(key)} value={formatValue(key, only[key])} />

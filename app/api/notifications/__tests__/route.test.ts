@@ -39,6 +39,10 @@ function asUser(permissions: string[]) {
   mockGetCurrentUser.mockResolvedValue({ id: "u-1", permissions: new Set(permissions) })
 }
 
+async function getBody() {
+  return (await (await GET()).json()) as { count: number; items: { type: string }[] }
+}
+
 describe("GET /api/notifications", () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -54,30 +58,27 @@ describe("GET /api/notifications", () => {
 
   it("gives a plain minister only their own items", async () => {
     asUser(MINISTER)
-    const body = await (await GET()).json()
+    const body = await getBody()
 
-    expect(body.items.map((i: { type: string }) => i.type)).toEqual(["INTENTION_APPROVED"])
+    expect(body.items.map((i) => i.type)).toEqual(["INTENTION_APPROVED"])
     expect(body.count).toBe(1)
     expect(mockIntentionsPending).not.toHaveBeenCalled()
   })
 
   it("gives a plain bursar only reviewer counts", async () => {
     asUser(BURSAR)
-    const body = await (await GET()).json()
+    const body = await getBody()
 
-    expect(body.items.map((i: { type: string }) => i.type)).toEqual([
-      "INTENTIONS_PENDING",
-      "SETTLEMENTS_PENDING"
-    ])
+    expect(body.items.map((i) => i.type)).toEqual(["INTENTIONS_PENDING", "SETTLEMENTS_PENDING"])
     expect(body.count).toBe(3)
     expect(mockGetMinistryForUser).not.toHaveBeenCalled()
   })
 
   it("gives a bursar+minister both sides", async () => {
     asUser([...BURSAR, ...MINISTER])
-    const body = await (await GET()).json()
+    const body = await getBody()
 
-    expect(body.items.map((i: { type: string }) => i.type)).toEqual([
+    expect(body.items.map((i) => i.type)).toEqual([
       "INTENTION_APPROVED",
       "INTENTIONS_PENDING",
       "SETTLEMENTS_PENDING"
@@ -87,7 +88,7 @@ describe("GET /api/notifications", () => {
 
   it("keeps finance on the reviewer-style counts", async () => {
     asUser(["VIEW_WORKFLOW"])
-    const body = await (await GET()).json()
+    const body = await getBody()
 
     expect(body.count).toBe(3)
   })
@@ -95,7 +96,7 @@ describe("GET /api/notifications", () => {
   it("returns an empty minister result when no ministry is assigned", async () => {
     asUser(MINISTER)
     mockGetMinistryForUser.mockResolvedValue(null)
-    const body = await (await GET()).json()
+    const body = await getBody()
 
     expect(body).toEqual({ count: 0, items: [] })
   })

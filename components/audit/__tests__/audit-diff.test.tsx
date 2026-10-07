@@ -14,12 +14,7 @@ describe("AuditDiff roles", () => {
   })
 
   it("shows roles as Spanish labels, before and after", () => {
-    render(
-      <AuditDiff
-        previous={{ roles: ["BURSAR"] }}
-        next={{ roles: ["BURSAR", "MINISTER"] }}
-      />
-    )
+    render(<AuditDiff previous={{ roles: ["BURSAR"] }} next={{ roles: ["BURSAR", "MINISTER"] }} />)
 
     expect(screen.getByText("Roles:")).toBeInTheDocument()
     expect(screen.getByText("Tesorero")).toBeInTheDocument()

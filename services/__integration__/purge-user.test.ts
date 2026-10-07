@@ -33,7 +33,7 @@ describeIfLocal("purge_user", () => {
     createdAuthIds.push(id)
     const { error: profileError } = await getAdmin()
       .from("users")
-      .insert({ id, full_name: `Purge ${label}`, email, role: "FINANCE", status: "ACTIVE" })
+      .insert({ id, full_name: `Purge ${label}`, email, roles: ["FINANCE"], status: "ACTIVE" })
     expect(profileError).toBeNull()
     return id
   }
