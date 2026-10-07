@@ -30,11 +30,11 @@ INSERT INTO auth.identities (
   ('e2e00000-0000-0000-0000-000000000003', 'e2e-finance@local.test', 'e2e00000-0000-0000-0000-000000000003', '{"sub":"e2e00000-0000-0000-0000-000000000003","email":"e2e-finance@local.test"}', 'email', now(), now(), now()),
   ('e2e00000-0000-0000-0000-000000000004', 'e2e-minister@local.test', 'e2e00000-0000-0000-0000-000000000004', '{"sub":"e2e00000-0000-0000-0000-000000000004","email":"e2e-minister@local.test"}', 'email', now(), now(), now());
 
-INSERT INTO public.users (id, full_name, email, role, status) VALUES
-  ('e2e00000-0000-0000-0000-000000000001', 'E2E Admin', 'e2e-admin@local.test', 'ADMIN', 'ACTIVE'),
-  ('e2e00000-0000-0000-0000-000000000002', 'E2E Bursar', 'e2e-bursar@local.test', 'BURSAR', 'ACTIVE'),
-  ('e2e00000-0000-0000-0000-000000000003', 'E2E Finance', 'e2e-finance@local.test', 'FINANCE', 'ACTIVE'),
-  ('e2e00000-0000-0000-0000-000000000004', 'E2E Minister', 'e2e-minister@local.test', 'MINISTER', 'ACTIVE');
+INSERT INTO public.users (id, full_name, email, roles, status) VALUES
+  ('e2e00000-0000-0000-0000-000000000001', 'E2E Admin', 'e2e-admin@local.test', ARRAY['ADMIN']::user_role[], 'ACTIVE'),
+  ('e2e00000-0000-0000-0000-000000000002', 'E2E Bursar', 'e2e-bursar@local.test', ARRAY['BURSAR']::user_role[], 'ACTIVE'),
+  ('e2e00000-0000-0000-0000-000000000003', 'E2E Finance', 'e2e-finance@local.test', ARRAY['FINANCE']::user_role[], 'ACTIVE'),
+  ('e2e00000-0000-0000-0000-000000000004', 'E2E Minister', 'e2e-minister@local.test', ARRAY['MINISTER']::user_role[], 'ACTIVE');
 
 INSERT INTO public.ministries (id, name, description, created_by) VALUES
   ('e2e00000-0000-0000-0000-0000000000a1', 'Ministerio E2E', 'Ministerio de prueba para pruebas e2e', 'e2e00000-0000-0000-0000-000000000001');
