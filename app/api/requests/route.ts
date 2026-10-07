@@ -20,7 +20,10 @@ export async function GET(request: Request) {
 
   const db = await createSupabaseServerClient()
 
-  if (can(user.permissions, PERMISSIONS.CREATE_REQUEST)) {
+  if (
+    can(user.permissions, PERMISSIONS.CREATE_REQUEST) &&
+    !can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS)
+  ) {
     const assignment = await ministriesService.getMinistryForUser(db, user.id)
     if (!assignment) return NextResponse.json([])
     const data = await intentionsService.list(db, {
