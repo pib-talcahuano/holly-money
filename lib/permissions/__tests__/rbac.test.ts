@@ -17,20 +17,49 @@ describe("mergePermissions", () => {
   })
 })
 
+const finance = [P.VIEW_DASHBOARD, P.VIEW_MOVEMENT, P.VIEW_WORKFLOW]
+
 describe("isOwnMinistryScoped", () => {
   it("is true for a plain minister", () => {
-    expect(isOwnMinistryScoped(new Set(minister))).toBe(true)
+    expect(isOwnMinistryScoped({ permissions: new Set(minister), roles: ["MINISTER"] })).toBe(true)
+  })
+
+  it("is true for a delegate-only user", () => {
+    expect(isOwnMinistryScoped({ permissions: new Set(minister), roles: ["DELEGATE"] })).toBe(true)
   })
 
   it("is false for a bursar+minister (keeps the reviewer view)", () => {
-    expect(isOwnMinistryScoped(mergePermissions([bursar, minister]))).toBe(false)
+    expect(
+      isOwnMinistryScoped({
+        permissions: mergePermissions([bursar, minister]),
+        roles: ["BURSAR", "MINISTER"]
+      })
+    ).toBe(false)
   })
 
   it("is false for finance (read-only workflow, not minister-scoped)", () => {
-    expect(isOwnMinistryScoped(new Set([P.VIEW_WORKFLOW]))).toBe(false)
+    expect(
+      isOwnMinistryScoped({ permissions: new Set([P.VIEW_WORKFLOW]), roles: ["FINANCE"] })
+    ).toBe(false)
   })
 
-  it("is false for no permissions", () => {
+  it("is false for finance+minister (keeps finance's org-wide read view)", () => {
+    expect(
+      isOwnMinistryScoped({
+        permissions: mergePermissions([finance, minister]),
+        roles: ["FINANCE", "MINISTER"]
+      })
+    ).toBe(false)
+  })
+
+  it("is false when a BURSAR role is held even if the matrix dropped REVIEW_INTENTIONS", () => {
+    expect(
+      isOwnMinistryScoped({ permissions: new Set(minister), roles: ["BURSAR", "MINISTER"] })
+    ).toBe(false)
+  })
+
+  it("is false for no user", () => {
     expect(isOwnMinistryScoped(undefined)).toBe(false)
+    expect(isOwnMinistryScoped(null)).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/server"
-import { PERMISSIONS, can, canAccessWorkflow, isMinisterWorkflowUser } from "@/lib/permissions/rbac"
+import { canAccessWorkflow, isMinisterWorkflowUser, isOwnMinistryScoped } from "@/lib/permissions/rbac"
 import { intentionsService } from "@/services/intentions/intentions.service"
 import { settlementsService } from "@/services/settlements/settlements.service"
 import { ministriesService } from "@/services/ministries/ministries.service"
@@ -83,7 +83,7 @@ export async function GET() {
   // A user can have both sides (e.g. bursar+minister): they get both sets of items. Anyone who
   // isn't minister-style (finance, bursar) gets the reviewer-style counts, as before.
   const hasMinisterSide = isMinisterWorkflowUser(user.permissions)
-  const hasReviewerSide = can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS) || !hasMinisterSide
+  const hasReviewerSide = !isOwnMinistryScoped(user)
 
   const [minister, reviewer] = await Promise.all([
     hasMinisterSide ? ministerSide(db, user.id) : null,

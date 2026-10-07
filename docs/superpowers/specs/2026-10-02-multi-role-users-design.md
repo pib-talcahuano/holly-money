@@ -131,14 +131,17 @@ Several workflow pages/APIs use `can(CREATE_REQUEST)` / `isMinisterWorkflowUser`
 user is a minister, scope them to their own ministry". With the permission union, a
 bursar+minister would silently lose the bursar's full request list and review view.
 
-Rule: **a user with `REVIEW_INTENTIONS` keeps the full reviewer view.** Own-ministry scoping
-applies only to workflow users who can't review. A bursar+minister creates requests and settles
+Rule: **a user keeps the full workflow view unless every one of their roles is MINISTER or
+DELEGATE (and they cannot `REVIEW_INTENTIONS`).** A FINANCE+MINISTER keeps FINANCE's read-only
+org-wide view and gets minister access to their own ministry via "Mi ministerio". A bursar+minister creates requests and settles
 expenses for their own ministry from "Mi ministerio" (`/ministries/[id]`).
 
-- New helper `isOwnMinistryScoped(permissions)` in `lib/permissions/rbac.ts`:
-  `isMinisterWorkflowUser(p) && !can(p, REVIEW_INTENTIONS)`.
+- New helper `isOwnMinistryScoped(user)` in `lib/permissions/rbac.ts`:
+  `isMinisterWorkflowUser(permissions) && !can(permissions, REVIEW_INTENTIONS)` and every role in
+  `user.roles` is MINISTER or DELEGATE (role names are a deliberate exception to `can()`, since
+  permissions alone cannot distinguish FINANCE from MINISTER).
 - `/requests` page, `GET /api/requests`: minister mode only when
-  `can(CREATE_REQUEST) && !can(REVIEW_INTENTIONS)`.
+  `can(CREATE_REQUEST) && isOwnMinistryScoped(user)`.
 - `/requests/[id]` page: the own-ministry redirect uses `isOwnMinistryScoped`.
 - `GET /api/notifications`: minister-side items (approved intentions, own draft/returned
   settlements) and reviewer-side counts are both returned when the user has both sides.

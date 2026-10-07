@@ -1,3 +1,6 @@
+import type { UserRole } from "@/types/auth"
+import { USER_ROLES } from "@/lib/constants/roles"
+
 export const PERMISSIONS = {
   MANAGE_USERS: "MANAGE_USERS",
   CREATE_MOVEMENT: "CREATE_MOVEMENT",
@@ -51,9 +54,18 @@ export function mergePermissions(lists: ReadonlyArray<ReadonlyArray<string>>): S
   return new Set(lists.flat())
 }
 
-// Own-ministry scoping (minister-style request/settlement views) applies only to workflow
-// users who can't review. A reviewer (BURSAR, ADMIN) who also holds MINISTER keeps the full
-// reviewer view and gets the minister view of their own ministry from /ministries/[id].
-export function isOwnMinistryScoped(permissions: Set<string> | undefined): boolean {
-  return isMinisterWorkflowUser(permissions) && !can(permissions, PERMISSIONS.REVIEW_INTENTIONS)
+// Own-ministry scoping (minister-style request/settlement views) applies only when the user is
+// minister-style, cannot REVIEW_INTENTIONS, AND every role they hold is MINISTER or DELEGATE.
+// Anyone else (BURSAR, ADMIN, FINANCE + MINISTER, ...) keeps the full workflow view and gets the
+// minister view of their own ministry from /ministries/[id]. The role-name check is a deliberate
+// exception to "use can()": permissions alone cannot distinguish FINANCE from MINISTER.
+export function isOwnMinistryScoped(
+  user: { permissions: Set<string> | undefined; roles: readonly UserRole[] } | null | undefined
+): boolean {
+  if (!user) return false
+  return (
+    isMinisterWorkflowUser(user.permissions) &&
+    !can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS) &&
+    user.roles.every((role) => role === USER_ROLES.MINISTER || role === USER_ROLES.DELEGATE)
+  )
 }

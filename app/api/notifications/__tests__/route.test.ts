@@ -35,8 +35,10 @@ import { GET } from "../route"
 const MINISTER = ["CREATE_REQUEST", "CREATE_SETTLEMENT", "VIEW_WORKFLOW"]
 const BURSAR = ["REVIEW_INTENTIONS", "VIEW_WORKFLOW", "CREATE_MOVEMENT"]
 
-function asUser(permissions: string[]) {
-  mockGetCurrentUser.mockResolvedValue({ id: "u-1", permissions: new Set(permissions) })
+const FINANCE = ["VIEW_WORKFLOW", "VIEW_DASHBOARD", "VIEW_MOVEMENT"]
+
+function asUser(permissions: string[], roles: string[]) {
+  mockGetCurrentUser.mockResolvedValue({ id: "u-1", permissions: new Set(permissions), roles })
 }
 
 async function getBody() {
@@ -57,7 +59,7 @@ describe("GET /api/notifications", () => {
   })
 
   it("gives a plain minister only their own items", async () => {
-    asUser(MINISTER)
+    asUser(MINISTER, ["MINISTER"])
     const body = await getBody()
 
     expect(body.items.map((i) => i.type)).toEqual(["INTENTION_APPROVED"])
@@ -66,7 +68,7 @@ describe("GET /api/notifications", () => {
   })
 
   it("gives a plain bursar only reviewer counts", async () => {
-    asUser(BURSAR)
+    asUser(BURSAR, ["BURSAR"])
     const body = await getBody()
 
     expect(body.items.map((i) => i.type)).toEqual(["INTENTIONS_PENDING", "SETTLEMENTS_PENDING"])
@@ -75,7 +77,7 @@ describe("GET /api/notifications", () => {
   })
 
   it("gives a bursar+minister both sides", async () => {
-    asUser([...BURSAR, ...MINISTER])
+    asUser([...BURSAR, ...MINISTER], ["BURSAR", "MINISTER"])
     const body = await getBody()
 
     expect(body.items.map((i) => i.type)).toEqual([
@@ -87,14 +89,29 @@ describe("GET /api/notifications", () => {
   })
 
   it("keeps finance on the reviewer-style counts", async () => {
-    asUser(["VIEW_WORKFLOW"])
+    asUser(["VIEW_WORKFLOW"], ["FINANCE"])
     const body = await getBody()
 
     expect(body.count).toBe(3)
   })
 
+  it("gives a finance+minister both sides", async () => {
+    asUser([...FINANCE, ...MINISTER], ["FINANCE", "MINISTER"])
+    const body = await getBody()
+
+    expect(body.items.map((i) => i.type)).toEqual([
+      "INTENTION_APPROVED",
+      "INTENTIONS_PENDING",
+      "SETTLEMENTS_PENDING"
+    ])
+    expect(body.count).toBe(4)
+    expect(mockGetMinistryForUser).toHaveBeenCalled()
+    expect(mockIntentionsPending).toHaveBeenCalled()
+    expect(mockSettlementsPending).toHaveBeenCalled()
+  })
+
   it("returns an empty minister result when no ministry is assigned", async () => {
-    asUser(MINISTER)
+    asUser(MINISTER, ["MINISTER"])
     mockGetMinistryForUser.mockResolvedValue(null)
     const body = await getBody()
 

@@ -90,7 +90,8 @@ Every request calls `getCurrentUser()` (`lib/supabase/server.ts`), which:
 1. Resolves the real authenticated identity from the Supabase session (`getRealUser()`).
 2. Loads that user's row from `public.users` via the **service-role client** — not RLS-as-self,
    because step 3 below may need to load a *different* user's row during impersonation.
-3. Looks up the role's enabled permissions via `getPermissionsForRole(role)`, wrapped in
+3. Looks up each of the user's roles' enabled permissions via `getPermissionsForRole(role)` and
+   merges them into a union (`mergePermissions`), each lookup wrapped in
    `unstable_cache` — **cached for 24 hours per role**, tagged `"role-permissions"`.
 4. Builds a `Set<Permission>` attached to the user object; every `can()` check downstream is a
    plain `Set.has()`.
