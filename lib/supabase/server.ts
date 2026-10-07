@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import type { Database } from "@/types/database.types"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
+import { mergePermissions } from "@/lib/permissions/rbac"
 import type { UserRole } from "@/types/auth"
 
 export const IMPERSONATION_COOKIE = "impersonation_session"
@@ -45,7 +46,7 @@ const getPermissionsForRole = unstable_cache(
       .eq("enabled", true)
     return (data ?? []).map((p) => p.permission)
   },
-  ["role-permissions"],
+  ["role-permissions-v2"],
   { tags: ["role-permissions"], revalidate: 86400 }
 )
 
@@ -59,21 +60,23 @@ async function loadIdentity(userId: string) {
   const admin = createSupabaseAdminClient()
   const { data: profile } = await admin
     .from("users")
-    .select("id, full_name, email, role, status")
+    .select("id, full_name, email, roles, status")
     .eq("id", userId)
     .single()
 
   if (!profile || profile.status !== "ACTIVE") return null
 
-  const permList = await getPermissionsForRole(profile.role)
+  const permissions = mergePermissions(
+    await Promise.all(profile.roles.map((role) => getPermissionsForRole(role)))
+  )
 
   return {
     id: profile.id,
     email: profile.email,
     name: profile.full_name,
-    role: profile.role,
+    roles: profile.roles,
     status: profile.status,
-    permissions: new Set<string>(permList)
+    permissions
   }
 }
 
@@ -143,6 +146,6 @@ export const getCurrentUser = cache(async function getCurrentUser() {
   return {
     ...target,
     impersonatorId: realUser.id,
-    realUser: { id: realUser.id, email: realUser.email, name: realUser.name, role: realUser.role }
+    realUser: { id: realUser.id, email: realUser.email, name: realUser.name, roles: realUser.roles }
   }
 })

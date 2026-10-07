@@ -45,3 +45,15 @@ export function isMinisterWorkflowUser(permissions: Set<string> | undefined): bo
     can(permissions, PERMISSIONS.CREATE_REQUEST) || can(permissions, PERMISSIONS.CREATE_SETTLEMENT)
   )
 }
+
+// A user's effective permissions are the union of every role they hold.
+export function mergePermissions(lists: ReadonlyArray<ReadonlyArray<string>>): Set<string> {
+  return new Set(lists.flat())
+}
+
+// Own-ministry scoping (minister-style request/settlement views) applies only to workflow
+// users who can't review. A reviewer (BURSAR, ADMIN) who also holds MINISTER keeps the full
+// reviewer view and gets the minister view of their own ministry from /ministries/[id].
+export function isOwnMinistryScoped(permissions: Set<string> | undefined): boolean {
+  return isMinisterWorkflowUser(permissions) && !can(permissions, PERMISSIONS.REVIEW_INTENTIONS)
+}
