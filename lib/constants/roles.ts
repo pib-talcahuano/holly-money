@@ -30,6 +30,29 @@ export function roleLabel(role: string): string {
   return ROLE_LABEL[role as UserRole] ?? role
 }
 
+// Roles that can't be combined with any other (also enforced by users_roles_valid in the DB).
+export const EXCLUSIVE_ROLES: UserRole[] = [USER_ROLES.ADMIN, USER_ROLES.DELEGATE]
+
+type WithRoles = { roles: readonly UserRole[] } | null | undefined
+
+// The only way TS code asks "does this user have role X?" — a user can hold several roles.
+export function hasRole(user: WithRoles, role: UserRole): boolean {
+  return user?.roles.includes(role) ?? false
+}
+
+export function hasAnyRole(user: WithRoles, roles: readonly UserRole[]): boolean {
+  return roles.some((role) => hasRole(user, role))
+}
+
+export function rolesLabel(roles: readonly string[]): string {
+  return roles.map(roleLabel).join(" · ")
+}
+
+// Stable, de-duplicated order so audit diffs and list badges don't flicker.
+export function normalizeRoles(roles: readonly UserRole[]): UserRole[] {
+  return ROLE_ORDER.filter((role) => roles.includes(role))
+}
+
 export type RoleBadgeVariant = "primary" | "role" | "income" | "warn" | "neutral"
 
 export const ROLE_BADGE_VARIANT: Record<UserRole, RoleBadgeVariant> = {
