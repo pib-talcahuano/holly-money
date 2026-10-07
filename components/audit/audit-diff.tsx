@@ -1,4 +1,5 @@
 import { formatDate, formatCLP } from "@/lib/utils"
+import { rolesLabel } from "@/lib/constants/roles"
 
 // Known JSONB keys across every auditService.logSystem/logMovement call site — used to
 // humanize the diff view. Unmapped keys fall back to a title-cased version of the key.
@@ -18,6 +19,7 @@ const KEY_LABEL: Record<string, string> = {
   file_name: "Archivo",
   name: "Nombre",
   role: "Rol",
+  roles: "Roles",
   is_active: "Activo"
 }
 
@@ -36,6 +38,7 @@ function formatValue(key: string, value: unknown): string {
   if (DATE_KEYS.has(key) && typeof value === "string" && !Number.isNaN(new Date(value).getTime())) {
     return formatDate(value)
   }
+  if (key === "roles" && Array.isArray(value)) return rolesLabel(value.map(String))
   return String(value)
 }
 
@@ -72,7 +75,7 @@ export function AuditDiff({ previous, next }: { previous: unknown; next: unknown
 
   if (prev && nxt) {
     const keys = Array.from(new Set([...Object.keys(prev), ...Object.keys(nxt)])).filter(
-      (key) => prev[key] !== nxt[key]
+      (key) => JSON.stringify(prev[key]) !== JSON.stringify(nxt[key])
     )
     if (!keys.length) return null
     return (
