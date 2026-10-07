@@ -27,12 +27,9 @@ import {
 } from "@/components/ui/item"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { avatarColorFor, initialsFor } from "@/lib/utils"
 import { createMinistrySchema, type CreateMinistryInput } from "@/lib/validators/ministry"
 import { createMinistry, assignMinister } from "@/app/actions/ministries"
-import { MinistryBudgetAdmin } from "@/components/ministries/ministry-budget-admin"
-import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 
 type Ministry = {
   id: string
@@ -53,24 +50,16 @@ type MinistryUser = {
   email: string
 }
 
-type BudgetPeriod = { id: string; label: string; start_date: string; end_date: string }
-
 type Props = {
   initialMinistries: Ministry[]
   initialCurrentAssignments: CurrentAssignment[]
   ministers: MinistryUser[]
-  canManageBudgets: boolean
-  currentBudgetPeriod: BudgetPeriod | null
-  budgetSummary: MinistryBudgetSummaryRow[]
 }
 
 export function MinistriesClient({
   initialMinistries,
   initialCurrentAssignments,
-  ministers,
-  canManageBudgets,
-  currentBudgetPeriod,
-  budgetSummary
+  ministers
 }: Props) {
   const [ministries, setMinistries] = useState<Ministry[]>(initialMinistries)
   const [currentAssignments, setCurrentAssignments] =
@@ -255,26 +244,7 @@ export function MinistriesClient({
         </Dialog>
       </div>
 
-      {canManageBudgets ? (
-        <Tabs defaultValue="ministerios">
-          <TabsList>
-            <TabsTrigger value="ministerios">Ministerios</TabsTrigger>
-            <TabsTrigger value="presupuesto">Presupuesto</TabsTrigger>
-          </TabsList>
-          <TabsContent value="ministerios" className="pt-4">
-            {ministriesList}
-          </TabsContent>
-          <TabsContent value="presupuesto" className="pt-4">
-            <MinistryBudgetAdmin
-              ministries={ministries}
-              currentPeriod={currentBudgetPeriod}
-              summary={budgetSummary}
-            />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        ministriesList
-      )}
+      {ministriesList}
     </div>
   )
 }
