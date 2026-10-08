@@ -28,6 +28,7 @@ function assertBudgetsAccess(user: Awaited<ReturnType<typeof getCurrentUser>>) {
 }
 
 function revalidateBudgetConsumers(ministryId?: string) {
+  revalidatePath("/budgets")
   revalidatePath("/ministries")
   if (ministryId) revalidatePath(`/ministries/${ministryId}`)
 }

@@ -167,7 +167,7 @@ export const ministriesService = {
     assignedBy: string
   ) {
     const created = await usersService.invite(
-      { full_name: input.full_name, email: input.email, role: "DELEGATE" },
+      { full_name: input.full_name, email: input.email, roles: ["DELEGATE"] },
       assignedBy
     )
     if (!created.id) throw new Error("No se pudo crear la cuenta del delegado")

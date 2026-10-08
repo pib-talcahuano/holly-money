@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/server"
-import { PERMISSIONS, can } from "@/lib/permissions/rbac"
+import { PERMISSIONS, can, canAccessWorkflow, isOwnMinistryScoped } from "@/lib/permissions/rbac"
 import { intentionsService } from "@/services/intentions/intentions.service"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import { createIntentionSchema, intentionFiltersSchema } from "@/lib/validators/intention"
@@ -20,7 +20,9 @@ export async function GET(request: Request) {
 
   const db = await createSupabaseServerClient()
 
-  if (can(user.permissions, PERMISSIONS.CREATE_REQUEST)) {
+  if (
+    can(user.permissions, PERMISSIONS.CREATE_REQUEST) && isOwnMinistryScoped(user)
+  ) {
     const assignment = await ministriesService.getMinistryForUser(db, user.id)
     if (!assignment) return NextResponse.json([])
     const data = await intentionsService.list(db, {
@@ -30,7 +32,7 @@ export async function GET(request: Request) {
     return NextResponse.json(data)
   }
 
-  if (!can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS)) {
+  if (!canAccessWorkflow(user.permissions)) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 

@@ -6,9 +6,11 @@ import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { cn, avatarColorFor, initialsFor } from "@/lib/utils"
 import type { UserRole } from "@/types/auth"
+import { RoleMultiSelect } from "@/components/users/role-multi-select"
 import {
   USER_ROLES,
   ROLE_ORDER,
+  hasRole,
   ROLE_LABEL,
   ROLE_BADGE_VARIANT,
   ROLE_DOT_CLASS
@@ -75,7 +77,7 @@ type UserRow = {
   id: string
   full_name: string
   email: string
-  role: UserRole
+  roles: UserRole[]
   status: UserStatus
   created_at: string | Date
   updated_at: string | Date | null
@@ -147,12 +149,15 @@ function UserListItem({
         </div>
       </ItemContent>
       <ItemActions>
-        <Badge
-          variant={ROLE_BADGE_VARIANT[user.role]}
-          className="hidden sm:inline-flex uppercase tracking-wide"
-        >
-          {ROLE_LABEL[user.role]}
-        </Badge>
+        {user.roles.map((role) => (
+          <Badge
+            key={role}
+            variant={ROLE_BADGE_VARIANT[role]}
+            className="hidden sm:inline-flex uppercase tracking-wide"
+          >
+            {ROLE_LABEL[role]}
+          </Badge>
+        ))}
         {meta.variant && (
           <Badge variant={meta.variant} className="hidden sm:inline-flex">
             {meta.label}
@@ -163,7 +168,7 @@ function UserListItem({
             Enlace expirado
           </Badge>
         )}
-        {user.role !== USER_ROLES.ADMIN && user.status === "ACTIVE" && (
+        {!hasRole(user, USER_ROLES.ADMIN) && user.status === "ACTIVE" && (
           <Button
             size="icon-sm"
             variant="outline"
@@ -199,6 +204,29 @@ const PURGE_LABELS: Record<string, string> = {
   ministry_assignments: "Asignaciones a ministerios",
   ministry_delegates: "Delegaciones",
   system_audit_entries: "Registros de auditoría del sistema"
+}
+
+const ROLE_HELP: Partial<Record<UserRole, { title: string; description: string }>> = {
+  ADMIN: {
+    title: "Acceso total al sistema",
+    description:
+      "Puede invitar y eliminar usuarios, ver todos los movimientos, crear y anular registros contables, y acceder a los reportes. Asigna este rol solo a personas de plena confianza."
+  },
+  BURSAR: {
+    title: "Tesorero — Ingreso y aprobación",
+    description:
+      "Puede crear, editar y anular movimientos contables, y aprobar o rechazar solicitudes de fondos de ministros. No puede gestionar usuarios ni configurar el sistema."
+  },
+  FINANCE: {
+    title: "Finanzas — Monitoreo de registros",
+    description:
+      "Puede consultar movimientos y el flujo de solicitudes, pero no puede crear, editar ni aprobar ningún registro. Rol de supervisión financiera."
+  },
+  MINISTER: {
+    title: "Solicitudes de fondos",
+    description:
+      "Puede enviar solicitudes de fondos para su ministerio y rendir los gastos correspondientes. No tiene acceso a movimientos contables ni configuración."
+  }
 }
 
 export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
@@ -249,7 +277,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const groups = useMemo(() => {
     return ROLE_ORDER.map((role) => ({
       role,
-      members: filtered.filter((u) => u.role === role)
+      members: filtered.filter((u) => u.roles.includes(role))
     })).filter((g) => g.members.length > 0)
   }, [filtered])
 
@@ -267,11 +295,11 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     defaultValues: {
       full_name: "",
       email: "",
-      role: inviteMinister ? USER_ROLES.MINISTER : USER_ROLES.BURSAR
+      roles: inviteMinister ? [USER_ROLES.MINISTER] : [USER_ROLES.BURSAR]
     }
   })
 
-  const selectedRole = useWatch({ control: createForm.control, name: "role" })
+  const selectedRoles = useWatch({ control: createForm.control, name: "roles" }) ?? []
 
   const handleCreate = (values: CreateUserInput) => {
     const promise = inviteUser(values)
@@ -296,6 +324,8 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     resolver: zodResolver(updateUserSchema)
   })
 
+  const editRoles = useWatch({ control: editForm.control, name: "roles" }) ?? []
+
   function openEdit(user: UserRow) {
     setEditingUser(user)
     setConfirmDelete(false)
@@ -303,7 +333,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
     editForm.reset({
       id: user.id,
       full_name: user.full_name,
-      role: user.role,
+      roles: user.roles,
       status: user.status
     })
   }
@@ -344,7 +374,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
   const handleDelete = () => {
     if (!editingUser || isDeleting) return
     const { id: userId, full_name: name } = editingUser
-    const wantsHardDelete = hardDelete && currentUser.role === USER_ROLES.ADMIN
+    const wantsHardDelete = hardDelete && hasRole(currentUser, USER_ROLES.ADMIN)
     setIsDeleting(true)
 
     const request = deleteUser(userId, { hardDelete: wantsHardDelete }).then((result) => {
@@ -479,54 +509,27 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                 <FieldError errors={[createForm.formState.errors.email]} />
               </Field>
 
-              <Field>
+              <Field data-invalid={!!createForm.formState.errors.roles || undefined}>
                 <FieldLabel htmlFor="new-role">Nivel de acceso</FieldLabel>
-                <NativeSelect id="new-role" className="w-full" {...createForm.register("role")}>
-                  <option value={USER_ROLES.ADMIN}>Administrador — Acceso total</option>
-                  <option value={USER_ROLES.FINANCE}>Finanzas — Gestión contable</option>
-                  <option value={USER_ROLES.BURSAR}>Tesorero — Ingreso y aprobación</option>
-                  <option value={USER_ROLES.MINISTER}>Ministro — Solicitudes de fondos</option>
-                </NativeSelect>
+                <RoleMultiSelect
+                  id="new-role"
+                  value={selectedRoles}
+                  onChange={(roles) =>
+                    createForm.setValue("roles", roles, { shouldValidate: true })
+                  }
+                />
+                <FieldError errors={[createForm.formState.errors.roles]} />
               </Field>
 
-              {selectedRole === USER_ROLES.ADMIN && (
-                <Alert variant="info">
-                  <AlertTitle>Acceso total al sistema</AlertTitle>
-                  <AlertDescription>
-                    Puede invitar y eliminar usuarios, ver todos los movimientos, crear y anular
-                    registros contables, y acceder a los reportes. Asigna este rol solo a personas
-                    de plena confianza.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {selectedRole === USER_ROLES.BURSAR && (
-                <Alert variant="info">
-                  <AlertTitle>Tesorero — Ingreso y aprobación</AlertTitle>
-                  <AlertDescription>
-                    Puede crear, editar y anular movimientos contables, y aprobar o rechazar
-                    solicitudes de fondos de ministros. No puede gestionar usuarios ni configurar el
-                    sistema.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {selectedRole === USER_ROLES.FINANCE && (
-                <Alert variant="info">
-                  <AlertTitle>Finanzas — Monitoreo de registros</AlertTitle>
-                  <AlertDescription>
-                    Puede consultar movimientos y el flujo de solicitudes, pero no puede crear,
-                    editar ni aprobar ningún registro. Rol de supervisión financiera.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {selectedRole === USER_ROLES.MINISTER && (
-                <Alert variant="info">
-                  <AlertTitle>Solicitudes de fondos</AlertTitle>
-                  <AlertDescription>
-                    Puede enviar solicitudes de fondos para su ministerio y rendir los gastos
-                    correspondientes. No tiene acceso a movimientos contables ni configuración.
-                  </AlertDescription>
-                </Alert>
-              )}
+              {selectedRoles.map((role) => {
+                const help = ROLE_HELP[role]
+                return help ? (
+                  <Alert key={role} variant="info">
+                    <AlertTitle>{help.title}</AlertTitle>
+                    <AlertDescription>{help.description}</AlertDescription>
+                  </Alert>
+                ) : null
+              })}
 
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
                 <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>
@@ -602,7 +605,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                 </DialogDescription>
               </DialogHeader>
 
-              {currentUser.role === USER_ROLES.ADMIN && (
+              {hasRole(currentUser, USER_ROLES.ADMIN) && (
                 <label className="flex items-start gap-2 text-[12.5px] cursor-pointer">
                   <input
                     type="checkbox"
@@ -699,15 +702,22 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                     <FieldError errors={[editForm.formState.errors.full_name]} />
                   </Field>
 
-                  <Field>
-                    <FieldLabel htmlFor="edit-role">Rol</FieldLabel>
-                    <NativeSelect id="edit-role" className="w-full" {...editForm.register("role")}>
-                      {ROLE_ORDER.map((role) => (
-                        <option key={role} value={role}>
-                          {ROLE_LABEL[role]}
-                        </option>
-                      ))}
-                    </NativeSelect>
+                  <Field data-invalid={!!editForm.formState.errors.roles || undefined}>
+                    <FieldLabel htmlFor="edit-role">Roles</FieldLabel>
+                    {editingUser?.roles.includes(USER_ROLES.DELEGATE) ? (
+                      <Badge variant={ROLE_BADGE_VARIANT[USER_ROLES.DELEGATE]}>
+                        {ROLE_LABEL[USER_ROLES.DELEGATE]}
+                      </Badge>
+                    ) : (
+                      <RoleMultiSelect
+                        id="edit-role"
+                        value={editRoles}
+                        onChange={(roles) =>
+                          editForm.setValue("roles", roles, { shouldValidate: true })
+                        }
+                      />
+                    )}
+                    <FieldError errors={[editForm.formState.errors.roles]} />
                   </Field>
                 </div>
 
@@ -739,16 +749,17 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                       Acciones de cuenta
                     </h3>
                     <div className="flex flex-wrap gap-2">
-                      {editingUser.role !== USER_ROLES.ADMIN && editingUser.status === "ACTIVE" && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => handleImpersonate(editingUser.id)}
-                        >
-                          <VenetianMask className="size-3.5" />
-                          Impersonar
-                        </Button>
-                      )}
+                      {!hasRole(editingUser, USER_ROLES.ADMIN) &&
+                        editingUser.status === "ACTIVE" && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => handleImpersonate(editingUser.id)}
+                          >
+                            <VenetianMask className="size-3.5" />
+                            Impersonar
+                          </Button>
+                        )}
                       <Button
                         type="button"
                         variant="outline"

@@ -4,6 +4,8 @@ import { sendInviteEmail, sendResetEmail } from "@/services/email/resend.service
 import { wrapAuthLink } from "@/services/auth/link-wrapper"
 import { attachmentStorageService } from "@/services/storage/attachment-storage.service"
 import { getSiteUrl } from "@/lib/utils"
+import { USER_ROLES, normalizeRoles } from "@/lib/constants/roles"
+import type { UserRole } from "@/types/auth"
 import type { CreateUserInput, UpdateUserInput, UpdateOwnProfileInput } from "@/lib/validators/user"
 
 export type UserPurgePreview = {
@@ -32,12 +34,18 @@ async function runPurge(
   return data as unknown as UserPurgePreview
 }
 
+// `invite` is also called by the ministries flow with ["DELEGATE"], which the users-dialog
+// schema deliberately doesn't allow — so the service takes plain roles, not CreateUserInput.
+export type InviteUserInput = Pick<CreateUserInput, "full_name" | "email"> & {
+  roles: UserRole[]
+}
+
 export const usersService = {
   async getById(userId: string) {
     const admin = createSupabaseAdminClient()
     const { data, error } = await admin
       .from("users")
-      .select("id, full_name, email, role, status, created_at, updated_at")
+      .select("id, full_name, email, roles, status, created_at, updated_at")
       .eq("id", userId)
       .single()
 
@@ -49,7 +57,7 @@ export const usersService = {
     const admin = createSupabaseAdminClient()
     const { data, error } = await admin
       .from("users")
-      .select("id, full_name, email, role, status, created_at, updated_at")
+      .select("id, full_name, email, roles, status, created_at, updated_at")
       .order("created_at", { ascending: true })
       .limit(500)
 
@@ -57,7 +65,7 @@ export const usersService = {
     return data
   },
 
-  async invite(input: CreateUserInput, actingUserId: string) {
+  async invite(input: InviteUserInput, actingUserId: string) {
     const admin = createSupabaseAdminClient()
     const email = input.email.toLowerCase().trim()
     const callbackUrl = `${getSiteUrl()}/auth/callback`
@@ -100,7 +108,7 @@ export const usersService = {
       id: userId,
       full_name: input.full_name.trim(),
       email,
-      role: input.role,
+      roles: normalizeRoles(input.roles),
       status: "PENDING_ACTIVATION"
     })
 
@@ -120,13 +128,13 @@ export const usersService = {
       action: "Usuario invitado",
       entity_id: userId,
       user_id: actingUserId,
-      new_value: { email, full_name: input.full_name.trim(), role: input.role },
+      new_value: { email, full_name: input.full_name.trim(), roles: normalizeRoles(input.roles) },
       note: "Invitación enviada, pendiente de activación"
     })
 
     const { data: profile } = await admin
       .from("users")
-      .select("id, full_name, role, status, created_at, updated_at")
+      .select("id, full_name, roles, status, created_at, updated_at")
       .eq("id", userId)
       .single()
 
@@ -188,7 +196,7 @@ export const usersService = {
 
     const { data: user, error: fetchError } = await admin
       .from("users")
-      .select("full_name, email, role, status")
+      .select("full_name, email, roles, status")
       .eq("id", userId)
       .single()
 
@@ -304,16 +312,26 @@ export const usersService = {
 
     if (fetchError || !current) throw new Error("Usuario no encontrado")
 
+    const currentRoles = current.roles as UserRole[]
+    const nextRoles = normalizeRoles(input.roles)
+    const currentIsDelegate = currentRoles.includes(USER_ROLES.DELEGATE)
+    if (currentIsDelegate && nextRoles.join() !== normalizeRoles(currentRoles).join()) {
+      throw new Error("El rol de un delegado no se puede modificar")
+    }
+    if (!currentIsDelegate && nextRoles.includes(USER_ROLES.DELEGATE)) {
+      throw new Error("El rol de delegado solo se asigna desde Ministerios")
+    }
+
     const { data: updated, error } = await admin
       .from("users")
       .update({
         full_name: input.full_name.trim(),
-        role: input.role,
+        roles: nextRoles,
         status: input.status,
         updated_at: new Date().toISOString()
       })
       .eq("id", input.id)
-      .select("id, full_name, role, status, created_at, updated_at")
+      .select("id, full_name, roles, status, created_at, updated_at")
       .single()
 
     if (error) throw error

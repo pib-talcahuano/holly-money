@@ -31,7 +31,7 @@ test.describe("Account recovery", () => {
       id: userId,
       full_name: "E2E Recovery",
       email: TEST_EMAIL,
-      role: "ADMIN",
+      roles: ["ADMIN"],
       status: "ACTIVE"
     })
     if (profileError) throw profileError

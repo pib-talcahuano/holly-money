@@ -1,10 +1,4 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
   graphql_public: {
@@ -16,12 +10,7 @@ export type Database = {
     }
     Functions: {
       graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
+        Args: { extensions?: Json; operationName?: string; query?: string; variables?: Json }
         Returns: Json
       }
     }
@@ -41,6 +30,7 @@ export type Database = {
           updated_by: string | null
           value: string | null
         }
+        ComputedFields: never
         Insert: {
           key: string
           updated_at?: string
@@ -60,7 +50,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       budget_intentions: {
@@ -81,6 +71,7 @@ export type Database = {
           token: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           created_at?: string
@@ -136,7 +127,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       budget_periods: {
@@ -149,6 +140,7 @@ export type Database = {
           start_date: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -174,7 +166,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       expense_settlements: {
@@ -195,6 +187,7 @@ export type Database = {
           token: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           created_at?: string
@@ -257,7 +250,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       impersonation_sessions: {
@@ -270,6 +263,7 @@ export type Database = {
           started_at: string
           target_user_id: string
         }
+        ComputedFields: never
         Insert: {
           ended_at?: string | null
           ended_reason?: string | null
@@ -302,7 +296,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       inbound_email_routes: {
@@ -313,6 +307,7 @@ export type Database = {
           local_part: string
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -341,7 +336,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       intention_attachments: {
@@ -355,6 +350,7 @@ export type Database = {
           size_bytes: number
           storage_path: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by_id: string
@@ -389,7 +385,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "budget_intentions"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       intention_transfers: {
@@ -403,6 +399,7 @@ export type Database = {
           registered_by: string
           transfer_date: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           created_at?: string
@@ -444,7 +441,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       ministries: {
@@ -457,6 +454,7 @@ export type Database = {
           name: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -482,7 +480,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       ministry_assignments: {
@@ -495,6 +493,7 @@ export type Database = {
           unassigned_at: string | null
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           assigned_at?: string
           assigned_by?: string | null
@@ -534,7 +533,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       ministry_budgets: {
@@ -549,6 +548,7 @@ export type Database = {
           notes: string | null
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           assigned_amount: number
           budget_period_id: string
@@ -592,7 +592,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "ministries"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       ministry_delegates: {
@@ -603,6 +603,7 @@ export type Database = {
           ministry_id: string
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           assigned_by: string
           created_at?: string
@@ -638,7 +639,7 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       movement_attachments: {
@@ -652,6 +653,7 @@ export type Database = {
           size_bytes: number
           storage_path: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by_id: string
@@ -686,7 +688,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "movements"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       movement_audit_log: {
@@ -701,6 +703,7 @@ export type Database = {
           previous_value: Json | null
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           action: string
           event_date?: string
@@ -744,7 +747,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       movement_categories: {
@@ -759,6 +762,7 @@ export type Database = {
           name: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -788,7 +792,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       movement_subcategories: {
@@ -802,6 +806,7 @@ export type Database = {
           name: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           category_id: string
           created_at?: string
@@ -836,7 +841,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       movements: {
@@ -864,6 +869,7 @@ export type Database = {
           updated_at: string | null
           updated_by_id: string | null
         }
+        ComputedFields: never
         Insert: {
           amount: number
           cancellation_reason?: string | null
@@ -954,7 +960,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       payment_methods: {
@@ -966,6 +972,7 @@ export type Database = {
           name: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by?: string | null
@@ -989,7 +996,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       payroll_movements: {
@@ -1000,6 +1007,7 @@ export type Database = {
           payroll_record_id: string
           title: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           id?: string
@@ -1028,7 +1036,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "payroll_records"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       payroll_records: {
@@ -1043,6 +1051,7 @@ export type Database = {
           period: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by_id: string
@@ -1072,7 +1081,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       request_comments: {
@@ -1084,6 +1093,7 @@ export type Database = {
           message: string
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           entity_id: string
@@ -1107,7 +1117,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       role_permissions: {
@@ -1116,6 +1126,7 @@ export type Database = {
           permission: string
           role: Database["public"]["Enums"]["user_role"]
         }
+        ComputedFields: never
         Insert: {
           enabled?: boolean
           permission: string
@@ -1139,6 +1150,7 @@ export type Database = {
           size_bytes: number
           storage_path: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           created_by_id: string
@@ -1173,7 +1185,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "expense_settlements"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       severance_reserve_adjustments: {
@@ -1185,6 +1197,7 @@ export type Database = {
           note: string
           period: string
         }
+        ComputedFields: never
         Insert: {
           amount_delta: number
           created_at?: string
@@ -1208,7 +1221,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       system_audit_log: {
@@ -1224,6 +1237,7 @@ export type Database = {
           previous_value: Json | null
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           action: string
           entity: string
@@ -1262,7 +1276,7 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       users: {
@@ -1271,16 +1285,17 @@ export type Database = {
           email: string
           full_name: string
           id: string
-          role: Database["public"]["Enums"]["user_role"]
+          roles: Database["public"]["Enums"]["user_role"][]
           status: Database["public"]["Enums"]["user_status"]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           email: string
           full_name: string
           id: string
-          role?: Database["public"]["Enums"]["user_role"]
+          roles?: Database["public"]["Enums"]["user_role"][]
           status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
         }
@@ -1289,7 +1304,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
-          role?: Database["public"]["Enums"]["user_role"]
+          roles?: Database["public"]["Enums"]["user_role"][]
           status?: Database["public"]["Enums"]["user_status"]
           updated_at?: string
         }
@@ -1304,54 +1319,30 @@ export type Database = {
         Args: { p_email: string; p_full_name: string; p_password: string }
         Returns: string
       }
-      create_user_with_role: {
-        Args: {
-          p_email: string
-          p_full_name: string
-          p_password: string
-          p_role?: Database["public"]["Enums"]["user_role"]
-        }
-        Returns: string
-      }
-      get_dashboard_summary: {
-        Args: { p_from?: string; p_to?: string }
-        Returns: Json
-      }
-      get_ministry_budget_summary: {
-        Args: { p_period_id?: string }
-        Returns: Json
-      }
+      get_dashboard_summary: { Args: { p_from?: string; p_to?: string }; Returns: Json }
+      get_ministry_budget_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_ministry_leftover_summary: {
         Args: { p_as_of?: string; p_ministry_id?: string }
         Returns: Json
       }
-      get_my_active_ministries: { Args: never; Returns: string[] }
-      get_my_ministries_as_minister: { Args: never; Returns: string[] }
-      get_my_role: {
-        Args: never
-        Returns: Database["public"]["Enums"]["user_role"]
-      }
-      get_pending_reminders: { Args: never; Returns: Json }
+      get_my_active_ministries: { Args: Record<PropertyKey, never>; Returns: string[] }
+      get_my_ministries_as_minister: { Args: Record<PropertyKey, never>; Returns: string[] }
+      get_pending_reminders: { Args: Record<PropertyKey, never>; Returns: Json }
+      has_any_role: { Args: { p_roles: string[] }; Returns: boolean }
       purge_user: { Args: { p_dry_run?: boolean; p_user_id: string }; Returns: Json }
       register_payroll: {
-        Args: {
-          p_category_id: string
-          p_created_by_id: string
-          p_lines: Json
-          p_period: string
-        }
+        Args: { p_category_id: string; p_created_by_id: string; p_lines: Json; p_period: string }
         Returns: Json
+      }
+      users_roles_valid: {
+        Args: { p_roles: Database["public"]["Enums"]["user_role"][] }
+        Returns: boolean
       }
     }
     Enums: {
       comment_entity: "INTENTION" | "SETTLEMENT"
       intention_funding_method: "REIMBURSEMENT" | "TRANSFER"
-      intention_status:
-        | "PENDING"
-        | "APPROVED"
-        | "REJECTED"
-        | "DRAFT"
-        | "CANCELLED"
+      intention_status: "PENDING" | "APPROVED" | "REJECTED" | "DRAFT" | "CANCELLED"
       movement_status: "ACTIVE" | "CANCELLED"
       movement_type: "INCOME" | "EXPENSE"
       notification_status: "PENDING" | "SENT" | "ERROR" | "SKIPPED"
@@ -1364,11 +1355,7 @@ export type Database = {
         | "RETURNED_FOR_CORRECTION"
         | "CANCELLED"
       user_role: "ADMIN" | "BURSAR" | "FINANCE" | "MINISTER" | "DELEGATE"
-      user_status:
-        | "ACTIVE"
-        | "INACTIVE"
-        | "PENDING_ACTIVATION"
-        | "PENDING_RESET"
+      user_status: "ACTIVE" | "INACTIVE" | "PENDING_ACTIVATION" | "PENDING_RESET"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1389,20 +1376,16 @@ export type Tables<
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
+    : never) = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -1411,16 +1394,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
   TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
+    : never) = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
@@ -1436,16 +1416,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
   TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
+    : never) = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
@@ -1461,16 +1438,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
   EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
+    : never) = never
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
@@ -1478,16 +1452,13 @@ export type Enums<
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
+    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
+    : never) = never
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
@@ -1495,19 +1466,13 @@ export type CompositeTypes<
 
 export const Constants = {
   graphql_public: {
-    Enums: {},
+    Enums: {}
   },
   public: {
     Enums: {
       comment_entity: ["INTENTION", "SETTLEMENT"],
       intention_funding_method: ["REIMBURSEMENT", "TRANSFER"],
-      intention_status: [
-        "PENDING",
-        "APPROVED",
-        "REJECTED",
-        "DRAFT",
-        "CANCELLED",
-      ],
+      intention_status: ["PENDING", "APPROVED", "REJECTED", "DRAFT", "CANCELLED"],
       movement_status: ["ACTIVE", "CANCELLED"],
       movement_type: ["INCOME", "EXPENSE"],
       notification_status: ["PENDING", "SENT", "ERROR", "SKIPPED"],
@@ -1518,16 +1483,10 @@ export const Constants = {
         "DRAFT",
         "IN_REVIEW",
         "RETURNED_FOR_CORRECTION",
-        "CANCELLED",
+        "CANCELLED"
       ],
       user_role: ["ADMIN", "BURSAR", "FINANCE", "MINISTER", "DELEGATE"],
-      user_status: [
-        "ACTIVE",
-        "INACTIVE",
-        "PENDING_ACTIVATION",
-        "PENDING_RESET",
-      ],
-    },
-  },
+      user_status: ["ACTIVE", "INACTIVE", "PENDING_ACTIVATION", "PENDING_RESET"]
+    }
+  }
 } as const
-

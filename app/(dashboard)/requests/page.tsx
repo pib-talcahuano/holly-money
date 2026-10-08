@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/server"
-import { PERMISSIONS, can, canAccessWorkflow } from "@/lib/permissions/rbac"
+import { PERMISSIONS, can, canAccessWorkflow, isOwnMinistryScoped } from "@/lib/permissions/rbac"
 import { intentionsService } from "@/services/intentions/intentions.service"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import { IntentionsClient } from "@/components/intentions/intentions-client"
@@ -11,7 +11,11 @@ export default async function RequestsPage() {
 
   const db = await createSupabaseServerClient()
 
-  if (can(user.permissions, PERMISSIONS.CREATE_REQUEST)) {
+  // Reviewers (bursar, admin) keep the full list even when they also hold MINISTER; they create
+  // requests for their own ministry from /ministries/[id].
+  if (
+    can(user.permissions, PERMISSIONS.CREATE_REQUEST) && isOwnMinistryScoped(user)
+  ) {
     const assignment = await ministriesService.getMinistryForUser(db, user.id)
 
     const intentions = assignment

@@ -16,7 +16,8 @@ import {
   ShieldCheck,
   CreditCard,
   Tags,
-  Banknote
+  Banknote,
+  Wallet
 } from "lucide-react"
 import {
   Sidebar,
@@ -75,13 +76,19 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Remuneraciones",
         icon: Banknote,
         roles: ["ADMIN", "BURSAR"]
+      },
+      {
+        href: "/budgets",
+        label: "Presupuesto",
+        icon: Wallet,
+        roles: ["ADMIN", "BURSAR"]
       }
     ]
   },
   {
     label: "Ministerios",
     links: [
-      { href: "/ministries", label: "Ministerios", icon: Landmark, roles: ["ADMIN", "BURSAR"] },
+      { href: "/ministries", label: "Ministerios", icon: Landmark, roles: ["ADMIN"] },
       {
         href: MY_MINISTRY_HREF,
         label: "Mi ministerio",
@@ -122,6 +129,16 @@ const NAV_GROUPS: NavGroup[] = [
 
 const GROUP_THRESHOLD = 5
 
+export function getVisibleGroups(roles: readonly string[], ministryId?: string | null): NavGroup[] {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    links: group.links
+      .filter((l) => !l.roles || l.roles.some((role) => roles.includes(role)))
+      .filter((l) => l.href !== MY_MINISTRY_HREF || ministryId)
+      .map((l) => (l.href === MY_MINISTRY_HREF ? { ...l, href: `/ministries/${ministryId}` } : l))
+  })).filter((group) => group.links.length > 0)
+}
+
 export function AppSidebar({
   user
 }: {
@@ -129,7 +146,7 @@ export function AppSidebar({
     name: string
     email: string
     initials: string
-    role: string
+    roles: string[]
     ministryId?: string | null
   }
 }) {
@@ -137,17 +154,8 @@ export function AppSidebar({
   const { setOpenMobile } = useSidebar()
 
   const visibleGroups = useMemo(
-    () =>
-      NAV_GROUPS.map((group) => ({
-        ...group,
-        links: group.links
-          .filter((l) => !l.roles || l.roles.includes(user.role))
-          .filter((l) => l.href !== MY_MINISTRY_HREF || user.ministryId)
-          .map((l) =>
-            l.href === MY_MINISTRY_HREF ? { ...l, href: `/ministries/${user.ministryId}` } : l
-          )
-      })).filter((group) => group.links.length > 0),
-    [user.role, user.ministryId]
+    () => getVisibleGroups(user.roles, user.ministryId),
+    [user.roles, user.ministryId]
   )
 
   const useGroups = useMemo(

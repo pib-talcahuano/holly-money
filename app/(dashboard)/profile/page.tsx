@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/supabase/server"
-import { roleLabel } from "@/lib/constants/roles"
+import { rolesLabel } from "@/lib/constants/roles"
 import { initialsFor, avatarColorFor } from "@/lib/utils"
 import { ProfileInfoForm } from "@/components/profile/profile-info-form"
 import { SecuritySection } from "@/components/profile/security-section"
@@ -32,7 +32,7 @@ export default async function ProfilePage() {
           <p className="text-[17px] font-extrabold truncate">{name}</p>
           <p className="text-[13px] text-muted-foreground truncate mb-1.5">{email}</p>
           <span className="inline-block text-[11px] font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
-            {roleLabel(user.role)}
+            {rolesLabel(user.roles)}
           </span>
         </div>
       </div>

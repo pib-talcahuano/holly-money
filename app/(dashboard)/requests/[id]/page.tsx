@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/server"
-import { PERMISSIONS, can, canAccessWorkflow, isMinisterWorkflowUser } from "@/lib/permissions/rbac"
+import { PERMISSIONS, can, canAccessWorkflow, isOwnMinistryScoped } from "@/lib/permissions/rbac"
 import { intentionsService } from "@/services/intentions/intentions.service"
 import { settlementsService } from "@/services/settlements/settlements.service"
 import { ministriesService } from "@/services/ministries/ministries.service"
@@ -24,7 +24,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
   const canReview = can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS)
   const canCreateRequest = can(user.permissions, PERMISSIONS.CREATE_REQUEST)
 
-  if (isMinisterWorkflowUser(user.permissions)) {
+  if (isOwnMinistryScoped(user)) {
     const assignment = await ministriesService.getMinistryForUser(db, user.id)
     if (!assignment || assignment.ministry_id !== intention.ministry_id) {
       redirect("/requests")

@@ -6,11 +6,11 @@ import { getRealUser, IMPERSONATION_COOKIE } from "@/lib/supabase/server"
 import { impersonationService } from "@/services/impersonation/impersonation.service"
 import { usersService } from "@/services/users/users.service"
 import { startImpersonationSchema } from "@/lib/validators/impersonation"
-import { USER_ROLES } from "@/lib/constants/roles"
+import { USER_ROLES, hasRole } from "@/lib/constants/roles"
 
 async function assertRealAdmin() {
   const realUser = await getRealUser()
-  if (!realUser || realUser.role !== USER_ROLES.ADMIN) {
+  if (!realUser || !hasRole(realUser, USER_ROLES.ADMIN)) {
     throw new Error("Solo un administrador puede suplantar usuarios")
   }
   return realUser
@@ -20,7 +20,7 @@ export async function listImpersonationTargets() {
   const realUser = await assertRealAdmin()
   const users = await usersService.list()
   return users.filter(
-    (u) => u.id !== realUser.id && u.role !== USER_ROLES.ADMIN && u.status === "ACTIVE"
+    (u) => u.id !== realUser.id && !hasRole(u, USER_ROLES.ADMIN) && u.status === "ACTIVE"
   )
 }
 
