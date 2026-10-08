@@ -37,3 +37,19 @@ describe("RoleMultiSelect", () => {
     expect(screen.getByLabelText(/Finanzas/)).not.toBeChecked()
   })
 })
+
+describe("RoleMultiSelect cards", () => {
+  it("marks Admin as exclusive and dims the other roles when it is selected", () => {
+    render(<RoleMultiSelect id="roles" value={["ADMIN"]} onChange={jest.fn()} />)
+
+    expect(screen.getByText("Exclusivo")).toBeInTheDocument()
+    expect(screen.getByLabelText(/Tesorero/).closest("label")).toHaveClass("opacity-55")
+    expect(screen.getByLabelText(/Admin/).closest("label")).not.toHaveClass("opacity-55")
+  })
+
+  it("does not offer Delegado", () => {
+    render(<RoleMultiSelect id="roles" value={[]} onChange={jest.fn()} />)
+
+    expect(screen.queryByLabelText(/Delegado/)).not.toBeInTheDocument()
+  })
+})

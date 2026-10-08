@@ -6,7 +6,8 @@ import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { cn, avatarColorFor, initialsFor } from "@/lib/utils"
 import type { UserRole } from "@/types/auth"
-import { RoleMultiSelect } from "@/components/users/role-multi-select"
+import { RoleMultiSelect, LockedDelegateRole } from "@/components/users/role-multi-select"
+import { RoleSummary, RolePermissionsPanel, RoleCallouts } from "@/components/users/role-guidance"
 import {
   USER_ROLES,
   ROLE_ORDER,
@@ -36,6 +37,8 @@ import {
   Send,
   Copy,
   Check,
+  ClockAlert,
+  Lock,
   Link,
   Settings2,
   VenetianMask,
@@ -56,7 +59,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { createUserSchema, updateUserSchema } from "@/lib/validators/user"
 import type { CreateUserInput, UpdateUserInput } from "@/lib/validators/user"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { toast } from "sonner"
 import {
@@ -96,6 +98,14 @@ function isLinkExpired(user: UserRow): boolean {
   return Date.now() - lastAction > LINK_EXPIRY_MS
 }
 
+function isPendingStatus(status: UserStatus): boolean {
+  return status === "PENDING_ACTIVATION" || status === "PENDING_RESET"
+}
+
+function canImpersonate(user: UserRow): boolean {
+  return !hasRole(user, USER_ROLES.ADMIN) && user.status === "ACTIVE"
+}
+
 type BadgeVariant = ComponentProps<typeof Badge>["variant"]
 
 type StatusMeta = {
@@ -111,9 +121,9 @@ function statusMeta(status: UserStatus): StatusMeta {
     case "INACTIVE":
       return { label: "Inactivo", variant: "neutral", rowOpacity: true }
     case "PENDING_ACTIVATION":
-      return { label: "Sin activar", variant: "warn", rowOpacity: false }
+      return { label: "Pendiente de activación", variant: "warn", rowOpacity: false }
     case "PENDING_RESET":
-      return { label: "Reset pendiente", variant: "expense", rowOpacity: false }
+      return { label: "Pendiente de reseteo", variant: "expense", rowOpacity: false }
   }
 }
 
@@ -145,7 +155,7 @@ function UserListItem({
         <ItemDescription className="text-[12.5px]">{user.email}</ItemDescription>
         <div className="sm:hidden mt-0.5 flex flex-wrap gap-1">
           {meta.variant && <Badge variant={meta.variant}>{meta.label}</Badge>}
-          {linkExpired && <Badge variant="expense">Enlace expirado</Badge>}
+          {linkExpired && <Badge variant="expense">Invitación expirada</Badge>}
         </div>
       </ItemContent>
       <ItemActions>
@@ -165,10 +175,10 @@ function UserListItem({
         )}
         {linkExpired && (
           <Badge variant="expense" className="hidden sm:inline-flex">
-            Enlace expirado
+            Invitación expirada
           </Badge>
         )}
-        {!hasRole(user, USER_ROLES.ADMIN) && user.status === "ACTIVE" && (
+        {canImpersonate(user) && (
           <Button
             size="icon-sm"
             variant="outline"
@@ -204,29 +214,6 @@ const PURGE_LABELS: Record<string, string> = {
   ministry_assignments: "Asignaciones a ministerios",
   ministry_delegates: "Delegaciones",
   system_audit_entries: "Registros de auditoría del sistema"
-}
-
-const ROLE_HELP: Partial<Record<UserRole, { title: string; description: string }>> = {
-  ADMIN: {
-    title: "Acceso total al sistema",
-    description:
-      "Puede invitar y eliminar usuarios, ver todos los movimientos, crear y anular registros contables, y acceder a los reportes. Asigna este rol solo a personas de plena confianza."
-  },
-  BURSAR: {
-    title: "Tesorero — Ingreso y aprobación",
-    description:
-      "Puede crear, editar y anular movimientos contables, y aprobar o rechazar solicitudes de fondos de ministros. No puede gestionar usuarios ni configurar el sistema."
-  },
-  FINANCE: {
-    title: "Finanzas — Monitoreo de registros",
-    description:
-      "Puede consultar movimientos y el flujo de solicitudes, pero no puede crear, editar ni aprobar ningún registro. Rol de supervisión financiera."
-  },
-  MINISTER: {
-    title: "Solicitudes de fondos",
-    description:
-      "Puede enviar solicitudes de fondos para su ministerio y rendir los gastos correspondientes. No tiene acceso a movimientos contables ni configuración."
-  }
 }
 
 export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
@@ -510,7 +497,10 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
               </Field>
 
               <Field data-invalid={!!createForm.formState.errors.roles || undefined}>
-                <FieldLabel htmlFor="new-role">Nivel de acceso</FieldLabel>
+                <div className="flex items-baseline justify-between gap-2.5">
+                  <FieldLabel htmlFor="new-role">Roles</FieldLabel>
+                  <RoleSummary roles={selectedRoles} />
+                </div>
                 <RoleMultiSelect
                   id="new-role"
                   value={selectedRoles}
@@ -518,24 +508,31 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                     createForm.setValue("roles", roles, { shouldValidate: true })
                   }
                 />
-                <FieldError errors={[createForm.formState.errors.roles]} />
+                {selectedRoles.includes(USER_ROLES.ADMIN) && (
+                  <p className="text-[11.5px] text-muted-foreground">
+                    Admin no se combina con otros roles: al elegir otro, se quitará Admin.
+                  </p>
+                )}
+                {selectedRoles.length === 0 ? (
+                  <p className="text-xs font-semibold text-destructive">
+                    Selecciona al menos un rol
+                  </p>
+                ) : (
+                  <FieldError errors={[createForm.formState.errors.roles]} />
+                )}
               </Field>
 
-              {selectedRoles.map((role) => {
-                const help = ROLE_HELP[role]
-                return help ? (
-                  <Alert key={role} variant="info">
-                    <AlertTitle>{help.title}</AlertTitle>
-                    <AlertDescription>{help.description}</AlertDescription>
-                  </Alert>
-                ) : null
-              })}
+              <RolePermissionsPanel roles={selectedRoles} />
+              <RoleCallouts roles={selectedRoles} />
 
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
                 <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={createForm.formState.isSubmitting}>
+                <Button
+                  type="submit"
+                  disabled={createForm.formState.isSubmitting || selectedRoles.length === 0}
+                >
                   <Send className="size-3.5" />
                   {createForm.formState.isSubmitting
                     ? "Enviando invitación..."
@@ -690,8 +687,8 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                 </DialogDescription>
               </DialogHeader>
 
-              <form onSubmit={editForm.handleSubmit(handleUpdate)} className="space-y-4 pt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <form onSubmit={editForm.handleSubmit(handleUpdate)} className="space-y-3 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Field data-invalid={!!editForm.formState.errors.full_name || undefined}>
                     <FieldLabel htmlFor="edit-full_name">Nombre</FieldLabel>
                     <Input
@@ -702,13 +699,26 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                     <FieldError errors={[editForm.formState.errors.full_name]} />
                   </Field>
 
-                  <Field data-invalid={!!editForm.formState.errors.roles || undefined}>
+                  <Field>
+                    <FieldLabel htmlFor="edit-email">Correo</FieldLabel>
+                    <div
+                      id="edit-email"
+                      className="flex h-9 items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-transparent bg-muted px-2.5 text-sm text-muted-foreground"
+                    >
+                      {editingUser?.email}
+                    </div>
+                  </Field>
+                </div>
+
+                <Field data-invalid={!!editForm.formState.errors.roles || undefined}>
+                  <div className="flex items-baseline justify-between gap-2.5">
                     <FieldLabel htmlFor="edit-role">Roles</FieldLabel>
-                    {editingUser?.roles.includes(USER_ROLES.DELEGATE) ? (
-                      <Badge variant={ROLE_BADGE_VARIANT[USER_ROLES.DELEGATE]}>
-                        {ROLE_LABEL[USER_ROLES.DELEGATE]}
-                      </Badge>
-                    ) : (
+                    <RoleSummary roles={editRoles} />
+                  </div>
+                  {editingUser && hasRole(editingUser, USER_ROLES.DELEGATE) ? (
+                    <LockedDelegateRole />
+                  ) : (
+                    <>
                       <RoleMultiSelect
                         id="edit-role"
                         value={editRoles}
@@ -716,50 +726,93 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                           editForm.setValue("roles", roles, { shouldValidate: true })
                         }
                       />
-                    )}
-                    <FieldError errors={[editForm.formState.errors.roles]} />
-                  </Field>
-                </div>
-
-                <Field>
-                  <FieldLabel htmlFor="edit-email">Correo</FieldLabel>
-                  <div
-                    id="edit-email"
-                    className="flex h-9 items-center rounded-md border border-transparent bg-muted px-2.5 text-sm text-muted-foreground"
-                  >
-                    {editingUser?.email}
-                  </div>
+                      {editRoles.includes(USER_ROLES.ADMIN) && (
+                        <p className="text-[11.5px] text-muted-foreground">
+                          Admin no se combina con otros roles: al elegir otro, se quitará Admin.
+                        </p>
+                      )}
+                      {editRoles.length === 0 ? (
+                        <p className="text-xs font-semibold text-destructive">
+                          Selecciona al menos un rol
+                        </p>
+                      ) : (
+                        <FieldError errors={[editForm.formState.errors.roles]} />
+                      )}
+                    </>
+                  )}
                 </Field>
+
+                <RolePermissionsPanel roles={editRoles} />
+                <RoleCallouts roles={editRoles} />
 
                 <Field>
                   <FieldLabel htmlFor="edit-status">Estado de cuenta</FieldLabel>
-                  <NativeSelect
-                    id="edit-status"
-                    className="w-full"
-                    {...editForm.register("status")}
-                  >
-                    <option value="ACTIVE">Activo</option>
-                    <option value="INACTIVE">Inactivo</option>
-                  </NativeSelect>
+                  {editingUser && isPendingStatus(editingUser.status) ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={statusMeta(editingUser.status).variant ?? "neutral"}>
+                        <Lock className="size-3" />
+                        {statusMeta(editingUser.status).label}
+                      </Badge>
+                      <span className="text-[11.5px] text-muted-foreground">
+                        {editingUser.status === "PENDING_RESET"
+                          ? "Cambia a Activo cuando defina su nueva contraseña."
+                          : "Cambia a Activo cuando el usuario active su cuenta."}
+                      </span>
+                    </div>
+                  ) : (
+                    <NativeSelect
+                      id="edit-status"
+                      className="w-full"
+                      {...editForm.register("status")}
+                    >
+                      <option value="ACTIVE">Activo</option>
+                      <option value="INACTIVE">Inactivo</option>
+                    </NativeSelect>
+                  )}
                 </Field>
 
+                {editingUser && isLinkExpired(editingUser) && (
+                  <div className="flex gap-2.5 rounded-[10px] bg-warn-surface px-3.5 py-3">
+                    <ClockAlert className="mt-0.5 size-4 shrink-0 text-on-warn" />
+                    <div>
+                      <p className="mb-0.5 text-[12.5px] font-bold text-on-warn">
+                        Invitación expirada
+                      </p>
+                      <p className="text-xs leading-relaxed text-foreground">
+                        {editingUser.status === "PENDING_ACTIVATION"
+                          ? "El enlace ya venció; los enlaces duran 2 días. Reenvía la invitación para generar uno nuevo."
+                          : "El enlace de reseteo ya venció; los enlaces duran 2 días. Resetea la contraseña de nuevo para generar uno nuevo."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {editingUser && (
-                  <div className="border-t border-border pt-4 space-y-2.5">
-                    <h3 className="text-[10.5px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                  <div className="border-t border-border pt-3.5 space-y-2.5">
+                    <h3 className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
                       Acciones de cuenta
                     </h3>
                     <div className="flex flex-wrap gap-2">
-                      {!hasRole(editingUser, USER_ROLES.ADMIN) &&
-                        editingUser.status === "ACTIVE" && (
+                      {editingUser.status === "PENDING_ACTIVATION" &&
+                        isLinkExpired(editingUser) && (
                           <Button
                             type="button"
-                            variant="outline"
-                            onClick={() => handleImpersonate(editingUser.id)}
+                            onClick={() => void handleResendInvite(editingUser.id)}
                           >
-                            <VenetianMask className="size-3.5" />
-                            Impersonar
+                            <Send className="size-3.5" />
+                            Reenviar invitación
                           </Button>
                         )}
+                      {canImpersonate(editingUser) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleImpersonate(editingUser.id)}
+                        >
+                          <VenetianMask className="size-3.5" />
+                          Impersonar
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
@@ -768,16 +821,17 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                         <RotateCcw className="size-3.5" />
                         Resetear contraseña
                       </Button>
-                      {editingUser.status === "PENDING_ACTIVATION" && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => void handleResendInvite(editingUser.id)}
-                        >
-                          <Send className="size-3.5" />
-                          Reenviar invitación
-                        </Button>
-                      )}
+                      {editingUser.status === "PENDING_ACTIVATION" &&
+                        !isLinkExpired(editingUser) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void handleResendInvite(editingUser.id)}
+                          >
+                            <Send className="size-3.5" />
+                            Reenviar invitación
+                          </Button>
+                        )}
                       <Button
                         type="button"
                         variant="outline"
@@ -789,6 +843,13 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                         Eliminar usuario
                       </Button>
                     </div>
+                    {!canImpersonate(editingUser) && (
+                      <p className="text-[11.5px] text-muted-foreground">
+                        {hasRole(editingUser, USER_ROLES.ADMIN)
+                          ? "Impersonar no está disponible para administradores."
+                          : "Impersonar solo está disponible para cuentas activas."}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -796,7 +857,10 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                   <Button variant="outline" type="button" onClick={() => setEditingUser(null)}>
                     Cancelar
                   </Button>
-                  <Button type="submit" disabled={editForm.formState.isSubmitting}>
+                  <Button
+                    type="submit"
+                    disabled={editForm.formState.isSubmitting || editRoles.length === 0}
+                  >
                     {editForm.formState.isSubmitting ? "Guardando..." : "Guardar cambios"}
                   </Button>
                 </div>
