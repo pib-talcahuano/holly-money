@@ -71,7 +71,13 @@ function Message({ item }: { item: MessageItem }) {
         <Bubble
           variant={reviewer ? "default" : "muted"}
           align={reviewer ? "end" : "start"}
-          className={cn("max-w-full", !reviewer && "*:data-[slot=bubble-content]:border-border")}
+          className={cn(
+            "max-w-full",
+            reviewer
+              ? // The dark-mode primary under white text is ~3.3:1; primary-dark darkened 8% clears AA (4.5:1).
+                "dark:*:data-[slot=bubble-content]:bg-[color-mix(in_oklch,var(--primary-dark),black_8%)]"
+              : "*:data-[slot=bubble-content]:border-border"
+          )}
         >
           <BubbleContent className={cn("px-3.5 py-[9px] text-[13.5px] leading-normal", radius)}>
             <RichText

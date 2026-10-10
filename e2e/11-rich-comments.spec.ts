@@ -183,10 +183,9 @@ test("request comments use a rich text editor and render formatted", async () =>
 
   // Rendered comments (bold, list, link) are legible in dark mode
   const rendered = bubbles.filter({ hasText: "Revisar monto" })
-  // Reviewer bubbles are white on the primary color (per the design): the dark-mode
-  // primary gives ~3.3:1, so assert the 3:1 floor here rather than 4.5.
-  await expectContrast(rendered.locator("strong"), 3)
-  await expectContrast(rendered.locator("li").first(), 3)
+  // Reviewer bubbles are white on a darkened primary in dark mode, which clears AA.
+  await expectContrast(rendered.locator("strong"), 4.5)
+  await expectContrast(rendered.locator("li").first(), 4.5)
   await shot(bursar, "11-rich-comments", "comment-rendered-dark", { fullPage: false })
 
   // The comment posted in dark mode renders as a link opening in a new tab
