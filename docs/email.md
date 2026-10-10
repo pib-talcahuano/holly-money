@@ -27,16 +27,16 @@ verified in your Resend account.
 
 ### Auth emails
 
-| Trigger                  | Recipients | Template                              |
-| ------------------------ | ---------- | ------------------------------------- |
-| User invited by ADMIN    | New user   | Account activation link (2 d expiry)  |
-| Password reset requested | User       | Reset link (2 d expiry)               |
-| Forgot password flow     | User       | Recovery link (2 d expiry)            |
+| Trigger                  | Recipients | Template                             |
+| ------------------------ | ---------- | ------------------------------------ |
+| User invited by ADMIN    | New user   | Account activation link (2 d expiry) |
+| Password reset requested | User       | Reset link (2 d expiry)              |
+| Forgot password flow     | User       | Recovery link (2 d expiry)           |
 
 ### Movement notifications
 
-| Trigger                                          | Recipients          | Content                                        |
-| ------------------------------------------------ | ------------------- | ----------------------------------------------- |
+| Trigger                                                             | Recipients           | Content                                        |
+| ------------------------------------------------------------------- | -------------------- | ---------------------------------------------- |
 | Movement created/edited, "Notificar por correo a tesorería" checked | `NOTIFICATION_EMAIL` | Movement detail table (amount, category, etc.) |
 
 ### Fund request workflow
@@ -47,6 +47,16 @@ verified in your Resend account.
 | Request approved or rejected    | Ministry contact                          | Status (approved/rejected) with detail link           |
 | Transfer registered             | Ministry contact                          | Transfer confirmation with 30-day settlement reminder |
 | Settlement approved or rejected | Ministry contact                          | Status with detail link                               |
+
+### Request comments
+
+| Trigger                                           | Recipients                                                                                                            | Content                                       |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Scheduled job (`POST /api/comment-notifications`) | Counterpart: requester if someone else commented; reviewer (treasury email until reviewed) if the requester commented | New comments batched per request, detail link |
+
+Comments are tracked by `request_comments.notified_at`; the job claims unnotified rows, sends one
+email per recipient + request, and releases the claim if sending fails. Authenticated with the
+same `x-cron-secret` header as the reminders endpoint, so it needs its own scheduler entry.
 
 ### Reminders
 
