@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     await sendForgotPasswordEmail({
       to: email,
-      action_link: wrapAuthLink(linkData.properties.action_link)
+      action_link: wrapAuthLink(linkData.properties.action_link, linkData.user.email ?? email)
     })
 
     return NextResponse.json({ ok: true })

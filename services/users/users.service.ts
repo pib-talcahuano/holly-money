@@ -114,7 +114,7 @@ export const usersService = {
 
     if (insertError) throw insertError
 
-    const inviteLink = wrapAuthLink(linkData.properties.action_link)
+    const inviteLink = wrapAuthLink(linkData.properties.action_link, linkData.user.email ?? email)
 
     // Send invite email via Resend
     await sendInviteEmail({
@@ -175,7 +175,7 @@ export const usersService = {
     await sendResetEmail({
       to: email,
       full_name: user.full_name,
-      action_link: wrapAuthLink(linkData.properties.action_link)
+      action_link: wrapAuthLink(linkData.properties.action_link, linkData.user.email ?? email)
     })
 
     await auditService.logSystem({
@@ -282,7 +282,7 @@ export const usersService = {
 
     await admin.from("users").update({ updated_at: new Date().toISOString() }).eq("id", userId)
 
-    const inviteLink = wrapAuthLink(linkData.properties.action_link)
+    const inviteLink = wrapAuthLink(linkData.properties.action_link, linkData.user.email ?? email)
 
     await sendInviteEmail({
       to: email,
