@@ -57,6 +57,6 @@ export async function sendForgotPassword(email: string) {
 
   await sendForgotPasswordEmail({
     to: normalizedEmail,
-    action_link: wrapAuthLink(linkData.properties.action_link)
+    action_link: wrapAuthLink(linkData.properties.action_link, normalizedEmail)
   })
 }

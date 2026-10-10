@@ -4,10 +4,12 @@
 import { GET } from "../route"
 import { NextRequest } from "next/server"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { mintOtpForLink } from "@/services/auth/reusable-link.service"
 
 const ORIGIN = "https://pibtalcahuano.com"
 
 jest.mock("@/lib/supabase/server")
+jest.mock("@/services/auth/reusable-link.service")
 
 const mockedCreateClient = jest.mocked(createSupabaseServerClient)
 
@@ -107,5 +109,26 @@ describe("GET /api/auth/verify", () => {
     await GET(req)
 
     expect(mockVerifyOtp).toHaveBeenCalledWith({ token_hash: token, type: "invite" })
+  })
+
+  describe("reusable signed link", () => {
+    it("mints a fresh OTP on every visit and redirects to /activate", async () => {
+      jest.mocked(mintOtpForLink).mockResolvedValue({ token_hash: "fresh", type: "magiclink" })
+
+      for (let i = 0; i < 2; i++) {
+        const res = await GET(makeRequest({ s: "signed" }))
+        expect(new URL(res.headers.get("location")!).pathname).toBe("/activate")
+      }
+      expect(mockVerifyOtp).toHaveBeenCalledTimes(2)
+      expect(mockVerifyOtp).toHaveBeenCalledWith({ token_hash: "fresh", type: "magiclink" })
+    })
+
+    it("redirects with link_expired when the signed token is invalid or spent", async () => {
+      jest.mocked(mintOtpForLink).mockResolvedValue(null)
+      const res = await GET(makeRequest({ s: "bad" }))
+      const location = new URL(res.headers.get("location")!)
+      expect(location.searchParams.get("error")).toBe("link_expired")
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+    })
   })
 })
