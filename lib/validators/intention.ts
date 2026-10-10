@@ -39,7 +39,11 @@ export const registerTransferSchema = z.object({
 })
 
 export const addCommentSchema = z.object({
-  message: z.string().min(1, "El comentario no puede estar vacío")
+  message: z
+    .string()
+    .trim()
+    .min(1, "El comentario no puede estar vacío")
+    .max(5000, "El comentario no puede superar los 5000 caracteres")
 })
 
 export const intentionFiltersSchema = z.object({

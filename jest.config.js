@@ -21,4 +21,47 @@ const customJestConfig = {
   }
 }
 
-module.exports = createJestConfig(customJestConfig)
+// react-markdown and its unified/remark/micromark dependency tree ship ESM only.
+// next/jest forces "/node_modules/" into transformIgnorePatterns, so extend it
+// after the config resolves.
+const ESM_PACKAGES = [
+  "react-markdown",
+  "remark-[^/]+",
+  "unified",
+  "bail",
+  "devlop",
+  "trough",
+  "vfile[^/]*",
+  "unist-[^/]+",
+  "mdast-[^/]+",
+  "hast-[^/]+",
+  "micromark[^/]*",
+  "decode-named-character-reference",
+  "character-entities[^/]*",
+  "property-information",
+  "space-separated-tokens",
+  "comma-separated-tokens",
+  "html-url-attributes",
+  "is-plain-obj",
+  "trim-lines",
+  "ccount",
+  "zwitch",
+  "estree-util-[^/]+",
+  "markdown-table",
+  "longest-streak",
+  "stringify-entities",
+  "parse-entities",
+  "escape-string-regexp"
+].join("|")
+
+module.exports = async () => {
+  const config = await createJestConfig(customJestConfig)()
+  return {
+    ...config,
+    // Add the ESM packages to every lookahead list next/jest generated (they all
+    // start with the @react-pdf entries), keeping its existing exceptions intact.
+    transformIgnorePatterns: config.transformIgnorePatterns.map((pattern) =>
+      pattern.replaceAll("(@react-pdf", `(${ESM_PACKAGES}|@react-pdf`)
+    )
+  }
+}
