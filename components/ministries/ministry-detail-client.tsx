@@ -957,30 +957,32 @@ export function MinistryDetailClient({
           </Empty>
         ) : (
           <>
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
-                <tr>
-                  <th className="px-5 py-2.5 text-left font-medium">Solicitud</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Transferido</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Rendido</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Remanente</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {leftover.map((row) => (
-                  <tr key={row.intention_id}>
-                    <td className="px-5 py-3">{row.purpose}</td>
-                    <td className="px-5 py-3 text-right">{formatCLP(row.transferred_amount)}</td>
-                    <td className="px-5 py-3 text-right">{formatCLP(row.settled_amount)}</td>
-                    <td
-                      className={`px-5 py-3 text-right font-medium ${row.leftover > 0 ? "text-warn" : row.leftover < 0 ? "text-destructive" : ""}`}
-                    >
-                      {formatCLP(row.leftover)}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[480px] text-sm">
+                <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
+                  <tr>
+                    <th className="px-5 py-2.5 text-left font-medium">Solicitud</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Transferido</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Rendido</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Remanente</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {leftover.map((row) => (
+                    <tr key={row.intention_id}>
+                      <td className="px-5 py-3">{row.purpose}</td>
+                      <td className="px-5 py-3 text-right">{formatCLP(row.transferred_amount)}</td>
+                      <td className="px-5 py-3 text-right">{formatCLP(row.settled_amount)}</td>
+                      <td
+                        className={`px-5 py-3 text-right font-medium ${row.leftover > 0 ? "text-warn" : row.leftover < 0 ? "text-destructive" : ""}`}
+                      >
+                        {formatCLP(row.leftover)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="flex justify-between items-center px-5 py-3.5 border-t border-border bg-muted/40 text-sm">
               <span className="font-extrabold">Total</span>
               <span className="font-extrabold">

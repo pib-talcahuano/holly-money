@@ -521,8 +521,8 @@ export function IntentionDetailClient({
       />
 
       {/* Header */}
-      <Card className="px-6 py-6 rounded-2xl space-y-0">
-        <div className="flex items-start justify-between mb-[18px]">
+      <Card className="px-4 py-5 sm:px-6 sm:py-6 rounded-2xl space-y-0">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 mb-[18px]">
           <div>
             <div
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-bold mb-2.5 ${STATUS_PILL_CLASS[intention.status]}`}
@@ -530,11 +530,11 @@ export function IntentionDetailClient({
               <StatusIcon className="size-3.5" />
               {status.label}
             </div>
-            <p className="text-[30px] font-extrabold tracking-tight">
+            <p className="text-[26px] sm:text-[30px] font-extrabold tracking-tight">
               {formatCLP(intention.amount)}
             </p>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             {intention.ministries?.name && (
               <div className="inline-flex items-center gap-2 mb-1.5">
                 <div
@@ -550,7 +550,7 @@ export function IntentionDetailClient({
           </div>
         </div>
 
-        <div className="border-t border-border pt-[18px] mb-[18px] grid grid-cols-2 gap-4">
+        <div className="border-t border-border pt-[18px] mb-[18px] grid grid-cols-1 min-[420px]:grid-cols-2 gap-4">
           <div>
             <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint mb-1">
               Propósito
@@ -617,7 +617,7 @@ export function IntentionDetailClient({
 
         {/* Actions for tesorería */}
         {canReview && intention.status === "PENDING" && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Dialog
               open={reviewOpen}
               onOpenChange={(o) => {
@@ -681,7 +681,7 @@ export function IntentionDetailClient({
 
         {/* Actions for the minister who owns this request */}
         {isRequestOwner && CANCELLABLE_INTENTION_STATUSES.has(intention.status) && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {intention.status === "DRAFT" && (
               <Button onClick={handleSubmitRequest}>
                 <Send className="size-4" />
@@ -698,7 +698,7 @@ export function IntentionDetailClient({
 
       {/* Transfer section */}
       {intention.status === "APPROVED" && intention.funding_method === "TRANSFER" && (
-        <Card className="px-6 py-6 rounded-2xl space-y-3.5">
+        <Card className="px-4 py-5 sm:px-6 sm:py-6 rounded-2xl space-y-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-[15px] font-bold flex items-center gap-2">
               <Banknote className="size-4 text-primary" />
@@ -794,7 +794,7 @@ export function IntentionDetailClient({
             )}
           </div>
           {currentTransfer ? (
-            <div className="grid grid-cols-2 gap-3 bg-income-surface rounded-[10px] p-4">
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3 bg-income-surface rounded-[10px] p-4">
               <div>
                 <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint mb-1">
                   Monto
@@ -830,7 +830,7 @@ export function IntentionDetailClient({
       {/* Settlement section */}
       {intention.status === "APPROVED" &&
         (intention.funding_method === "REIMBURSEMENT" || currentTransfer) && (
-          <Card className="px-6 py-6 rounded-2xl space-y-3.5">
+          <Card className="px-4 py-5 sm:px-6 sm:py-6 rounded-2xl space-y-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-[15px] font-bold flex items-center gap-2">
                 <FileText className="size-4 text-primary" />
@@ -972,7 +972,7 @@ export function IntentionDetailClient({
                       key={s.id}
                       className="rounded-xl border border-border p-4 text-sm space-y-2"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         <span className="font-medium">{formatCLP(s.amount)}</span>
                         <span className={`text-xs font-medium ${statusConfig.color}`}>
                           {statusConfig.label}
@@ -1172,7 +1172,7 @@ export function IntentionDetailClient({
         settlements.length > 0 &&
         settlements.every((s) => TERMINAL_SETTLEMENT_STATUSES.has(s.status)) &&
         settlements.some((s) => s.status === "APPROVED") && (
-          <Card className="px-6 py-6 rounded-2xl space-y-3.5">
+          <Card className="px-4 py-5 sm:px-6 sm:py-6 rounded-2xl space-y-3.5">
             <h2 className="text-[15px] font-bold flex items-center gap-2">
               <Archive className="size-4 text-primary" />
               Cierre de solicitud
@@ -1242,7 +1242,7 @@ export function IntentionDetailClient({
         )}
 
       {/* Comments */}
-      <Card className="px-6 py-6 rounded-2xl space-y-4">
+      <Card className="px-4 py-5 sm:px-6 sm:py-6 rounded-2xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[15px] font-bold flex items-center gap-2">
             <MessageCircle className="size-4 text-primary" />
