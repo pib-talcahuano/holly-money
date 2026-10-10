@@ -107,41 +107,49 @@ export function IntentionProgress(props: IntentionProgressProps) {
   const steps = buildSteps(props)
 
   return (
-    <Card className="px-6 py-[22px] rounded-2xl">
-      <div className="flex items-start">
-        {steps.map((step, index) => {
-          const isLast = index === steps.length - 1
-          const lineFilled = step.state === "complete"
+    <Card className="px-4 sm:px-6 py-[22px] rounded-2xl">
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <div className="flex items-start min-w-max sm:min-w-0">
+          {steps.map((step, index) => {
+            const isLast = index === steps.length - 1
+            const lineFilled = step.state === "complete"
 
-          return (
-            <div key={step.label} className={cn("flex items-start", !isLast && "flex-1")}>
-              <div className="flex flex-col items-center gap-1.5 flex-none w-[74px]" title={step.title}>
+            return (
+              <div key={step.label} className={cn("flex items-start", !isLast && "flex-1")}>
                 <div
-                  className={cn(
-                    "flex size-[26px] items-center justify-center rounded-full",
-                    CIRCLE_STATE_CLASS[step.state]
-                  )}
+                  className="flex flex-col items-center gap-1.5 flex-none w-[68px] sm:w-[74px]"
+                  title={step.title}
                 >
-                  {step.state === "complete" && <Check className="size-3.5" />}
-                  {step.state === "rejected" && <X className="size-3.5" />}
+                  <div
+                    className={cn(
+                      "flex size-[26px] items-center justify-center rounded-full",
+                      CIRCLE_STATE_CLASS[step.state]
+                    )}
+                  >
+                    {step.state === "complete" && <Check className="size-3.5" />}
+                    {step.state === "rejected" && <X className="size-3.5" />}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-[10.5px] text-center leading-tight",
+                      STATE_LABEL_CLASS[step.state]
+                    )}
+                  >
+                    {step.label}
+                  </span>
                 </div>
-                <span
-                  className={cn(
-                    "text-[10.5px] text-center leading-tight",
-                    STATE_LABEL_CLASS[step.state]
-                  )}
-                >
-                  {step.label}
-                </span>
+                {!isLast && (
+                  <div
+                    className={cn(
+                      "h-0.5 flex-1 min-w-3 mt-3",
+                      lineFilled ? "bg-income" : "bg-border"
+                    )}
+                  />
+                )}
               </div>
-              {!isLast && (
-                <div
-                  className={cn("h-0.5 flex-1 mt-3", lineFilled ? "bg-income" : "bg-border")}
-                />
-              )}
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </Card>
   )

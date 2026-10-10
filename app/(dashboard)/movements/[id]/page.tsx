@@ -116,8 +116,8 @@ export default async function MovementDetailPage({ params }: Props) {
       </div>
 
       {/* Hero */}
-      <div className="rounded-2xl bg-card border border-border p-6 mb-4">
-        <div className="flex items-start justify-between mb-[18px]">
+      <div className="rounded-2xl bg-card border border-border p-4 sm:p-6 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-[18px]">
           <div>
             <div
               className={cn(
@@ -132,7 +132,7 @@ export default async function MovementDetailPage({ params }: Props) {
               )}
               {isIncome ? "Ingreso" : "Egreso"}
             </div>
-            <div className="text-[30px] font-extrabold tracking-tight mt-2">
+            <div className="text-[26px] sm:text-[30px] font-extrabold tracking-tight mt-2">
               {formatCLP(Number(row.amount))}
             </div>
             <div className="text-[12.5px] text-muted-foreground mt-0.5">
@@ -174,7 +174,7 @@ export default async function MovementDetailPage({ params }: Props) {
           </div>
         )}
 
-        <div className="border-t border-border pt-[18px] grid grid-cols-3 gap-4">
+        <div className="border-t border-border pt-[18px] grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 gap-4">
           <div>
             <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint mb-1">
               Fecha del movimiento

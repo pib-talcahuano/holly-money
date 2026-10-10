@@ -135,7 +135,11 @@ export function MinistryBudgetAdmin({ ministries, currentPeriod, summary }: Prop
             <form onSubmit={periodForm.handleSubmit(handlePeriodSubmit)} className="space-y-4 pt-2">
               <Field>
                 <FieldLabel htmlFor="label">Nombre *</FieldLabel>
-                <Input id="label" placeholder="Presupuesto 2026" {...periodForm.register("label")} />
+                <Input
+                  id="label"
+                  placeholder="Presupuesto 2026"
+                  {...periodForm.register("label")}
+                />
                 <FieldError errors={[periodForm.formState.errors.label]} />
               </Field>
               <Field>
@@ -176,69 +180,73 @@ export function MinistryBudgetAdmin({ ministries, currentPeriod, summary }: Prop
               {saving ? "Guardando..." : "Guardar cambios"}
             </Button>
           </div>
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
-              <tr>
-                <th className="px-5 py-2.5 text-left font-medium">Ministerio</th>
-                <th className="px-5 py-2.5 text-right font-medium">Asignado</th>
-                <th className="px-5 py-2.5 text-right font-medium">Usado inicial</th>
-                <th className="px-5 py-2.5 text-right font-medium">Usado (auto)</th>
-                <th className="px-5 py-2.5 text-right font-medium">Remanente</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {ministries
-                .filter((m) => m.is_active)
-                .map((m) => {
-                  const existing = summary.find((s) => s.ministry_id === m.id)
-                  return (
-                    <tr key={m.id}>
-                      <td className="px-5 py-3 font-medium">{m.name}</td>
-                      <td className="px-5 py-3 text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="1"
-                          className="w-32 ml-auto text-right"
-                          value={rows[m.id]?.assigned ?? ""}
-                          onChange={(e) =>
-                            setRows((prev) => ({
-                              ...prev,
-                              [m.id]: { ...prev[m.id], assigned: e.target.value }
-                            }))
-                          }
-                        />
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="1"
-                          className="w-32 ml-auto text-right"
-                          value={rows[m.id]?.initial ?? ""}
-                          onChange={(e) =>
-                            setRows((prev) => ({
-                              ...prev,
-                              [m.id]: { ...prev[m.id], initial: e.target.value }
-                            }))
-                          }
-                        />
-                      </td>
-                      <td className="px-5 py-3 text-right text-muted-foreground">
-                        {existing ? formatCLP(existing.used_amount - existing.initial_used_amount) : "—"}
-                      </td>
-                      <td
-                        className={`px-5 py-3 text-right font-medium ${
-                          existing && existing.remaining < 0 ? "text-destructive" : ""
-                        }`}
-                      >
-                        {existing ? formatCLP(existing.remaining) : "—"}
-                      </td>
-                    </tr>
-                  )
-                })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
+              <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
+                <tr>
+                  <th className="px-5 py-2.5 text-left font-medium">Ministerio</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Asignado</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Usado inicial</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Usado (auto)</th>
+                  <th className="px-5 py-2.5 text-right font-medium">Remanente</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {ministries
+                  .filter((m) => m.is_active)
+                  .map((m) => {
+                    const existing = summary.find((s) => s.ministry_id === m.id)
+                    return (
+                      <tr key={m.id}>
+                        <td className="px-5 py-3 font-medium">{m.name}</td>
+                        <td className="px-5 py-3 text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            className="w-32 ml-auto text-right"
+                            value={rows[m.id]?.assigned ?? ""}
+                            onChange={(e) =>
+                              setRows((prev) => ({
+                                ...prev,
+                                [m.id]: { ...prev[m.id], assigned: e.target.value }
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            className="w-32 ml-auto text-right"
+                            value={rows[m.id]?.initial ?? ""}
+                            onChange={(e) =>
+                              setRows((prev) => ({
+                                ...prev,
+                                [m.id]: { ...prev[m.id], initial: e.target.value }
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="px-5 py-3 text-right text-muted-foreground">
+                          {existing
+                            ? formatCLP(existing.used_amount - existing.initial_used_amount)
+                            : "—"}
+                        </td>
+                        <td
+                          className={`px-5 py-3 text-right font-medium ${
+                            existing && existing.remaining < 0 ? "text-destructive" : ""
+                          }`}
+                        >
+                          {existing ? formatCLP(existing.remaining) : "—"}
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
