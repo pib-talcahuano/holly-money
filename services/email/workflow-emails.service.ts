@@ -1,5 +1,9 @@
 import { Resend } from "resend"
 
+import {
+  CommentNotificationEmail,
+  type CommentNotificationItem
+} from "@/emails/comment-notification-email"
 import { IntentionNotificationEmail } from "@/emails/intention-notification-email"
 import { IntentionReviewEmail } from "@/emails/intention-review-email"
 import { ReminderEmail } from "@/emails/reminder-email"
@@ -141,6 +145,31 @@ export async function sendSettlementReturnedNotification(
     }),
     headers: TRANSACTIONAL_HEADERS
   })
+}
+
+export async function sendCommentNotification(
+  to: string,
+  recipientName: string,
+  intention: { id: string; amount: number; purpose: string },
+  comments: CommentNotificationItem[]
+): Promise<void> {
+  const settings = await settingsService.getAll(createSupabaseAdminClient())
+  const from = settings.notifications_from_email || DEFAULT_FROM_EMAIL
+  const resend = new Resend(process.env.RESEND_API_KEY)
+
+  const { error } = await resend.emails.send({
+    from,
+    to: resendRecipient(to),
+    subject: `${comments.length === 1 ? "Nuevo comentario" : "Nuevos comentarios"} en una solicitud — ${ORG_SHORT}`,
+    react: CommentNotificationEmail({
+      recipientName,
+      intention,
+      comments,
+      detailUrl: `${BASE_URL}/requests/${intention.id}`
+    }),
+    headers: TRANSACTIONAL_HEADERS
+  })
+  if (error) throw new Error(error.message)
 }
 
 export async function sendReminderEmail(summary: {

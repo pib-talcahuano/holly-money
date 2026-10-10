@@ -1091,6 +1091,7 @@ export type Database = {
           entity_type: Database["public"]["Enums"]["comment_entity"]
           id: string
           message: string
+          notified_at: string | null
           user_id: string
         }
         ComputedFields: never
@@ -1100,6 +1101,7 @@ export type Database = {
           entity_type: Database["public"]["Enums"]["comment_entity"]
           id?: string
           message: string
+          notified_at?: string | null
           user_id: string
         }
         Update: {
@@ -1108,6 +1110,7 @@ export type Database = {
           entity_type?: Database["public"]["Enums"]["comment_entity"]
           id?: string
           message?: string
+          notified_at?: string | null
           user_id?: string
         }
         Relationships: [

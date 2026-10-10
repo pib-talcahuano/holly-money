@@ -281,7 +281,9 @@ export const settlementsService = {
         entity_type: "SETTLEMENT",
         entity_id: id,
         user_id: reviewerId,
-        message: input.message
+        message: input.message,
+        // already emailed via sendSettlementReturnedNotification
+        notified_at: now
       })
 
       const { data, error } = await db

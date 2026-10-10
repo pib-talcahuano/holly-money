@@ -35,7 +35,9 @@ export async function proxy(request: NextRequest) {
     "/activate",
     "/forgot-password",
     "/api/auth/verify",
-    "/api/auth/forgot-password"
+    "/api/auth/forgot-password",
+    // Cron endpoint: no session, authenticated by the x-cron-secret header
+    "/api/comment-notifications"
   ]
   const isPublicPath = PUBLIC_PATHS.some((p) =>
     p === "/" ? pathname === "/" : pathname.startsWith(p)
