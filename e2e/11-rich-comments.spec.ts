@@ -103,7 +103,9 @@ test("request comments use a rich text editor and render formatted", async () =>
   await expect(send).toBeEnabled()
   await send.click()
 
-  const comment = bursar.locator("div.border-l-2").filter({ hasText: "Revisar monto" })
+  const thread = bursar.getByRole("list", { name: "Conversación" })
+  const bubbles = thread.locator('[data-slot="bubble-content"]')
+  const comment = bubbles.filter({ hasText: "Revisar monto" })
   await expect(comment.locator("strong")).toHaveText("Revisar monto", { timeout: 10_000 })
   await expect(comment.locator("li")).toHaveCount(2)
   await expect(comment).toContainText("<script>alert(1)</script>")
@@ -112,6 +114,17 @@ test("request comments use a rich text editor and render formatted", async () =>
   await expect(editor).toHaveText("")
   await expect(send).toBeDisabled()
   await expect(bursar.getByText("El comentario no puede estar vacío")).toHaveCount(0)
+
+  // Bubble design: dated divider, author header (name + role chip), avatar, time + read
+  // ticks, and the reviewer's bubble sits on the right side of the thread.
+  await expect(thread.getByText(/^\d{2}-\d{2}-\d{4}$/)).toHaveCount(1)
+  await expect(thread.getByText("E2E Bursar", { exact: true })).toHaveCount(1)
+  await expect(thread.getByText("Tesorería", { exact: true })).toHaveCount(1)
+  await expect(thread.getByText("EB", { exact: true })).toHaveCount(1)
+  await expect(thread.getByText(/^\d{2}:\d{2}$/)).toHaveCount(1)
+  const [threadBox, bubbleBox] = await Promise.all([thread.boundingBox(), comment.boundingBox()])
+  // (the 32px avatar column + 10px gap sit to the right of the bubble)
+  expect(bubbleBox!.x + bubbleBox!.width).toBeGreaterThan(threadBox!.x + threadBox!.width - 60)
   await shot(bursar, "11-rich-comments", "comment-rendered", { fullPage: false })
 
   // Ctrl/Cmd+Enter submits, and the minister sees the formatted comment too
@@ -122,10 +135,22 @@ test("request comments use a rich text editor and render formatted", async () =>
   await expect(editor).toHaveText("")
   await expect(bursar.getByText("El comentario no puede estar vacío")).toHaveCount(0)
 
+  // Consecutive messages by the same author form one run: a single header, avatar and
+  // time (on the last bubble), and the first bubble's tail corner is the tight 6px one.
+  await expect(bubbles).toHaveCount(2)
+  await expect(thread.getByText("Tesorería", { exact: true })).toHaveCount(1)
+  await expect(thread.getByText("EB", { exact: true })).toHaveCount(1)
+  await expect(thread.getByText(/^\d{2}:\d{2}$/)).toHaveCount(1)
+  await expect(bubbles.first()).toHaveCSS("border-bottom-right-radius", "6px")
+  await expect(bubbles.last()).toHaveCSS("border-bottom-right-radius", "4px")
+
+  // The minister sees the same thread; the reviewer side is on the right for everyone.
   await minister.goto(bursar.url(), { waitUntil: "networkidle" })
+  const ministerThread = minister.getByRole("list", { name: "Conversación" })
   await expect(
-    minister.locator("div.border-l-2 strong", { hasText: "Revisar monto" })
+    ministerThread.locator('[data-slot="bubble-content"] strong', { hasText: "Revisar monto" })
   ).toBeVisible()
+  await expect(ministerThread.getByText("Tesorería", { exact: true })).toBeVisible()
 
   // --- Dark mode ---
   await bursar.getByRole("button", { name: "Cambiar tema" }).click()
@@ -157,7 +182,8 @@ test("request comments use a rich text editor and render formatted", async () =>
   await expect(editor.locator("a")).toHaveAttribute("href", "https://example.com")
 
   // Rendered comments (bold, list, link) are legible in dark mode
-  const rendered = bursar.locator("div.border-l-2").filter({ hasText: "Revisar monto" })
+  const rendered = bubbles.filter({ hasText: "Revisar monto" })
+  // Reviewer bubbles are white on a darkened primary in dark mode, which clears AA.
   await expectContrast(rendered.locator("strong"), 4.5)
   await expectContrast(rendered.locator("li").first(), 4.5)
   await shot(bursar, "11-rich-comments", "comment-rendered-dark", { fullPage: false })
