@@ -41,10 +41,12 @@ import {
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { DatePicker } from "@/components/ui/date-picker"
 import { AttachmentInput } from "@/components/ui/attachment-input"
+import { CommentThread } from "@/components/intentions/comment-thread"
 import { RichText } from "@/components/ui/rich-text"
 import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { useAttachmentUpload } from "@/hooks/use-attachment-upload"
-import { formatDate, formatDateTime, formatCLP, avatarColorFor, initialsFor } from "@/lib/utils"
+import type { ThreadEvent } from "@/lib/comment-thread"
+import { formatDate, formatCLP, avatarColorFor, initialsFor } from "@/lib/utils"
 import { attachmentHref } from "@/lib/storage/attachments"
 import {
   reviewIntentionSchema,
@@ -168,6 +170,20 @@ export function IntentionDetailClient({
   const isMinister = canCreateSettlement
   const isRequestOwner = canCreateRequest && intention.requested_by === currentUserId
   const isClosed = !!intention.settlement_closed_at
+  // The review outcome closes the thread, so it shows as a closing event in it.
+  const reviewEvents: ThreadEvent[] =
+    (intention.status === "APPROVED" || intention.status === "REJECTED") &&
+    intention.reviewer &&
+    intention.reviewed_at
+      ? [
+          {
+            id: intention.id,
+            kind: intention.status,
+            actorName: intention.reviewer.full_name,
+            at: intention.reviewed_at
+          }
+        ]
+      : []
 
   const settlementIds = settlements.map((s) => s.id)
   useRealtimeRefresh([
@@ -1227,10 +1243,37 @@ export function IntentionDetailClient({
 
       {/* Comments */}
       <Card className="px-6 py-6 rounded-2xl space-y-4">
-        <h2 className="text-[15px] font-bold flex items-center gap-2">
-          <MessageCircle className="size-4 text-primary" />
-          Comentarios
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-[15px] font-bold flex items-center gap-2">
+            <MessageCircle className="size-4 text-primary" />
+            Comentarios
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11.5px] font-bold text-muted-foreground">
+              {comments.length}
+            </span>
+          </h2>
+          {comments.length > 0 && (
+            <div className="flex items-center gap-3.5 text-[11.5px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="flex size-5 items-center justify-center rounded-full bg-[#f2a516] text-[8.5px] font-extrabold text-white"
+                >
+                  {initialsFor(intention.users?.full_name ?? "Solicitante")}
+                </span>
+                Solicitante
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="flex size-5 items-center justify-center rounded-full bg-primary text-[8.5px] font-extrabold text-primary-foreground"
+                >
+                  {intention.reviewer ? initialsFor(intention.reviewer.full_name) : "R"}
+                </span>
+                Revisor
+              </span>
+            </div>
+          )}
+        </div>
         {comments.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-5">
             <div className="flex size-11 items-center justify-center rounded-[13px] bg-muted">
@@ -1241,15 +1284,11 @@ export function IntentionDetailClient({
             </span>
           </div>
         ) : (
-          <div className="space-y-3">
-            {comments.map((c) => (
-              <div key={c.id} className="text-sm border-l-2 border-muted pl-3 space-y-0.5">
-                <p className="font-medium">{c.users?.full_name ?? "Usuario"}</p>
-                <RichText className="text-sm text-muted-foreground">{c.message}</RichText>
-                <p className="text-xs text-muted-foreground">{formatDateTime(c.created_at)}</p>
-              </div>
-            ))}
-          </div>
+          <CommentThread
+            comments={comments}
+            requesterId={intention.requested_by}
+            events={reviewEvents}
+          />
         )}
         {intention.status === "PENDING" ? (
           <form onSubmit={commentForm.handleSubmit(handleAddComment)} className="space-y-2">
