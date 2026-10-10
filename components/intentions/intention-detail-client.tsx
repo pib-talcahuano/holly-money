@@ -41,6 +41,8 @@ import {
 import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { DatePicker } from "@/components/ui/date-picker"
 import { AttachmentInput } from "@/components/ui/attachment-input"
+import { RichText } from "@/components/ui/rich-text"
+import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { useAttachmentUpload } from "@/hooks/use-attachment-upload"
 import { formatDate, formatDateTime, formatCLP, avatarColorFor, initialsFor } from "@/lib/utils"
 import { attachmentHref } from "@/lib/storage/attachments"
@@ -1021,7 +1023,9 @@ export function IntentionDetailClient({
                               <span className="font-medium">
                                 {c.users?.full_name ?? "Tesorería"}:{" "}
                               </span>
-                              <span className="text-muted-foreground">{c.message}</span>
+                              <RichText className="inline text-muted-foreground [&_p]:inline">
+                                {c.message}
+                              </RichText>
                             </div>
                           ))}
                         </div>
@@ -1241,25 +1245,39 @@ export function IntentionDetailClient({
             {comments.map((c) => (
               <div key={c.id} className="text-sm border-l-2 border-muted pl-3 space-y-0.5">
                 <p className="font-medium">{c.users?.full_name ?? "Usuario"}</p>
-                <p className="text-muted-foreground">{c.message}</p>
+                <RichText className="text-sm text-muted-foreground">{c.message}</RichText>
                 <p className="text-xs text-muted-foreground">{formatDateTime(c.created_at)}</p>
               </div>
             ))}
           </div>
         )}
         {intention.status === "PENDING" ? (
-          <form onSubmit={commentForm.handleSubmit(handleAddComment)} className="flex gap-2">
-            <Input
-              placeholder="Escribe un comentario..."
-              className="flex-1"
-              {...commentForm.register("message")}
+          <form onSubmit={commentForm.handleSubmit(handleAddComment)} className="space-y-2">
+            <Controller
+              name="message"
+              control={commentForm.control}
+              render={({ field }) => (
+                <RichTextEditor
+                  value={field.value}
+                  onChange={field.onChange}
+                  onSubmit={() => void commentForm.handleSubmit(handleAddComment)()}
+                  placeholder="Escribe un comentario..."
+                  disabled={commentForm.formState.isSubmitting}
+                />
+              )}
             />
-            <Button
-              type="submit"
-              disabled={commentForm.formState.isSubmitting || !commentForm.watch("message").trim()}
-            >
-              {commentForm.formState.isSubmitting ? "..." : "Comentar"}
-            </Button>
+            <FieldError errors={[commentForm.formState.errors.message]} />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">Ctrl/⌘ + Enter para enviar</span>
+              <Button
+                type="submit"
+                disabled={
+                  commentForm.formState.isSubmitting || !commentForm.watch("message").trim()
+                }
+              >
+                {commentForm.formState.isSubmitting ? "..." : "Comentar"}
+              </Button>
+            </div>
           </form>
         ) : (
           <div className="flex items-center gap-2.5 bg-muted rounded-[10px] px-3.5 py-2.5">
