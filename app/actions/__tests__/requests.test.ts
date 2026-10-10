@@ -249,9 +249,27 @@ describe("addComment", () => {
       "req-1",
       "INTENTION",
       { message: "ok" },
-      mockUser.id
+      mockUser.id,
+      false
     )
     expect(mockRevalidatePath).toHaveBeenCalledWith("/requests/req-1")
     expect(data).toEqual(comment)
+  })
+
+  it("flags impersonation so the service bypasses the auth.uid() insert policy", async () => {
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, impersonatorId: "admin-1" })
+    mockCanAccessWorkflow.mockReturnValue(true)
+    mockAddComment.mockResolvedValue({ id: "c-2" })
+
+    await addComment("req-1", { message: "ok" })
+
+    expect(mockAddComment).toHaveBeenCalledWith(
+      mockDb,
+      "req-1",
+      "INTENTION",
+      { message: "ok" },
+      mockUser.id,
+      true
+    )
   })
 })

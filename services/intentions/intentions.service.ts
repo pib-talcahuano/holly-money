@@ -333,9 +333,14 @@ export const intentionsService = {
     entityId: string,
     entityType: "INTENTION" | "SETTLEMENT",
     input: AddCommentInput,
-    userId: string
+    userId: string,
+    impersonating = false
   ) {
-    const { data, error } = await db
+    // While impersonating, the session is still the real admin's, so the
+    // `user_id = auth.uid()` insert policy would reject a row authored as the
+    // impersonated user. The caller has already authorized the effective user.
+    const client = impersonating ? createSupabaseAdminClient() : db
+    const { data, error } = await client
       .from("request_comments")
       .insert({
         entity_type: entityType,

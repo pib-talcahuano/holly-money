@@ -110,7 +110,14 @@ export async function addComment(id: string, input: AddCommentInput) {
   }
 
   const db = await createSupabaseServerClient()
-  const data = await intentionsService.addComment(db, id, "INTENTION", input, user.id)
+  const data = await intentionsService.addComment(
+    db,
+    id,
+    "INTENTION",
+    input,
+    user.id,
+    Boolean(user.impersonatorId)
+  )
   revalidatePath(`/requests/${id}`)
   return data
 }
