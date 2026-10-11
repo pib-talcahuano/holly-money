@@ -36,8 +36,11 @@ export async function proxy(request: NextRequest) {
     "/forgot-password",
     "/api/auth/verify",
     "/api/auth/forgot-password",
-    // Cron endpoint: no session, authenticated by the x-cron-secret header
-    "/api/comment-notifications"
+    // Called by external systems with no session; each handler authenticates the
+    // caller itself (x-cron-secret header / Resend webhook signature)
+    "/api/comment-notifications",
+    "/api/reminders",
+    "/api/webhooks/resend-inbound"
   ]
   const isPublicPath = PUBLIC_PATHS.some((p) =>
     p === "/" ? pathname === "/" : pathname.startsWith(p)
