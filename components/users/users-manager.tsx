@@ -555,7 +555,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
             type="button"
             onClick={() => setViewMode("grouped")}
             className={cn(
-              "flex h-7 items-center gap-1.5 rounded-[9px] px-3 text-xs font-semibold transition-colors",
+              "flex h-7 items-center gap-1.5 rounded-[9px] px-3 text-xs font-semibold transition-colors max-sm:h-9",
               viewMode === "grouped"
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -568,7 +568,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
             type="button"
             onClick={() => setViewMode("flat")}
             className={cn(
-              "flex h-7 items-center gap-1.5 rounded-[9px] px-3 text-xs font-semibold transition-colors",
+              "flex h-7 items-center gap-1.5 rounded-[9px] px-3 text-xs font-semibold transition-colors max-sm:h-9",
               viewMode === "flat"
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -964,7 +964,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
                 <button
                   type="button"
                   onClick={() => toggleRoleCollapsed(group.role)}
-                  className="mb-2.5 flex w-full select-none items-center gap-[10px]"
+                  className="mb-0.5 flex min-h-9 w-full select-none items-center gap-[10px] pb-0.5"
                 >
                   {collapsed ? (
                     <ChevronRight className="size-[15px] shrink-0 text-muted-foreground" />

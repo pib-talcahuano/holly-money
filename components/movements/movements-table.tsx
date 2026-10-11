@@ -142,7 +142,7 @@ export function MovementsTable({
           {viewAllHref && (
             <Link
               href={viewAllHref}
-              className="text-[12.5px] font-semibold text-primary hover:text-primary/80 transition-colors"
+              className="py-2 -my-2 text-[12.5px] font-semibold text-primary hover:text-primary/80 transition-colors"
             >
               Ver todos →
             </Link>

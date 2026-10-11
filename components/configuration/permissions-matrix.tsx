@@ -72,7 +72,7 @@ export function PermissionsMatrix({ initialMatrix }: { initialMatrix: Permission
         </p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-border">
               <th className="text-left py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -130,7 +130,7 @@ export function PermissionsMatrix({ initialMatrix }: { initialMatrix: Permission
                           disabled={loading}
                           onClick={() => toggle(role, permission)}
                           className={cn(
-                            "flex size-[19px] items-center justify-center rounded-[6px] transition-colors disabled:cursor-wait disabled:opacity-60",
+                            "relative flex size-[19px] items-center justify-center rounded-[6px] transition-colors disabled:cursor-wait disabled:opacity-60 after:absolute after:-inset-2.5 after:content-['']",
                             checked
                               ? "bg-primary text-primary-foreground"
                               : "border-2 border-input bg-card text-transparent hover:border-primary/40"

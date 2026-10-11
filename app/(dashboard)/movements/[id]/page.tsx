@@ -94,7 +94,7 @@ export default async function MovementDetailPage({ params }: Props) {
       <div className="flex items-center justify-between mb-[18px]">
         <Link
           href="/movements"
-          className="group flex items-center gap-1.5 text-[12.5px] font-bold text-muted-foreground hover:text-foreground transition-colors"
+          className="group flex items-center gap-1.5 text-[12.5px] font-bold text-muted-foreground hover:text-foreground transition-colors py-1.5 -my-1.5 w-fit"
         >
           <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-1" />
           Volver a movimientos

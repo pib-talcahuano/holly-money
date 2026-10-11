@@ -13,7 +13,7 @@ export function SecuritySection() {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="text-[12.5px] font-bold text-primary hover:underline"
+          className="py-2 -my-2 text-[12.5px] font-bold text-primary hover:underline"
         >
           {open ? "Cancelar" : "Cambiar contraseña"}
         </button>

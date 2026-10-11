@@ -40,7 +40,7 @@ export default async function NewMovementPage({ searchParams }: Props) {
       <div className="mb-6">
         <Link
           href="/movements"
-          className="group flex items-center gap-1.5 text-[12.5px] font-bold text-muted-foreground hover:text-foreground transition-colors w-fit mb-3.5"
+          className="group flex items-center gap-1.5 text-[12.5px] font-bold text-muted-foreground hover:text-foreground transition-colors w-fit py-1.5 -mt-1.5 mb-2"
         >
           <ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-1" />
           Volver a movimientos

@@ -683,7 +683,7 @@ export function MinistryDetailClient({
                       <button
                         type="button"
                         title="Agregar delegado"
-                        className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-input bg-card text-foreground hover:bg-muted transition-colors"
+                        className="flex size-9 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-input bg-card text-foreground hover:bg-muted transition-colors"
                       >
                         <UserPlus className="size-3.5" />
                       </button>
@@ -752,7 +752,7 @@ export function MinistryDetailClient({
                         type="button"
                         title="Quitar delegado"
                         onClick={() => handleRemoveDelegate(d.id)}
-                        className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:bg-expense-surface hover:border-expense hover:text-expense transition-colors"
+                        className="flex size-9 sm:size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:bg-expense-surface hover:border-expense hover:text-expense transition-colors"
                       >
                         <X className="size-3.5" />
                       </button>
@@ -839,7 +839,7 @@ export function MinistryDetailClient({
           <div className="rounded-2xl bg-card border border-border overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h2 className="text-sm font-bold text-foreground">Solicitudes del ministerio</h2>
-              <Link href="/requests" className="text-xs font-bold text-primary hover:underline">
+              <Link href="/requests" className="py-2 -my-2 text-xs font-bold text-primary hover:underline">
                 Ver todas →
               </Link>
             </div>
