@@ -96,7 +96,7 @@ export function ForgotPasswordForm() {
         <div className="mt-5 text-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 py-2 -my-2 text-[12.5px] font-semibold text-primary hover:underline"
           >
             <ArrowLeft className="size-[13px]" />
             Volver a iniciar sesión
@@ -156,7 +156,7 @@ export function ForgotPasswordForm() {
       <div className="mt-5 text-center">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-primary hover:underline"
+          className="inline-flex items-center gap-1.5 py-2 -my-2 text-[12.5px] font-semibold text-primary hover:underline"
         >
           <ArrowLeft className="size-[13px]" />
           Volver a iniciar sesión

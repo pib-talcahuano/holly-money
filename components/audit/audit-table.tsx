@@ -115,7 +115,7 @@ export function AuditTable({ rows }: { rows: SerializedAuditEvent[] }) {
         </div>
       </div>
 
-      <div className="sm:hidden flex flex-col gap-2.5 px-4 pb-4">
+      <div className="sm:hidden flex min-w-0 flex-col gap-2.5 px-4 pb-4">
         {rows.map((event) => (
           <div
             key={event.id}
@@ -123,9 +123,9 @@ export function AuditTable({ rows }: { rows: SerializedAuditEvent[] }) {
             tabIndex={0}
             onClick={() => setSelected(event)}
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(event)}
-            className="cursor-pointer rounded-[14px] border border-border bg-card px-4 py-3.5"
+            className="min-w-0 cursor-pointer rounded-[14px] border border-border bg-card px-4 py-3.5"
           >
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2">
               <Badge
                 variant={auditActionVariant(event.action)}
                 className="uppercase tracking-wide text-[11px] font-bold"
@@ -138,11 +138,11 @@ export function AuditTable({ rows }: { rows: SerializedAuditEvent[] }) {
             </div>
             <div className="text-sm font-bold mb-1">{auditEntityLabel(event.entity)}</div>
             {event.note && (
-              <p className="mb-2 text-[12.5px] leading-relaxed text-muted-foreground">
+              <p className="mb-2 break-words text-[12.5px] leading-relaxed text-muted-foreground">
                 {event.note}
               </p>
             )}
-            <div className="border-t border-border pt-2 text-[11.5px] font-semibold text-faint">
+            <div className="break-words border-t border-border pt-2 text-[11.5px] font-semibold text-faint">
               Por {event.user_name ?? "—"}
               {event.impersonator_name && ` (suplantado por ${event.impersonator_name})`}
             </div>

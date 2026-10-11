@@ -62,19 +62,19 @@ export function PayrollDetailClient({
     <div className="max-w-6xl space-y-6">
       <Link
         href="/payroll"
-        className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-foreground hover:text-primary w-fit"
+        className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-foreground hover:text-primary w-fit py-1.5 -my-1.5"
       >
         <ArrowLeft className="size-4" />
         Volver a remuneraciones
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           <div className="flex size-[52px] shrink-0 items-center justify-center rounded-[15px] bg-primary-soft">
             <Banknote className="size-[22px] text-primary" />
           </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <h1 className="font-heading text-2xl font-extrabold tracking-tight text-foreground">
                 Remuneración · {formatPeriod(record.period)}
               </h1>

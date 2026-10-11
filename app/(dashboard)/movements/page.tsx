@@ -61,7 +61,7 @@ export default async function MovementsPage({ searchParams }: Props) {
           <p className="text-[13.5px] text-muted-foreground">Registro de ingresos y egresos</p>
         </div>
         {canWrite && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               render={<Link href="/movements/new?capitalInjection=1" />}

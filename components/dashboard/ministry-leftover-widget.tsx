@@ -29,7 +29,7 @@ export function MinistryLeftoverWidget({ totals }: { totals: MinistryLeftoverTot
         </div>
         <Link
           href="/ministries"
-          className="text-[12.5px] font-semibold text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
+          className="py-2 -my-2 text-[12.5px] font-semibold text-primary hover:text-primary/80 transition-colors whitespace-nowrap"
         >
           Ver ministerios →
         </Link>
