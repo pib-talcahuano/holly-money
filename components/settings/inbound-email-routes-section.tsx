@@ -220,7 +220,7 @@ export function InboundEmailRoutesSection({
                       setNgName(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ""))
                     }
                     placeholder="tesoreria"
-                    className="h-10 min-w-0 flex-1 bg-transparent px-3 text-[13.5px] outline-none"
+                    className="h-10 min-w-0 flex-1 bg-transparent px-3 text-base md:text-[13.5px] outline-none"
                   />
                   <span className="flex h-10 items-center whitespace-nowrap bg-muted px-3 text-[12.5px] font-semibold text-faint">
                     @{DOMAIN}
@@ -393,7 +393,7 @@ export function InboundEmailRoutesSection({
                       onChange={(e) =>
                         setInlineUser((prev) => ({ ...prev, [localPart]: e.target.value }))
                       }
-                      className="h-8 flex-1 text-xs"
+                      className="h-8 flex-1 text-base md:text-xs"
                     >
                       <NativeSelectOption value="" disabled>
                         Agregar usuario a este grupo…

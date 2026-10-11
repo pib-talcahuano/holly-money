@@ -445,7 +445,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
             placeholder="Buscar por nombre o correo..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 h-[42px] rounded-[10px] text-[13.5px]"
+            className="pl-10 h-[42px] rounded-[10px] text-base md:text-[13.5px]"
           />
         </div>
 
@@ -892,7 +892,7 @@ export function UsersManager({ initialUsers }: { initialUsers: UserRow[] }) {
             <Input
               readOnly
               value={inviteLink ?? ""}
-              className="h-11 bg-muted border-none rounded-xl px-4 text-sm font-mono truncate"
+              className="h-11 bg-muted border-none rounded-xl px-4 text-base md:text-sm font-mono truncate"
               onFocus={(e) => e.target.select()}
             />
             <Button
