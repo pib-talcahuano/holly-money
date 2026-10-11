@@ -398,7 +398,7 @@ export function MovementsTable({
                     value={annulReason}
                     onChange={(e) => setAnnulReason(e.target.value)}
                     placeholder="Razón de la anulación — ej: movimiento duplicado, monto incorrecto…"
-                    className="h-16 w-full resize-none rounded-[10px] border border-expense bg-card px-3 py-2.5 text-[13px] outline-none focus-visible:ring-3 focus-visible:ring-expense/20"
+                    className="h-16 w-full resize-none rounded-[10px] border border-expense bg-card px-3 py-2.5 text-base md:text-[13px] outline-none focus-visible:ring-3 focus-visible:ring-expense/20"
                   />
                   <div className="flex justify-end gap-2 mt-2.5">
                     <Button

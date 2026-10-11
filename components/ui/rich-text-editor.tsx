@@ -89,7 +89,7 @@ export function RichTextEditor({
       attributes: {
         "aria-label": placeholder ?? "Comentario",
         class: cn(
-          "min-h-20 max-h-72 overflow-y-auto px-3 py-2 text-sm outline-none",
+          "min-h-20 max-h-72 overflow-y-auto px-3 py-2 text-base md:text-sm outline-none",
           richTextClassName
         )
       },
@@ -220,7 +220,7 @@ export function RichTextEditor({
               }
             }}
             placeholder="https://..."
-            className="h-8 flex-1 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
+            className="h-8 flex-1 rounded-md border border-input bg-transparent px-2 text-base md:text-sm outline-none focus-visible:border-ring"
           />
           <Button type="button" size="sm" onClick={applyLink}>
             Aplicar
