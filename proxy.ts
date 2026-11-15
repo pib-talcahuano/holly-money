@@ -24,9 +24,13 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user }
-  } = await supabase.auth.getUser()
+  // getClaims() verifies the JWT locally against the project's cached signing keys
+  // (asymmetric keys), instead of a round trip to Supabase Auth on every request and
+  // every link prefetch like getUser(). It still refreshes an expiring session first,
+  // so the cookie handling above keeps working. With a legacy symmetric secret it
+  // falls back to the same network validation getUser() does.
+  const { data } = await supabase.auth.getClaims()
+  const user = data?.claims ?? null
 
   const { pathname } = request.nextUrl
   const PUBLIC_PATHS = [
