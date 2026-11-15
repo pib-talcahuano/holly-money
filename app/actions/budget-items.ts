@@ -8,8 +8,10 @@ import { budgetItemsService } from "@/services/ministries/budget-items.service"
 import {
   upsertBudgetItemSchema,
   setBudgetItemActiveSchema,
+  updateBudgetItemAmountsSchema,
   type UpsertBudgetItemInput,
-  type SetBudgetItemActiveInput
+  type SetBudgetItemActiveInput,
+  type UpdateBudgetItemAmountsInput
 } from "@/lib/validators/budget-item"
 
 function parseOrThrow<T>(schema: z.ZodType<T>, input: unknown): T {
@@ -41,6 +43,15 @@ export async function setBudgetItemActive(input: SetBudgetItemActiveInput) {
   const parsed = parseOrThrow(setBudgetItemActiveSchema, input)
   const db = await createSupabaseServerClient()
   const data = await budgetItemsService.setActive(db, parsed, user.id)
+  revalidatePath("/budgets")
+  return data
+}
+
+export async function updateBudgetItemAmounts(input: UpdateBudgetItemAmountsInput) {
+  const user = assertBudgetsAccess(await getCurrentUser())
+  const parsed = parseOrThrow(updateBudgetItemAmountsSchema, input)
+  const db = await createSupabaseServerClient()
+  const data = await budgetItemsService.updateAmounts(db, parsed, user.id)
   revalidatePath("/budgets")
   return data
 }

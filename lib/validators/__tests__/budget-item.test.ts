@@ -1,4 +1,8 @@
-import { upsertBudgetItemSchema, setBudgetItemActiveSchema } from "../budget-item"
+import {
+  upsertBudgetItemSchema,
+  setBudgetItemActiveSchema,
+  updateBudgetItemAmountsSchema
+} from "../budget-item"
 
 const PERIOD_ID = "e2e00000-0000-0000-0000-0000000000b1"
 const valid = { budget_period_id: PERIOD_ID, name: "Directorio", assigned_amount: 1000 }
@@ -41,5 +45,17 @@ describe("setBudgetItemActiveSchema", () => {
     expect(setBudgetItemActiveSchema.safeParse({ id: PERIOD_ID, is_active: false }).success).toBe(
       true
     )
+  })
+})
+
+describe("updateBudgetItemAmountsSchema", () => {
+  it("accepts only id and amounts, with initial defaulting to 0", () => {
+    const parsed = updateBudgetItemAmountsSchema.parse({ id: PERIOD_ID, assigned_amount: "700" })
+    expect(parsed).toEqual({ id: PERIOD_ID, assigned_amount: 700, initial_used_amount: 0 })
+  })
+
+  it("rejects a non-positive assigned amount", () => {
+    const result = updateBudgetItemAmountsSchema.safeParse({ id: PERIOD_ID, assigned_amount: 0 })
+    expect(result.error?.issues[0].message).toBe("El monto asignado debe ser mayor a 0")
   })
 })

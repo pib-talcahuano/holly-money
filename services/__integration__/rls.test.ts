@@ -400,6 +400,30 @@ describeIfLocal("RLS + RPC: budget_items", () => {
     expect(Number(incomeRow.used_amount)).toBe(0)
   })
 
+  it("frees the name of a deactivated item so it can be created again", async () => {
+    const admin = adminClient()
+    const { data: first, error: firstError } = await admin
+      .from("budget_items")
+      .insert({
+        budget_period_id: periodId,
+        name: "Reusable name",
+        assigned_amount: 1,
+        initial_used_amount: 0
+      })
+      .select()
+      .single()
+    expect(firstError).toBeNull()
+    await admin.from("budget_items").update({ is_active: false }).eq("id", first!.id)
+
+    const { error } = await admin.from("budget_items").insert({
+      budget_period_id: periodId,
+      name: "reusable NAME",
+      assigned_amount: 1,
+      initial_used_amount: 0
+    })
+    expect(error).toBeNull()
+  })
+
   it("get_budget_items_summary omits inactive items and is not callable by authenticated users", async () => {
     const bursar = await signIn(E2E_USERS.bursar)
     const { data } = await adminClient().rpc("get_budget_items_summary", { p_period_id: periodId })

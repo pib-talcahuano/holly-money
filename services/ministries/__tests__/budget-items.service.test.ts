@@ -122,6 +122,40 @@ describe("budgetItemsService.setActive", () => {
   })
 })
 
+describe("budgetItemsService.setActive (reactivation)", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("turns a name collision on reactivation into the friendly Spanish error", async () => {
+    const { db } = fakeDb({ write: { data: null, error: { code: "23505", message: "dup" } } })
+    await expect(
+      budgetItemsService.setActive(db, { id: ITEM_ID, is_active: true }, "user-1")
+    ).rejects.toThrow("Ya existe un ítem con ese nombre en este período")
+    expect(mockLogSystem).not.toHaveBeenCalled()
+  })
+})
+
+describe("budgetItemsService.updateAmounts", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("writes only the amounts, never name, category or notes", async () => {
+    const { db, writes } = fakeDb({})
+    await budgetItemsService.updateAmounts(
+      db,
+      { id: ITEM_ID, assigned_amount: 900, initial_used_amount: 10 },
+      "user-1"
+    )
+    expect(writes[0].op).toBe("update")
+    expect(Object.keys(writes[0].payload as object).sort()).toEqual([
+      "assigned_amount",
+      "initial_used_amount",
+      "updated_at"
+    ])
+    expect(mockLogSystem).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "BUDGET_ITEM_AMOUNTS_UPDATED", entity_id: ITEM_ID })
+    )
+  })
+})
+
 describe("budgetItemsService.getSummary", () => {
   it("calls the RPC with the period id and returns the rows", async () => {
     mockRpc.mockResolvedValue({ data: [{ item_id: ITEM_ID }], error: null })

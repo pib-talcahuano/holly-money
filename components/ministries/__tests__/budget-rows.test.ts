@@ -1,4 +1,4 @@
-import { buildBudgetRows, sumTotals } from "../budget-rows"
+import { buildBudgetRows, pendingEdits, sumTotals } from "../budget-rows"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
 
@@ -84,5 +84,34 @@ describe("sumTotals", () => {
   it("ignores ministries that have no budget row", () => {
     const rows = buildBudgetRows([ministry("m1", "Alfa")], [], [])
     expect(sumTotals(rows)).toEqual({ assigned: 0, initial: 0, used: 0, remaining: 0 })
+  })
+})
+
+describe("pendingEdits", () => {
+  const rows = buildBudgetRows(
+    [ministry("m1", "Alfa"), ministry("m2", "Beta")],
+    [ministryRow("m1", 1000, 100, 350), ministryRow("m2", 500, 0, 0)],
+    [itemRow("i1", "Directorio", 500, 20, 120)]
+  )
+
+  it("returns nothing when there are no drafts", () => {
+    expect(pendingEdits(rows, {})).toEqual([])
+  })
+
+  it("returns only rows the user edited, keeping their kind", () => {
+    const edits = pendingEdits(rows, { m2: { assigned: "700" }, i1: { initial: "30" } })
+    expect(edits).toEqual([
+      { kind: "ministry", id: "m2", assigned: 700, initial: 0 },
+      { kind: "item", id: "i1", assigned: 500, initial: 30 }
+    ])
+  })
+
+  it("skips an edited row whose assigned amount was cleared", () => {
+    expect(pendingEdits(rows, { m1: { assigned: "" } })).toEqual([])
+  })
+
+  it("skips an edited ministry that has no saved budget and no assigned amount", () => {
+    const unassigned = buildBudgetRows([ministry("m9", "Zeta")], [], [])
+    expect(pendingEdits(unassigned, { m9: { initial: "5" } })).toEqual([])
   })
 })

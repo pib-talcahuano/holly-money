@@ -20,10 +20,12 @@ CREATE TABLE budget_items (
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Nombre único por período sin distinguir mayúsculas (también entre inactivos: un
--- ítem desactivado se reactiva, no se duplica).
+-- Nombre único por período sin distinguir mayúsculas, solo entre ítems activos: un ítem
+-- desactivado queda oculto en la UI, así que no debe seguir ocupando su nombre (mismo
+-- criterio que movement_categories_name_active_unique).
 CREATE UNIQUE INDEX budget_items_period_name_unique
-  ON budget_items (budget_period_id, lower(name));
+  ON budget_items (budget_period_id, lower(name))
+  WHERE is_active;
 CREATE INDEX idx_budget_items_period ON budget_items(budget_period_id);
 CREATE INDEX idx_budget_items_category ON budget_items(category_id);
 

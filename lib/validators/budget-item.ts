@@ -19,5 +19,15 @@ export const setBudgetItemActiveSchema = z.object({
   is_active: z.boolean()
 })
 
+export const updateBudgetItemAmountsSchema = z.object({
+  id: uuidSchema("ID de ítem inválido"),
+  assigned_amount: z.coerce.number().positive("El monto asignado debe ser mayor a 0"),
+  initial_used_amount: z.coerce
+    .number()
+    .min(0, "El monto inicial utilizado no puede ser negativo")
+    .default(0)
+})
+
 export type UpsertBudgetItemInput = z.infer<typeof upsertBudgetItemSchema>
 export type SetBudgetItemActiveInput = z.infer<typeof setBudgetItemActiveSchema>
+export type UpdateBudgetItemAmountsInput = z.infer<typeof updateBudgetItemAmountsSchema>

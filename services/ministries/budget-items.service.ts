@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { auditService } from "@/services/audit/audit.service"
 import type {
   SetBudgetItemActiveInput,
+  UpdateBudgetItemAmountsInput,
   UpsertBudgetItemInput
 } from "@/lib/validators/budget-item"
 
@@ -92,7 +93,7 @@ export const budgetItemsService = {
       .eq("id", input.id)
       .select()
       .single()
-    if (error) throw error
+    if (error) rethrowFriendly(error)
 
     await auditService.logSystem({
       entity: "BUDGET_ITEM",
@@ -100,6 +101,31 @@ export const budgetItemsService = {
       user_id: userId,
       entity_id: data.id,
       new_value: { is_active: input.is_active }
+    })
+    return data
+  },
+
+  // Amounts only: the table's "Guardar cambios" must never overwrite name, category or notes,
+  // which change only through the dialog (upsertItem).
+  async updateAmounts(db: DB, input: UpdateBudgetItemAmountsInput, userId: string) {
+    const values = {
+      assigned_amount: input.assigned_amount,
+      initial_used_amount: input.initial_used_amount
+    }
+    const { data, error } = await db
+      .from("budget_items")
+      .update({ ...values, updated_at: new Date().toISOString() })
+      .eq("id", input.id)
+      .select()
+      .single()
+    if (error) throw error
+
+    await auditService.logSystem({
+      entity: "BUDGET_ITEM",
+      action: "BUDGET_ITEM_AMOUNTS_UPDATED",
+      user_id: userId,
+      entity_id: data.id,
+      new_value: values
     })
     return data
   },

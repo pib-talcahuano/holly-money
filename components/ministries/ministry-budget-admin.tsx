@@ -23,11 +23,11 @@ import {
   type UpsertBudgetPeriodInput
 } from "@/lib/validators/ministry-budget"
 import { upsertBudgetPeriod, upsertMinistryBudget } from "@/app/actions/ministry-budgets"
-import { upsertBudgetItem, setBudgetItemActive } from "@/app/actions/budget-items"
+import { updateBudgetItemAmounts, setBudgetItemActive } from "@/app/actions/budget-items"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
 import { BudgetItemDialog } from "./budget-item-dialog"
-import { buildBudgetRows, sumTotals, type BudgetRow } from "./budget-rows"
+import { buildBudgetRows, pendingEdits, sumTotals, type BudgetRow, type Draft } from "./budget-rows"
 
 type Ministry = { id: string; name: string; is_active: boolean }
 type BudgetPeriod = { id: string; label: string; start_date: string; end_date: string }
@@ -39,8 +39,6 @@ type Props = {
   itemSummary: BudgetItemSummaryRow[]
   expenseCategories: { id: string; name: string }[]
 }
-
-type Draft = { assigned?: string; initial?: string }
 
 export function MinistryBudgetAdmin({
   ministries,
@@ -97,24 +95,19 @@ export function MinistryBudgetAdmin({
     if (!currentPeriod) return
     setSaving(true)
     try {
-      const withAmount = budgetRows.filter((r) => assignedOf(r))
       await Promise.all(
-        withAmount.map((r) =>
-          r.kind === "ministry"
+        pendingEdits(budgetRows, drafts).map((e) =>
+          e.kind === "ministry"
             ? upsertMinistryBudget({
-                ministry_id: r.id,
+                ministry_id: e.id,
                 budget_period_id: currentPeriod.id,
-                assigned_amount: Number(assignedOf(r)),
-                initial_used_amount: Number(initialOf(r) || 0)
+                assigned_amount: e.assigned,
+                initial_used_amount: e.initial
               })
-            : upsertBudgetItem({
-                id: r.id,
-                budget_period_id: currentPeriod.id,
-                name: r.name,
-                category_id: r.categoryId ?? null,
-                notes: r.notes ?? undefined,
-                assigned_amount: Number(assignedOf(r)),
-                initial_used_amount: Number(initialOf(r) || 0)
+            : updateBudgetItemAmounts({
+                id: e.id,
+                assigned_amount: e.assigned,
+                initial_used_amount: e.initial
               })
         )
       )

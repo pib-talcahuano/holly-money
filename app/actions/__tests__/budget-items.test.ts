@@ -1,10 +1,11 @@
-import { upsertBudgetItem, setBudgetItemActive } from "../budget-items"
+import { upsertBudgetItem, setBudgetItemActive, updateBudgetItemAmounts } from "../budget-items"
 
 const mockGetCurrentUser = jest.fn()
 const mockDb = {}
 const mockCan = jest.fn()
 const mockUpsertItem = jest.fn()
 const mockSetActive = jest.fn()
+const mockUpdateAmounts = jest.fn()
 const mockRevalidatePath = jest.fn()
 
 jest.mock("@/lib/supabase/server", () => ({
@@ -20,7 +21,8 @@ jest.mock("@/lib/permissions/rbac", () => ({
 jest.mock("@/services/ministries/budget-items.service", () => ({
   budgetItemsService: {
     upsertItem: (...args: unknown[]) => mockUpsertItem(...args),
-    setActive: (...args: unknown[]) => mockSetActive(...args)
+    setActive: (...args: unknown[]) => mockSetActive(...args),
+    updateAmounts: (...args: unknown[]) => mockUpdateAmounts(...args)
   }
 }))
 
@@ -94,6 +96,34 @@ describe("setBudgetItemActive", () => {
     expect(mockSetActive).toHaveBeenCalledWith(
       mockDb,
       { id: ITEM_ID, is_active: false },
+      mockUser.id
+    )
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/budgets")
+  })
+})
+
+describe("updateBudgetItemAmounts", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("throws when lacking MANAGE_BUDGETS", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(false)
+    await expect(
+      updateBudgetItemAmounts({ id: ITEM_ID, assigned_amount: 5, initial_used_amount: 0 })
+    ).rejects.toThrow("Sin permisos")
+    expect(mockUpdateAmounts).not.toHaveBeenCalled()
+  })
+
+  it("calls the service with (db, parsed, user.id) and revalidates /budgets", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockUpdateAmounts.mockResolvedValue({ id: ITEM_ID })
+
+    await updateBudgetItemAmounts({ id: ITEM_ID, assigned_amount: 5, initial_used_amount: 0 })
+
+    expect(mockUpdateAmounts).toHaveBeenCalledWith(
+      mockDb,
+      { id: ITEM_ID, assigned_amount: 5, initial_used_amount: 0 },
       mockUser.id
     )
     expect(mockRevalidatePath).toHaveBeenCalledWith("/budgets")

@@ -72,3 +72,31 @@ export function sumTotals(rows: BudgetRow[]) {
     { assigned: 0, initial: 0, used: 0, remaining: 0 }
   )
 }
+
+export type Draft = { assigned?: string; initial?: string }
+
+export type PendingEdit = {
+  kind: BudgetRow["kind"]
+  id: string
+  assigned: number
+  initial: number
+}
+
+// Rows the user actually edited and can be saved. Untouched rows are never re-sent, so a
+// stale tab cannot overwrite what someone else changed.
+export function pendingEdits(rows: BudgetRow[], drafts: Record<string, Draft>): PendingEdit[] {
+  return rows.flatMap((r) => {
+    const draft = drafts[r.id]
+    if (!draft) return []
+    const assigned = draft.assigned ?? (r.assigned === null ? "" : String(r.assigned))
+    if (!assigned) return []
+    return [
+      {
+        kind: r.kind,
+        id: r.id,
+        assigned: Number(assigned),
+        initial: Number(draft.initial ?? r.initial)
+      }
+    ]
+  })
+}
