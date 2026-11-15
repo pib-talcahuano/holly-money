@@ -32,10 +32,22 @@ export function NotificationBell() {
       .catch(() => null)
   }, [])
 
+  // Poll only while the tab is visible — a background tab would otherwise keep
+  // hitting the API (auth + several queries) every minute for nobody. Coming back
+  // to the tab refetches right away so the badge is never left stale.
   useEffect(() => {
     fetchNotifications()
-    const interval = setInterval(fetchNotifications, 60_000)
-    return () => clearInterval(interval)
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") fetchNotifications()
+    }, 60_000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") fetchNotifications()
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
   }, [fetchNotifications])
 
   const unreadCount = useMemo(

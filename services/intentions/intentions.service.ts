@@ -9,6 +9,7 @@ import {
 } from "@/services/email/workflow-emails.service"
 import { insertMovementAttachments } from "@/services/movements/movements.service"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
+import { runAfterResponse } from "@/lib/utils/run-after-response"
 import type {
   CreateIntentionInput,
   ReviewIntentionInput,
@@ -115,7 +116,7 @@ export const intentionsService = {
     })
 
     if (!input.isDraft) {
-      await sendIntentionNotification(data).catch(() => null)
+      runAfterResponse("sendIntentionNotification", () => sendIntentionNotification(data))
     }
 
     return data
@@ -157,7 +158,7 @@ export const intentionsService = {
       new_value: { status: "PENDING" }
     })
 
-    await sendIntentionNotification(data).catch(() => null)
+    runAfterResponse("sendIntentionNotification", () => sendIntentionNotification(data))
 
     return { alreadyActioned: false, data }
   },
@@ -238,7 +239,9 @@ export const intentionsService = {
 
     const ministerUser = current?.users
     if (ministerUser?.email) {
-      await sendIntentionReviewNotification(data, ministerUser, input.action).catch(() => null)
+      runAfterResponse("sendIntentionReviewNotification", () =>
+        sendIntentionReviewNotification(data, ministerUser, input.action)
+      )
     }
 
     return { alreadyActioned: false, data }
@@ -312,7 +315,9 @@ export const intentionsService = {
 
     const ministerUser = intention.users
     if (ministerUser?.email) {
-      await sendTransferNotification(intention, ministerUser).catch(() => null)
+      runAfterResponse("sendTransferNotification", () =>
+        sendTransferNotification(intention, ministerUser)
+      )
     }
 
     return data
