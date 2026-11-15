@@ -130,6 +130,71 @@ export type Database = {
           }
         ]
       }
+      budget_items: {
+        Row: {
+          assigned_amount: number
+          budget_period_id: string
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          initial_used_amount: number
+          is_active: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          assigned_amount: number
+          budget_period_id: string
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          initial_used_amount?: number
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_amount?: number
+          budget_period_id?: string
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          initial_used_amount?: number
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_items_budget_period_id_fkey"
+            columns: ["budget_period_id"]
+            isOneToOne: false
+            referencedRelation: "budget_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "movement_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       budget_periods: {
         Row: {
           created_at: string
@@ -1322,6 +1387,7 @@ export type Database = {
         Args: { p_email: string; p_full_name: string; p_password: string }
         Returns: string
       }
+      get_budget_items_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_dashboard_summary: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       get_ministry_budget_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_ministry_leftover_summary: {
