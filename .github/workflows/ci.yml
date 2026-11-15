@@ -104,5 +104,6 @@ jobs:
         run: supabase link --project-ref $SUPABASE_PROJECT_ID
 
       - name: Deploy database migrations
-        # CLI v3 targets the local stack by default; --remote selects the linked project.
-        run: supabase db push --remote
+        # CLI v3 targets the local stack by default (--remote selects the linked project) and
+        # refuses to apply to production without a TTY unless confirmed (--yes).
+        run: supabase db push --remote --yes
