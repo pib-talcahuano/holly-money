@@ -3,6 +3,7 @@ import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/serve
 import { PERMISSIONS, can } from "@/lib/permissions/rbac"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import { ministryBudgetService } from "@/services/ministries/ministry-budget.service"
+import { budgetItemsService } from "@/services/ministries/budget-items.service"
 import { MinistryBudgetAdmin } from "@/components/ministries/ministry-budget-admin"
 
 export default async function BudgetsPage() {
@@ -10,11 +11,14 @@ export default async function BudgetsPage() {
   if (!user || !can(user.permissions, PERMISSIONS.MANAGE_BUDGETS)) redirect("/dashboard")
 
   const db = await createSupabaseServerClient()
-  const [ministries, currentPeriod, budgetSummary] = await Promise.all([
-    ministriesService.list(db),
-    ministryBudgetService.getCurrentPeriod(db),
-    ministryBudgetService.getSummary()
-  ])
+  const [ministries, currentPeriod, budgetSummary, itemSummary, expenseCategories] =
+    await Promise.all([
+      ministriesService.list(db),
+      ministryBudgetService.getCurrentPeriod(db),
+      ministryBudgetService.getSummary(),
+      budgetItemsService.getSummary(),
+      budgetItemsService.listExpenseCategories(db)
+    ])
 
   return (
     <section className="flex flex-col gap-6">
@@ -23,7 +27,7 @@ export default async function BudgetsPage() {
           Presupuesto
         </h1>
         <p className="text-[13.5px] text-muted-foreground">
-          Presupuesto por ministerio para el período vigente.
+          Presupuesto por ministerio y otros ítems para el período vigente.
         </p>
       </div>
 
@@ -31,6 +35,8 @@ export default async function BudgetsPage() {
         ministries={ministries}
         currentPeriod={currentPeriod}
         summary={budgetSummary}
+        itemSummary={itemSummary}
+        expenseCategories={expenseCategories}
       />
     </section>
   )

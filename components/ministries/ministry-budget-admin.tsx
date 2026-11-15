@@ -3,8 +3,9 @@
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { CalendarRange, Wallet } from "lucide-react"
+import { CalendarRange, Pencil, Plus, Wallet, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -22,7 +23,11 @@ import {
   type UpsertBudgetPeriodInput
 } from "@/lib/validators/ministry-budget"
 import { upsertBudgetPeriod, upsertMinistryBudget } from "@/app/actions/ministry-budgets"
+import { updateBudgetItemAmounts, setBudgetItemActive } from "@/app/actions/budget-items"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
+import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
+import { BudgetItemDialog } from "./budget-item-dialog"
+import { buildBudgetRows, pendingEdits, sumTotals, type BudgetRow, type Draft } from "./budget-rows"
 
 type Ministry = { id: string; name: string; is_active: boolean }
 type BudgetPeriod = { id: string; label: string; start_date: string; end_date: string }
@@ -31,22 +36,38 @@ type Props = {
   ministries: Ministry[]
   currentPeriod: BudgetPeriod | null
   summary: MinistryBudgetSummaryRow[]
+  itemSummary: BudgetItemSummaryRow[]
+  expenseCategories: { id: string; name: string }[]
 }
 
-export function MinistryBudgetAdmin({ ministries, currentPeriod, summary }: Props) {
+export function MinistryBudgetAdmin({
+  ministries,
+  currentPeriod,
+  summary,
+  itemSummary,
+  expenseCategories
+}: Props) {
+  const router = useRouter()
   const [periodDialogOpen, setPeriodDialogOpen] = useState(false)
+  const [itemDialogOpen, setItemDialogOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<BudgetRow | null>(null)
   const [saving, setSaving] = useState(false)
-  const [rows, setRows] = useState<Record<string, { assigned: string; initial: string }>>(() => {
-    const initial: Record<string, { assigned: string; initial: string }> = {}
-    for (const m of ministries) {
-      const existing = summary.find((s) => s.ministry_id === m.id)
-      initial[m.id] = {
-        assigned: existing ? String(existing.assigned_amount) : "",
-        initial: existing ? String(existing.initial_used_amount) : "0"
-      }
-    }
-    return initial
-  })
+  // Only the user's pending edits; displayed values fall back to the saved ones from props,
+  // so rows added or removed by a refresh never leave stale state behind.
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+
+  const budgetRows = buildBudgetRows(ministries, summary, itemSummary)
+  const totals = sumTotals(budgetRows)
+
+  function assignedOf(r: BudgetRow) {
+    return drafts[r.id]?.assigned ?? (r.assigned === null ? "" : String(r.assigned))
+  }
+  function initialOf(r: BudgetRow) {
+    return drafts[r.id]?.initial ?? String(r.initial)
+  }
+  function setDraft(id: string, patch: Draft) {
+    setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
 
   const periodForm = useForm<UpsertBudgetPeriodInput>({
     resolver: zodResolver(upsertBudgetPeriodSchema),
@@ -74,23 +95,45 @@ export function MinistryBudgetAdmin({ ministries, currentPeriod, summary }: Prop
     if (!currentPeriod) return
     setSaving(true)
     try {
-      const activeMinistries = ministries.filter((m) => m.is_active && rows[m.id]?.assigned)
       await Promise.all(
-        activeMinistries.map((m) =>
-          upsertMinistryBudget({
-            ministry_id: m.id,
-            budget_period_id: currentPeriod.id,
-            assigned_amount: Number(rows[m.id].assigned),
-            initial_used_amount: Number(rows[m.id].initial || 0)
-          })
+        pendingEdits(budgetRows, drafts).map((e) =>
+          e.kind === "ministry"
+            ? upsertMinistryBudget({
+                ministry_id: e.id,
+                budget_period_id: currentPeriod.id,
+                assigned_amount: e.assigned,
+                initial_used_amount: e.initial
+              })
+            : updateBudgetItemAmounts({
+                id: e.id,
+                assigned_amount: e.assigned,
+                initial_used_amount: e.initial
+              })
         )
       )
+      setDrafts({})
       toast.success("Presupuestos guardados")
+      router.refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al guardar presupuestos")
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleDeactivate(r: BudgetRow) {
+    try {
+      await setBudgetItemActive({ id: r.id, is_active: false })
+      toast.success("Ítem desactivado")
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al desactivar el ítem")
+    }
+  }
+
+  function openItemDialog(item: BudgetRow | null) {
+    setEditingItem(item)
+    setItemDialogOpen(true)
   }
 
   return (
@@ -175,79 +218,135 @@ export function MinistryBudgetAdmin({ ministries, currentPeriod, summary }: Prop
       ) : (
         <div className="rounded-2xl bg-card border border-border overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-b border-border">
-            <h2 className="text-sm font-bold text-foreground">Presupuesto por ministerio</h2>
+            <h2 className="text-sm font-bold text-foreground">Presupuesto del período</h2>
             <Button size="sm" onClick={handleSaveBudgets} disabled={saving}>
               {saving ? "Guardando..." : "Guardar cambios"}
             </Button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-sm">
+            <table className="w-full min-w-[720px] text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
                 <tr>
-                  <th className="px-5 py-2.5 text-left font-medium">Ministerio</th>
+                  <th className="px-5 py-2.5 text-left font-medium">Nombre</th>
+                  <th className="px-5 py-2.5 text-left font-medium">Tipo</th>
                   <th className="px-5 py-2.5 text-right font-medium">Asignado</th>
                   <th className="px-5 py-2.5 text-right font-medium">Usado inicial</th>
                   <th className="px-5 py-2.5 text-right font-medium">Usado (auto)</th>
                   <th className="px-5 py-2.5 text-right font-medium">Remanente</th>
+                  <th className="px-5 py-2.5 text-right font-medium">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {ministries
-                  .filter((m) => m.is_active)
-                  .map((m) => {
-                    const existing = summary.find((s) => s.ministry_id === m.id)
-                    return (
-                      <tr key={m.id}>
-                        <td className="px-5 py-3 font-medium">{m.name}</td>
-                        <td className="px-5 py-3 text-right">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            className="w-32 ml-auto text-right"
-                            value={rows[m.id]?.assigned ?? ""}
-                            onChange={(e) =>
-                              setRows((prev) => ({
-                                ...prev,
-                                [m.id]: { ...prev[m.id], assigned: e.target.value }
-                              }))
-                            }
-                          />
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="1"
-                            className="w-32 ml-auto text-right"
-                            value={rows[m.id]?.initial ?? ""}
-                            onChange={(e) =>
-                              setRows((prev) => ({
-                                ...prev,
-                                [m.id]: { ...prev[m.id], initial: e.target.value }
-                              }))
-                            }
-                          />
-                        </td>
-                        <td className="px-5 py-3 text-right text-muted-foreground">
-                          {existing
-                            ? formatCLP(existing.used_amount - existing.initial_used_amount)
-                            : "—"}
-                        </td>
-                        <td
-                          className={`px-5 py-3 text-right font-medium ${
-                            existing && existing.remaining < 0 ? "text-destructive" : ""
-                          }`}
-                        >
-                          {existing ? formatCLP(existing.remaining) : "—"}
-                        </td>
-                      </tr>
-                    )
-                  })}
+                {budgetRows.map((r) => (
+                  <tr key={`${r.kind}-${r.id}`}>
+                    <td className="px-5 py-3 font-medium">
+                      {r.name}
+                      {r.kind === "item" && r.categoryName && (
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {r.categoryName}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {r.kind === "ministry" ? "Ministerio" : "Otro"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        aria-label={`Asignado ${r.name}`}
+                        className="w-32 ml-auto text-right"
+                        value={assignedOf(r)}
+                        onChange={(e) => setDraft(r.id, { assigned: e.target.value })}
+                      />
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        aria-label={`Usado inicial ${r.name}`}
+                        className="w-32 ml-auto text-right"
+                        value={initialOf(r)}
+                        onChange={(e) => setDraft(r.id, { initial: e.target.value })}
+                      />
+                    </td>
+                    <td className="px-5 py-3 text-right text-muted-foreground">
+                      {r.used === null ? "—" : formatCLP(r.used)}
+                    </td>
+                    <td
+                      className={`px-5 py-3 text-right font-medium ${
+                        r.remaining !== null && r.remaining < 0 ? "text-destructive" : ""
+                      }`}
+                    >
+                      {r.remaining === null ? "—" : formatCLP(r.remaining)}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      {r.kind === "item" && (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Editar ${r.name}`}
+                            onClick={() => openItemDialog(r)}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Desactivar ${r.name}`}
+                            onClick={() => handleDeactivate(r)}
+                          >
+                            <EyeOff className="size-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={7} className="px-5 py-2">
+                    <Button size="sm" variant="ghost" onClick={() => openItemDialog(null)}>
+                      <Plus className="size-4" /> Agregar ítem
+                    </Button>
+                  </td>
+                </tr>
               </tbody>
+              <tfoot className="bg-muted/50 text-sm font-bold">
+                <tr>
+                  <td className="px-5 py-3" colSpan={2}>
+                    Total
+                  </td>
+                  <td className="px-5 py-3 text-right">{formatCLP(totals.assigned)}</td>
+                  <td className="px-5 py-3 text-right">{formatCLP(totals.initial)}</td>
+                  <td className="px-5 py-3 text-right">{formatCLP(totals.used)}</td>
+                  <td
+                    className={`px-5 py-3 text-right ${totals.remaining < 0 ? "text-destructive" : ""}`}
+                  >
+                    {formatCLP(totals.remaining)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
+      )}
+
+      {currentPeriod && (
+        <BudgetItemDialog
+          open={itemDialogOpen}
+          onOpenChange={setItemDialogOpen}
+          periodId={currentPeriod.id}
+          categories={expenseCategories}
+          item={editingItem}
+        />
       )}
     </div>
   )

@@ -7,7 +7,7 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inv
 // 0000000000a1") don't follow. These are DB foreign keys — Postgres already
 // enforces the real uuid type and FK integrity — so this only needs to reject
 // obviously malformed input, not police RFC4122 compliance.
-const uuidSchema = (message: string) =>
+export const uuidSchema = (message: string) =>
   z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, message)
 
 export const upsertBudgetPeriodSchema = z

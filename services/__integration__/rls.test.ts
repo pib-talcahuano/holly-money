@@ -204,3 +204,234 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     await bursar.auth.signOut()
   })
 })
+
+const E2E_ADMIN_ID = "e2e00000-0000-0000-0000-000000000001"
+
+describeIfLocal("RLS: unauthenticated client — budget_items", () => {
+  it("cannot read budget_items table", async () => {
+    const anon = createClient<Database>(SUPABASE_URL, PUBLISHABLE_KEY)
+    const { data, error } = await anon.from("budget_items").select("id").limit(1)
+    if (error) {
+      expect(error.message).toMatch(/permission denied|JWT/i)
+    } else {
+      expect(data).toHaveLength(0)
+    }
+  })
+})
+
+describeIfLocal("RLS + RPC: budget_items", () => {
+  // Self-contained fixture: a far-future period, an EXPENSE and an INCOME category
+  // and movements around the period boundaries, all torn down in afterAll
+  // (children before parents — no ON DELETE CASCADE).
+  let periodId = ""
+  let expenseCategoryId = ""
+  let incomeCategoryId = ""
+  let expenseItemId = ""
+  let incomeItemId = ""
+  const movementIds: string[] = []
+  const adminClient = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+
+  beforeAll(async () => {
+    const admin = adminClient()
+    const { data: period, error: periodError } = await admin
+      .from("budget_periods")
+      .insert({ label: "Items fixture", start_date: "2098-01-01", end_date: "2098-01-31" })
+      .select()
+      .single()
+    if (periodError) throw periodError
+    periodId = period.id
+
+    const { data: categories, error: categoryError } = await admin
+      .from("movement_categories")
+      .insert([
+        { movement_type: "EXPENSE", name: "Items fixture expense" },
+        { movement_type: "INCOME", name: "Items fixture income" }
+      ])
+      .select()
+    if (categoryError) throw categoryError
+    expenseCategoryId = categories.find((c) => c.movement_type === "EXPENSE")!.id
+    incomeCategoryId = categories.find((c) => c.movement_type === "INCOME")!.id
+
+    // Explicit status on every row: a bulk insert with differing keys sends null for the rest.
+    const base = { created_by_id: E2E_ADMIN_ID, status: "ACTIVE" as const }
+    const { data: movements, error: movementError } = await admin
+      .from("movements")
+      .insert([
+        // first day, last day -> count
+        {
+          ...base,
+          category_id: expenseCategoryId,
+          movement_type: "EXPENSE",
+          amount: 100,
+          movement_date: "2098-01-01T12:00:00Z"
+        },
+        {
+          ...base,
+          category_id: expenseCategoryId,
+          movement_type: "EXPENSE",
+          amount: 200,
+          movement_date: "2098-01-31T12:00:00Z"
+        },
+        // outside the period -> ignored
+        {
+          ...base,
+          category_id: expenseCategoryId,
+          movement_type: "EXPENSE",
+          amount: 400,
+          movement_date: "2098-02-02T12:00:00Z"
+        },
+        // cancelled -> ignored
+        {
+          ...base,
+          category_id: expenseCategoryId,
+          movement_type: "EXPENSE",
+          amount: 800,
+          movement_date: "2098-01-15T12:00:00Z",
+          status: "CANCELLED"
+        },
+        // income movement in an income category -> ignored
+        {
+          ...base,
+          category_id: incomeCategoryId,
+          movement_type: "INCOME",
+          amount: 1600,
+          movement_date: "2098-01-15T12:00:00Z"
+        }
+      ])
+      .select("id")
+    if (movementError) throw movementError
+    movementIds.push(...movements.map((m) => m.id))
+
+    const { data: items, error: itemsError } = await admin
+      .from("budget_items")
+      .insert([
+        {
+          budget_period_id: periodId,
+          name: "Fixture expense item",
+          assigned_amount: 1000,
+          initial_used_amount: 50,
+          category_id: expenseCategoryId
+        },
+        {
+          budget_period_id: periodId,
+          name: "Fixture income item",
+          assigned_amount: 500,
+          initial_used_amount: 0,
+          category_id: incomeCategoryId
+        }
+      ])
+      .select()
+    if (itemsError) throw itemsError
+    expenseItemId = items.find((i) => i.name === "Fixture expense item")!.id
+    incomeItemId = items.find((i) => i.name === "Fixture income item")!.id
+  })
+
+  afterAll(async () => {
+    if (!periodId) return
+    const admin = adminClient()
+    await admin.from("budget_items").delete().eq("budget_period_id", periodId)
+    if (movementIds.length) await admin.from("movements").delete().in("id", movementIds)
+    await admin.from("movement_categories").delete().in("id", [expenseCategoryId, incomeCategoryId])
+    await admin.from("budget_periods").delete().eq("id", periodId)
+  })
+
+  it("MINISTER can neither read nor insert budget_items", async () => {
+    const minister = await signIn(E2E_USERS.minister)
+    const { data } = await minister
+      .from("budget_items")
+      .select("id")
+      .eq("budget_period_id", periodId)
+    expect(data ?? []).toHaveLength(0)
+    const { error } = await minister
+      .from("budget_items")
+      .insert({ budget_period_id: periodId, name: "Should fail", assigned_amount: 1 })
+    expect(error).not.toBeNull()
+    await minister.auth.signOut()
+  })
+
+  it("BURSAR can read, insert and update budget_items", async () => {
+    const bursar = await signIn(E2E_USERS.bursar)
+    const { data: read } = await bursar
+      .from("budget_items")
+      .select("id")
+      .eq("budget_period_id", periodId)
+    expect((read ?? []).length).toBeGreaterThan(0)
+
+    const { data: inserted, error: insertError } = await bursar
+      .from("budget_items")
+      .insert({ budget_period_id: periodId, name: "Bursar item", assigned_amount: 10 })
+      .select()
+      .single()
+    expect(insertError).toBeNull()
+
+    const { error: updateError } = await bursar
+      .from("budget_items")
+      .update({ is_active: false })
+      .eq("id", inserted!.id)
+    expect(updateError).toBeNull()
+    await bursar.auth.signOut()
+  })
+
+  it("rejects a duplicate name (case-insensitive) in the same period", async () => {
+    const { error } = await adminClient()
+      .from("budget_items")
+      .insert({ budget_period_id: periodId, name: "FIXTURE EXPENSE ITEM", assigned_amount: 1 })
+    expect(error?.code).toBe("23505")
+  })
+
+  it("get_budget_items_summary counts only active EXPENSE movements inside the period", async () => {
+    const { data, error } = await adminClient().rpc("get_budget_items_summary", {
+      p_period_id: periodId
+    })
+    expect(error).toBeNull()
+    const rows = data as unknown as {
+      item_id: string
+      name: string
+      category_name: string | null
+      assigned_amount: number
+      used_amount: number
+      remaining: number
+    }[]
+    const expenseRow = rows.find((r) => r.item_id === expenseItemId)!
+    expect(expenseRow.category_name).toBe("Items fixture expense")
+    expect(Number(expenseRow.used_amount)).toBe(350) // 50 initial + 100 + 200
+    expect(Number(expenseRow.remaining)).toBe(650)
+    const incomeRow = rows.find((r) => r.item_id === incomeItemId)!
+    expect(Number(incomeRow.used_amount)).toBe(0)
+  })
+
+  it("frees the name of a deactivated item so it can be created again", async () => {
+    const admin = adminClient()
+    const { data: first, error: firstError } = await admin
+      .from("budget_items")
+      .insert({
+        budget_period_id: periodId,
+        name: "Reusable name",
+        assigned_amount: 1,
+        initial_used_amount: 0
+      })
+      .select()
+      .single()
+    expect(firstError).toBeNull()
+    await admin.from("budget_items").update({ is_active: false }).eq("id", first!.id)
+
+    const { error } = await admin.from("budget_items").insert({
+      budget_period_id: periodId,
+      name: "reusable NAME",
+      assigned_amount: 1,
+      initial_used_amount: 0
+    })
+    expect(error).toBeNull()
+  })
+
+  it("get_budget_items_summary omits inactive items and is not callable by authenticated users", async () => {
+    const bursar = await signIn(E2E_USERS.bursar)
+    const { data } = await adminClient().rpc("get_budget_items_summary", { p_period_id: periodId })
+    expect((data as unknown as { name: string }[]).some((r) => r.name === "Bursar item")).toBe(
+      false
+    )
+    const { error } = await bursar.rpc("get_budget_items_summary", { p_period_id: periodId })
+    expect(error).not.toBeNull()
+    await bursar.auth.signOut()
+  })
+})
