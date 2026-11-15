@@ -84,13 +84,15 @@ async function loadIdentity(userId: string) {
 // starting/stopping impersonation itself — never derived from the effective identity.
 export const getRealUser = cache(async function getRealUser() {
   const supabase = await createSupabaseServerClient()
-  const {
-    data: { user }
-  } = await supabase.auth.getUser()
+  // Local JWT verification (see proxy.ts) — no Auth round trip. A token that was
+  // revoked server-side stays valid until it expires, so loadIdentity() below remains
+  // the per-request gate: it re-reads the users row and rejects anything not ACTIVE.
+  const { data } = await supabase.auth.getClaims()
+  const userId = data?.claims?.sub
 
-  if (!user) return null
+  if (!userId) return null
 
-  return loadIdentity(user.id)
+  return loadIdentity(userId)
 })
 
 async function getActiveImpersonation(realUserId: string) {

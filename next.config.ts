@@ -42,6 +42,13 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_COMMIT_SHA_FULL: getCommitHash(false)
   },
   experimental: {
+    // Every page is dynamic, so by default the client router refetches a page each
+    // time it's visited. Keep a visited page for 30s so back/forward and quick
+    // revisits are instant. Mutations still invalidate it (revalidatePath in server
+    // actions, router.refresh() after API calls and realtime events).
+    staleTimes: {
+      dynamic: 30
+    },
     serverActions: {
       // Default is 1MB, which rejects movement attachment uploads (up to 30MB).
       // 35mb leaves headroom above the 30MB file cap for multipart overhead.

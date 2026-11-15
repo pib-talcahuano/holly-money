@@ -3,7 +3,7 @@ import { NextRequest } from "next/server"
 import { proxy } from "../proxy"
 
 jest.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({ auth: { getUser: () => Promise.resolve({ data: { user: null } }) } })
+  createServerClient: () => ({ auth: { getClaims: () => Promise.resolve({ data: null, error: null }) } })
 }))
 
 const call = (path: string) =>
