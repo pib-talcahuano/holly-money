@@ -435,3 +435,32 @@ describeIfLocal("RLS + RPC: budget_items", () => {
     await bursar.auth.signOut()
   })
 })
+
+describeIfLocal("RPC privileges: service-role-only summaries", () => {
+  // Supabase default privileges grant EXECUTE on public functions to anon/authenticated,
+  // and `REVOKE ... FROM PUBLIC` does not remove those grants. These two SECURITY DEFINER
+  // RPCs bypass RLS and are only meant to be called through the admin client.
+  const rpcs = [
+    ["get_ministry_budget_summary", {}],
+    ["get_ministry_leftover_summary", { p_ministry_id: E2E_MINISTRY_ID }]
+  ] as const
+
+  it.each(rpcs)("%s is not callable by a MINISTER", async (name, args) => {
+    const minister = await signIn(E2E_USERS.minister)
+    const { error } = await minister.rpc(name, args)
+    expect(error).not.toBeNull()
+    await minister.auth.signOut()
+  })
+
+  it.each(rpcs)("%s is not callable by anon", async (name, args) => {
+    const anon = createClient<Database>(SUPABASE_URL, PUBLISHABLE_KEY)
+    const { error } = await anon.rpc(name, args)
+    expect(error).not.toBeNull()
+  })
+
+  it.each(rpcs)("%s still works for the service role", async (name, args) => {
+    const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+    const { error } = await admin.rpc(name, args)
+    expect(error).toBeNull()
+  })
+})
