@@ -19,21 +19,10 @@ import {
   ChartTooltip,
   ChartTooltipContent
 } from "@/components/ui/chart"
-import { formatCLP } from "@/lib/utils"
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty"
-import { BarChart2, PieChart as PieChartIcon, TrendingUp as TrendUpIcon } from "lucide-react"
+import { BarChart2, TrendingUp as TrendUpIcon } from "lucide-react"
 
 type SeriesItem = { name: string; income: number; expense: number }
-type CategoryItem = { category: string; total: number }
-
-const COLORS = [
-  "var(--color-chart-1)",
-  "var(--color-chart-2)",
-  "var(--color-chart-3)",
-  "var(--color-chart-4)",
-  "var(--color-chart-5)"
-]
-
 const incomeExpenseConfig = {
   income: {
     label: "Ingresos",
@@ -205,51 +194,6 @@ export const BalanceHistoryChart = memo(function BalanceHistoryChart({
           </AreaChart>
         </ResponsiveContainer>
       </ChartContainer>
-    </div>
-  )
-})
-
-export const CategoryChart = memo(function CategoryChart({ data }: { data: CategoryItem[] }) {
-  const grandTotal = useMemo(() => data.reduce((sum, item) => sum + item.total, 0), [data])
-
-  if (!data.length) {
-    return (
-      <Empty className="border-dashed h-[200px]">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <PieChartIcon />
-          </EmptyMedia>
-          <EmptyTitle>Sin categorías</EmptyTitle>
-          <EmptyDescription>No hay datos para el período seleccionado.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-4 w-full min-w-0">
-      {data.map((item, index) => {
-        const pct = grandTotal > 0 ? (item.total / grandTotal) * 100 : 0
-        return (
-          <div key={item.category}>
-            <div className="flex items-baseline justify-between gap-2.5 mb-1">
-              <span className="text-xs font-semibold text-foreground min-w-0 truncate">
-                {item.category}
-              </span>
-              <span className="text-[11.5px] font-bold text-muted-foreground whitespace-nowrap">
-                {formatCLP(item.total)}{" "}
-                <span className="text-faint font-semibold">· {pct.toFixed(0)}%</span>
-              </span>
-            </div>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${pct}%`, backgroundColor: COLORS[index % COLORS.length] }}
-              />
-            </div>
-          </div>
-        )
-      })}
     </div>
   )
 })

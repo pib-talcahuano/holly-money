@@ -5,9 +5,9 @@ import { PERMISSIONS, can } from "@/lib/permissions/rbac"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import {
   IncomeExpenseChart,
-  CategoryChart,
   BalanceHistoryChart
-} from "@/components/dashboard/dashboard-charts"
+} from "@/components/dashboard/dashboard-charts-lazy"
+import { CategoryChart } from "@/components/dashboard/category-chart"
 import { SeveranceReserveCard } from "@/components/dashboard/severance-reserve-card"
 import { MinistryLeftoverWidget } from "@/components/dashboard/ministry-leftover-widget"
 import { MovementsTable } from "@/components/movements/movements-table"
