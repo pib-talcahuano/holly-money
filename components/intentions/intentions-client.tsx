@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Clock, CheckCircle2, XCircle, FileText, Ban } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty"
@@ -53,7 +52,6 @@ export function IntentionsClient({
   intentions: Intention[]
   ministry: Ministry
 }) {
-  const router = useRouter()
   const [intentions, setIntentions] = useState<Intention[]>(initialIntentions)
 
   // Resync on router.refresh() (e.g. from useRealtimeRefresh below) — useState's
@@ -173,7 +171,7 @@ export function IntentionsClient({
                       intention={intention}
                       isMinister={isMinister}
                       closed={false}
-                      onClick={() => router.push(`/requests/${intention.id}`)}
+                      href={`/requests/${intention.id}`}
                     />
                   ))}
                 </div>
@@ -199,7 +197,7 @@ export function IntentionsClient({
                       intention={intention}
                       isMinister={isMinister}
                       closed
-                      onClick={() => router.push(`/requests/${intention.id}`)}
+                      href={`/requests/${intention.id}`}
                     />
                   ))}
                 </div>
@@ -218,21 +216,21 @@ function IntentionCard({
   intention,
   isMinister,
   closed,
-  onClick
+  href
 }: {
   intention: Intention
   isMinister: boolean
   closed: boolean
-  onClick: () => void
+  href: string
 }) {
   const ministryName = intention.ministries?.name ?? "Sin ministerio"
   const { icon: StatusIcon, color: statusColor } = STATUS_LINE_META[intention.status]
 
   return (
-    <div
-      onClick={onClick}
+    <Link
+      href={href}
       className={cn(
-        "cursor-pointer rounded-2xl border border-border p-[18px] transition-colors",
+        "block rounded-2xl border border-border p-[18px] transition-colors",
         closed ? "bg-muted/40" : "bg-card shadow-[0_1px_2px_rgba(22,17,41,.04)] hover:border-input"
       )}
     >
@@ -299,6 +297,6 @@ function IntentionCard({
         </span>
         <span className="text-[11.5px] text-faint">{formatDate(intention.created_at)}</span>
       </div>
-    </div>
+    </Link>
   )
 }

@@ -6,6 +6,14 @@ import { sendForgotPasswordEmail } from "@/services/email/resend.service"
 import { wrapAuthLink } from "@/services/auth/link-wrapper"
 import { getSiteUrl } from "@/lib/utils"
 
+// Server-side sign-out: clears the session cookies without the browser having to
+// download supabase-js just for this button (it used to ship on every dashboard page).
+export async function signOut() {
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.auth.signOut()
+  if (error) throw new Error("No se pudo cerrar la sesión")
+}
+
 export async function activateAccount() {
   const supabase = await createSupabaseServerClient()
   const {

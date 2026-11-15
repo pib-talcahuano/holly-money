@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm, Controller, type Resolver } from "react-hook-form"
@@ -43,7 +44,6 @@ import { DatePicker } from "@/components/ui/date-picker"
 import { AttachmentInput } from "@/components/ui/attachment-input"
 import { CommentThread } from "@/components/intentions/comment-thread"
 import { RichText } from "@/components/ui/rich-text"
-import { RichTextEditor } from "@/components/ui/rich-text-editor"
 import { useAttachmentUpload } from "@/hooks/use-attachment-upload"
 import type { ThreadEvent } from "@/lib/comment-thread"
 import { formatDate, formatCLP, avatarColorFor, initialsFor } from "@/lib/utils"
@@ -79,6 +79,13 @@ import {
   closeIntentionSettlements
 } from "@/app/actions/ministry-settlements"
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh"
+
+// Tiptap/ProseMirror is ~200 KB gzipped and only needed once a comment box is on
+// screen (PENDING requests), so it loads on demand instead of with the page.
+const RichTextEditor = dynamic(
+  () => import("@/components/ui/rich-text-editor").then((mod) => mod.RichTextEditor),
+  { ssr: false, loading: () => <div className="min-h-[116px] rounded-md border" aria-hidden /> }
+)
 
 type Intention = Awaited<ReturnType<typeof intentionsService.getById>>
 type Transfer = Awaited<ReturnType<typeof intentionsService.getTransfer>>

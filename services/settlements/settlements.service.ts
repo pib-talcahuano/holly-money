@@ -10,6 +10,7 @@ import type {
   ReviewSettlementInput,
   CloseIntentionInput
 } from "@/lib/validators/settlement"
+import { runAfterResponse } from "@/lib/utils/run-after-response"
 
 type DB = SupabaseClient<Database>
 
@@ -310,11 +311,13 @@ export const settlementsService = {
       })
 
       if (ministerUser?.email) {
-        await sendSettlementReturnedNotification(
-          { intention_id: current.intention_id, amount: current.amount, description: current.description },
-          ministerUser,
-          input.message
-        ).catch(() => null)
+        runAfterResponse("sendSettlementReturnedNotification", () =>
+          sendSettlementReturnedNotification(
+            { intention_id: current.intention_id, amount: current.amount, description: current.description },
+            ministerUser,
+            input.message
+          )
+        )
       }
 
       return { alreadyActioned: false, data }
@@ -414,11 +417,14 @@ export const settlementsService = {
     })
 
     if (ministerUser?.email) {
-      await sendSettlementReviewNotification(
-        { intention_id: current.intention_id, amount: current.amount, description: current.description },
-        ministerUser,
-        input.action
-      ).catch(() => null)
+      const action = input.action
+      runAfterResponse("sendSettlementReviewNotification", () =>
+        sendSettlementReviewNotification(
+          { intention_id: current.intention_id, amount: current.amount, description: current.description },
+          ministerUser,
+          action
+        )
+      )
     }
 
     return { alreadyActioned: false, data }

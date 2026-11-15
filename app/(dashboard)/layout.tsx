@@ -4,6 +4,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import { SiteHeader } from "@/components/dashboard/site-header"
 import { ImpersonationBanner } from "@/components/dashboard/impersonation-banner"
+import { NavigationProgress } from "@/components/dashboard/navigation-progress"
 import { UserProvider } from "@/components/providers/user-provider"
 import { hasAnyRole } from "@/lib/constants/roles"
 import { ministriesService } from "@/services/ministries/ministries.service"
@@ -34,6 +35,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <UserProvider user={sessionUser}>
+      <NavigationProgress />
       <div className="flex min-h-svh flex-col">
         <ImpersonationBanner />
         <SidebarProvider className="min-h-0 flex-1">

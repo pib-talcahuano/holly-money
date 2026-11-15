@@ -280,3 +280,31 @@
   --on-warn: #ffdf9e;
   --role-purple-surface: #3a3266;
 }
+
+/* Top-of-page bar shown while a navigation is pending (components/dashboard/
+   navigation-progress.tsx). The delay keeps it from flashing on navigations that
+   resolve from the client cache; it then creeps toward the end without reaching it. */
+@keyframes navigation-progress {
+  0% {
+    transform: scaleX(0);
+  }
+  40% {
+    transform: scaleX(0.6);
+  }
+  100% {
+    transform: scaleX(0.92);
+  }
+}
+
+.navigation-progress-bar {
+  transform: scaleX(0);
+  animation: navigation-progress 4s cubic-bezier(0.1, 0.6, 0.2, 1) 120ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navigation-progress-bar {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0.6;
+  }
+}

@@ -18,25 +18,35 @@ export default async function MinistryDetailPage({ params }: { params: Promise<{
 
   // A MINISTER can't reach here via MANAGE_MINISTRIES — only via owning the assigned
   // ministry (see the "Ministerio: {name}" link on /requests). Anyone else is denied.
-  if (!canManage) {
-    if (!isMinisterWorkflowUser(user.permissions)) redirect("/dashboard")
-    const assignment = await ministriesService.getMinistryForUser(db, user.id)
-    if (assignment?.ministry_id !== id) redirect("/dashboard")
-  }
+  if (!canManage && !isMinisterWorkflowUser(user.permissions)) redirect("/dashboard")
 
-  const [ministry, assignments, delegates, users, leftover, intentions, associatedMovements, budgetSummary] =
-    await Promise.all([
-      ministriesService.getById(db, id).catch(() => null),
-      ministriesService.getAssignments(db, id),
-      ministriesService.listDelegates(db, id),
-      // The full user directory (names/emails) is only needed to populate the assign-minister
-      // picker — skip it for read-only viewers instead of shipping it in the page payload.
-      canManage ? usersService.list() : Promise.resolve([]),
-      ministryLeftoverService.getSummary(id),
-      intentionsService.list(db, { ministryId: id }),
-      ministriesService.getAssociatedMovements(db, id),
-      ministryBudgetService.getSummary()
-    ])
+  // The ownership lookup runs alongside the page data instead of ahead of it; nothing
+  // is rendered until it's checked right below.
+  const [
+    ownAssignment,
+    ministry,
+    assignments,
+    delegates,
+    users,
+    leftover,
+    intentions,
+    associatedMovements,
+    budgetSummary
+  ] = await Promise.all([
+    canManage ? null : ministriesService.getMinistryForUser(db, user.id),
+    ministriesService.getById(db, id).catch(() => null),
+    ministriesService.getAssignments(db, id),
+    ministriesService.listDelegates(db, id),
+    // The full user directory (names/emails) is only needed to populate the assign-minister
+    // picker — skip it for read-only viewers instead of shipping it in the page payload.
+    canManage ? usersService.list() : Promise.resolve([]),
+    ministryLeftoverService.getSummary(id),
+    intentionsService.list(db, { ministryId: id }),
+    ministriesService.getAssociatedMovements(db, id),
+    ministryBudgetService.getSummary()
+  ])
+
+  if (!canManage && ownAssignment?.ministry_id !== id) redirect("/dashboard")
 
   if (!ministry) notFound()
 

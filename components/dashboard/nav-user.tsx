@@ -2,7 +2,6 @@
 
 import { useCallback, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -17,6 +16,7 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui
 import { ChevronsUpDown, LogOut, Moon, Sun, UserCircle, VenetianMask } from "lucide-react"
 import Link from "next/link"
 import { stopImpersonation } from "@/app/actions/impersonation"
+import { signOut } from "@/app/actions/auth"
 import { useUser } from "@/components/providers/user-provider"
 import { useTheme } from "@/hooks/use-theme"
 import { rolesLabel } from "@/lib/constants/roles"
@@ -40,11 +40,11 @@ export function NavUser({
   const [isStoppingImpersonation, startStopImpersonation] = useTransition()
 
   const handleSignOut = useCallback(async () => {
-    const supabase = createSupabaseBrowserClient()
-    await supabase.auth.signOut()
-    router.push("/")
-    router.refresh()
-  }, [router])
+    await signOut()
+    // Full document load rather than router.push: drops every client-side cache
+    // (router cache, in-memory state) so nothing from this session outlives it.
+    window.location.assign("/")
+  }, [])
 
   const handleStopImpersonating = () => {
     startStopImpersonation(async () => {

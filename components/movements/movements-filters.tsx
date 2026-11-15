@@ -9,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { startNavigationProgress } from "@/components/dashboard/navigation-progress"
 
 type MovementType = "INCOME" | "EXPENSE" | "ALL"
 type MovementStatus = "ACTIVE" | "CANCELLED" | "ALL"
@@ -35,6 +36,7 @@ export function MovementsFilters({ initialSearch, initialMovementType, initialSt
     if (params.movementType !== "ALL") qs.set("movement_type", params.movementType)
     if (params.status !== "ALL") qs.set("status", params.status)
     const q = qs.toString()
+    startNavigationProgress()
     router.push(`/movements${q ? `?${q}` : ""}`)
   }
 
@@ -52,6 +54,7 @@ export function MovementsFilters({ initialSearch, initialMovementType, initialSt
     setSearch("")
     setMovementType("ALL")
     setStatus("ALL")
+    startNavigationProgress()
     router.push("/movements")
   }
 
