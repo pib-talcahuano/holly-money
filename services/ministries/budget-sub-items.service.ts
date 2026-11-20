@@ -28,17 +28,33 @@ export const budgetSubItemsService = {
       notes: rest.notes ?? null
     }
 
+    // On update the stored parent is authoritative: reparenting is not allowed, so the
+    // category rule is checked against it and the parent columns are never written.
+    let isMinistryParent = values.ministry_budget_id !== null
+    if (id) {
+      const { data: stored, error: storedError } = await db
+        .from("budget_sub_items")
+        .select("ministry_budget_id")
+        .eq("id", id)
+        .maybeSingle()
+      if (storedError) throw storedError
+      if (!stored) throw new Error("Sub-ítem no encontrado")
+      isMinistryParent = stored.ministry_budget_id !== null
+    }
+
     if (values.category_id) {
-      if (values.ministry_budget_id) {
+      if (isMinistryParent) {
         throw new Error("Los sub-ítems de ministerio no pueden tener categoría")
       }
       await assertExpenseCategory(db, values.category_id)
     }
 
     if (id) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { ministry_budget_id, budget_item_id, ...updatable } = values
       const { data, error } = await db
         .from("budget_sub_items")
-        .update({ ...values, updated_at: new Date().toISOString() })
+        .update({ ...updatable, updated_at: new Date().toISOString() })
         .eq("id", id)
         .select()
         .single()
@@ -49,7 +65,7 @@ export const budgetSubItemsService = {
         action: "BUDGET_SUB_ITEM_UPDATED",
         user_id: userId,
         entity_id: data.id,
-        new_value: values
+        new_value: updatable
       })
       return data
     }

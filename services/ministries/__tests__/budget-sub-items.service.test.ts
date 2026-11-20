@@ -18,7 +18,12 @@ const underMinistry = { ministry_budget_id: BUDGET_ID, name: "Viajes", assigned_
 
 type Result = { data: unknown; error: unknown }
 
-function fakeDb(results: { categoryType?: string | null; write?: Result; list?: Result }) {
+function fakeDb(results: {
+  stored?: { ministry_budget_id: string | null } | null
+  categoryType?: string | null
+  write?: Result
+  list?: Result
+}) {
   const writes: { table: string; op: string; payload: unknown }[] = []
   const filters: [string, unknown][] = []
   const db = {
@@ -44,7 +49,13 @@ function fakeDb(results: { categoryType?: string | null; write?: Result; list?: 
               error: null
             })
           : resolveWrite()
-      chain.maybeSingle = chain.single
+      chain.maybeSingle = () =>
+        table === "budget_sub_items"
+          ? Promise.resolve({
+              data: results.stored === undefined ? { ministry_budget_id: null } : results.stored,
+              error: null
+            })
+          : (chain.single as () => Promise<Result>)()
       chain.then = (res: (v: Result) => unknown) =>
         Promise.resolve(results.list ?? { data: [], error: null }).then(res)
       return chain
@@ -106,6 +117,48 @@ describe("budgetSubItemsService.upsert", () => {
       "Ya existe un sub-ítem con ese nombre"
     )
     expect(mockLogSystem).not.toHaveBeenCalled()
+  })
+})
+
+describe("budgetSubItemsService.upsert (update)", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("never writes a parent column, even if the input carries a different parent", async () => {
+    const { db, writes } = fakeDb({})
+    await budgetSubItemsService.upsert(
+      db,
+      { ...underMinistry, id: SUB_ID, budget_item_id: null, ministry_budget_id: BUDGET_ID },
+      "user-1"
+    )
+    await budgetSubItemsService.upsert(db, { ...underItem, id: SUB_ID }, "user-1")
+    for (const w of writes) {
+      expect(w.payload).not.toHaveProperty("ministry_budget_id")
+      expect(w.payload).not.toHaveProperty("budget_item_id")
+    }
+    expect(writes).toHaveLength(2)
+  })
+
+  it("rejects a category when the STORED parent is a ministry budget", async () => {
+    const { db, writes } = fakeDb({
+      stored: { ministry_budget_id: BUDGET_ID },
+      categoryType: "EXPENSE"
+    })
+    await expect(
+      budgetSubItemsService.upsert(
+        db,
+        { ...underItem, id: SUB_ID, category_id: CATEGORY_ID },
+        "user-1"
+      )
+    ).rejects.toThrow("Los sub-ítems de ministerio no pueden tener categoría")
+    expect(writes).toHaveLength(0)
+  })
+
+  it("throws a friendly error when the row does not exist or is hidden", async () => {
+    const { db, writes } = fakeDb({ stored: null })
+    await expect(
+      budgetSubItemsService.upsert(db, { ...underItem, id: SUB_ID }, "user-1")
+    ).rejects.toThrow("Sub-ítem no encontrado")
+    expect(writes).toHaveLength(0)
   })
 })
 
