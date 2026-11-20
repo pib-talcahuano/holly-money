@@ -6,19 +6,36 @@ import { ministryBudgetService } from "@/services/ministries/ministry-budget.ser
 import { budgetItemsService } from "@/services/ministries/budget-items.service"
 import { MinistryBudgetAdmin } from "@/components/ministries/ministry-budget-admin"
 
-export default async function BudgetsPage() {
+type Props = { searchParams: Promise<{ year?: string }> }
+
+export default async function BudgetsPage({ searchParams }: Props) {
   const user = await getCurrentUser()
   if (!user || !can(user.permissions, PERMISSIONS.MANAGE_BUDGETS)) redirect("/dashboard")
 
+  const { year } = await searchParams
   const db = await createSupabaseServerClient()
-  const [ministries, currentPeriod, budgetSummary, itemSummary, expenseCategories] =
-    await Promise.all([
-      ministriesService.list(db),
-      ministryBudgetService.getCurrentPeriod(db),
-      ministryBudgetService.getSummary(),
-      budgetItemsService.getSummary(),
-      budgetItemsService.listExpenseCategories(db)
-    ])
+  const [ministries, periods, currentPeriod, expenseCategories] = await Promise.all([
+    ministriesService.list(db),
+    ministryBudgetService.listPeriods(db),
+    ministryBudgetService.getCurrentPeriod(db),
+    budgetItemsService.listExpenseCategories(db)
+  ])
+
+  // Selected year: ?year= if it matches an existing period, else the period containing today,
+  // else the most recent one (periods come ordered by year desc).
+  const selectedPeriod =
+    periods.find((p) => String(p.year) === year) ??
+    periods.find((p) => p.id === currentPeriod?.id) ??
+    periods[0] ??
+    null
+  const suggestedYear = periods.length > 0 ? periods[0].year + 1 : new Date().getFullYear()
+
+  const [budgetSummary, itemSummary] = selectedPeriod
+    ? await Promise.all([
+        ministryBudgetService.getSummary(selectedPeriod.id),
+        budgetItemsService.getSummary(selectedPeriod.id)
+      ])
+    : [[], []]
 
   return (
     <section className="flex flex-col gap-6">
@@ -27,13 +44,15 @@ export default async function BudgetsPage() {
           Presupuesto
         </h1>
         <p className="text-[13.5px] text-muted-foreground">
-          Presupuesto por ministerio y otros ítems para el período vigente.
+          Presupuesto por ministerio y otros ítems por año (marzo a febrero).
         </p>
       </div>
 
       <MinistryBudgetAdmin
         ministries={ministries}
-        currentPeriod={currentPeriod}
+        periods={periods}
+        selectedPeriod={selectedPeriod}
+        suggestedYear={suggestedYear}
         summary={budgetSummary}
         itemSummary={itemSummary}
         expenseCategories={expenseCategories}

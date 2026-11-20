@@ -1,28 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { CalendarRange, Pencil, Plus, Wallet, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger
-} from "@/components/ui/dialog"
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty"
-import { Field, FieldLabel, FieldError } from "@/components/ui/field"
 import { formatCLP, formatDate } from "@/lib/utils"
-import {
-  upsertBudgetPeriodSchema,
-  type UpsertBudgetPeriodInput
-} from "@/lib/validators/ministry-budget"
-import { upsertBudgetPeriod, upsertMinistryBudget } from "@/app/actions/ministry-budgets"
+import { createBudgetPeriod, upsertMinistryBudget } from "@/app/actions/ministry-budgets"
 import { updateBudgetItemAmounts, setBudgetItemActive } from "@/app/actions/budget-items"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
@@ -30,11 +16,19 @@ import { BudgetItemDialog } from "./budget-item-dialog"
 import { buildBudgetRows, pendingEdits, sumTotals, type BudgetRow, type Draft } from "./budget-rows"
 
 type Ministry = { id: string; name: string; is_active: boolean }
-type BudgetPeriod = { id: string; label: string; start_date: string; end_date: string }
+type BudgetPeriod = {
+  id: string
+  year: number
+  label: string
+  start_date: string
+  end_date: string
+}
 
 type Props = {
   ministries: Ministry[]
-  currentPeriod: BudgetPeriod | null
+  periods: BudgetPeriod[]
+  selectedPeriod: BudgetPeriod | null
+  suggestedYear: number
   summary: MinistryBudgetSummaryRow[]
   itemSummary: BudgetItemSummaryRow[]
   expenseCategories: { id: string; name: string }[]
@@ -42,13 +36,15 @@ type Props = {
 
 export function MinistryBudgetAdmin({
   ministries,
-  currentPeriod,
+  periods,
+  selectedPeriod,
+  suggestedYear,
   summary,
   itemSummary,
   expenseCategories
 }: Props) {
   const router = useRouter()
-  const [periodDialogOpen, setPeriodDialogOpen] = useState(false)
+  const [creatingPeriod, setCreatingPeriod] = useState(false)
   const [itemDialogOpen, setItemDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<BudgetRow | null>(null)
   const [saving, setSaving] = useState(false)
@@ -69,30 +65,22 @@ export function MinistryBudgetAdmin({
     setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
   }
 
-  const periodForm = useForm<UpsertBudgetPeriodInput>({
-    resolver: zodResolver(upsertBudgetPeriodSchema),
-    defaultValues: currentPeriod
-      ? {
-          id: currentPeriod.id,
-          label: currentPeriod.label,
-          start_date: currentPeriod.start_date,
-          end_date: currentPeriod.end_date
-        }
-      : { label: "", start_date: "", end_date: "" }
-  })
-
-  async function handlePeriodSubmit(values: UpsertBudgetPeriodInput) {
+  async function handleCreatePeriod() {
+    setCreatingPeriod(true)
     try {
-      await upsertBudgetPeriod(values)
-      setPeriodDialogOpen(false)
-      toast.success("Período guardado")
+      await createBudgetPeriod({ year: suggestedYear })
+      toast.success(`Presupuesto ${suggestedYear} creado`)
+      router.push(`/budgets?year=${suggestedYear}`)
+      router.refresh()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar el período")
+      toast.error(err instanceof Error ? err.message : "Error al crear el presupuesto")
+    } finally {
+      setCreatingPeriod(false)
     }
   }
 
   async function handleSaveBudgets() {
-    if (!currentPeriod) return
+    if (!selectedPeriod) return
     setSaving(true)
     try {
       await Promise.all(
@@ -100,7 +88,7 @@ export function MinistryBudgetAdmin({
           e.kind === "ministry"
             ? upsertMinistryBudget({
                 ministry_id: e.id,
-                budget_period_id: currentPeriod.id,
+                budget_period_id: selectedPeriod.id,
                 assigned_amount: e.assigned,
                 initial_used_amount: e.initial
               })
@@ -144,16 +132,16 @@ export function MinistryBudgetAdmin({
             <CalendarRange className="size-4 text-primary" />
           </div>
           <div>
-            {currentPeriod ? (
+            {selectedPeriod ? (
               <>
-                <p className="text-sm font-bold text-foreground">{currentPeriod.label}</p>
+                <p className="text-sm font-bold text-foreground">{selectedPeriod.label}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatDate(currentPeriod.start_date)} – {formatDate(currentPeriod.end_date)}
+                  {formatDate(selectedPeriod.start_date)} – {formatDate(selectedPeriod.end_date)}
                 </p>
               </>
             ) : (
               <>
-                <p className="text-sm font-bold text-foreground">No hay período vigente</p>
+                <p className="text-sm font-bold text-foreground">No hay presupuestos</p>
                 <p className="text-xs text-muted-foreground">
                   Crea uno para poder cargar montos por ministerio
                 </p>
@@ -161,57 +149,40 @@ export function MinistryBudgetAdmin({
             )}
           </div>
         </div>
-        <Dialog open={periodDialogOpen} onOpenChange={setPeriodDialogOpen}>
-          <DialogTrigger
-            render={
-              <Button variant={currentPeriod ? "outline" : "default"}>
-                {currentPeriod ? "Editar período" : "Crear período"}
-              </Button>
-            }
-          />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {currentPeriod ? "Editar período" : "Nuevo período de presupuesto"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={periodForm.handleSubmit(handlePeriodSubmit)} className="space-y-4 pt-2">
-              <Field>
-                <FieldLabel htmlFor="label">Nombre *</FieldLabel>
-                <Input
-                  id="label"
-                  placeholder="Presupuesto 2026"
-                  {...periodForm.register("label")}
-                />
-                <FieldError errors={[periodForm.formState.errors.label]} />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="start_date">Desde *</FieldLabel>
-                <Input id="start_date" type="date" {...periodForm.register("start_date")} />
-                <FieldError errors={[periodForm.formState.errors.start_date]} />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="end_date">Hasta *</FieldLabel>
-                <Input id="end_date" type="date" {...periodForm.register("end_date")} />
-                <FieldError errors={[periodForm.formState.errors.end_date]} />
-              </Field>
-              <Button type="submit" className="w-full" disabled={periodForm.formState.isSubmitting}>
-                {periodForm.formState.isSubmitting ? "Guardando..." : "Guardar período"}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          {periods.length > 0 && (
+            <select
+              aria-label="Año del presupuesto"
+              className="h-9 rounded-lg border border-border bg-background px-3 text-sm"
+              value={selectedPeriod?.year ?? ""}
+              onChange={(e) => router.push(`/budgets?year=${e.target.value}`)}
+            >
+              {periods.map((p) => (
+                <option key={p.id} value={p.year}>
+                  {p.year}
+                </option>
+              ))}
+            </select>
+          )}
+          <Button
+            variant={selectedPeriod ? "outline" : "default"}
+            onClick={handleCreatePeriod}
+            disabled={creatingPeriod}
+          >
+            {creatingPeriod ? "Creando..." : `Crear presupuesto ${suggestedYear}`}
+          </Button>
+        </div>
       </div>
 
-      {!currentPeriod ? (
+      {!selectedPeriod ? (
         <Empty>
           <EmptyMedia>
             <Wallet className="size-10 text-muted-foreground" />
           </EmptyMedia>
           <EmptyHeader>
-            <EmptyTitle>No hay período vigente</EmptyTitle>
+            <EmptyTitle>No hay presupuestos</EmptyTitle>
             <EmptyDescription>
-              Crea un período arriba para poder cargar montos por ministerio.
+              Crea un presupuesto arriba para poder cargar montos por ministerio.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -339,11 +310,11 @@ export function MinistryBudgetAdmin({
         </div>
       )}
 
-      {currentPeriod && (
+      {selectedPeriod && (
         <BudgetItemDialog
           open={itemDialogOpen}
           onOpenChange={setItemDialogOpen}
-          periodId={currentPeriod.id}
+          periodId={selectedPeriod.id}
           categories={expenseCategories}
           item={editingItem}
         />

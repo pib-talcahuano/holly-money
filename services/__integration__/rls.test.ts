@@ -117,7 +117,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
     const { data: period, error: periodError } = await admin
       .from("budget_periods")
-      .insert({ label: "RLS fixture", start_date: "2099-06-01", end_date: "2099-06-30" })
+      .insert({
+        label: "RLS fixture",
+        year: 2099,
+        start_date: "2099-06-01",
+        end_date: "2099-06-30"
+      })
       .select()
       .single()
     if (periodError) throw periodError
@@ -144,7 +149,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const minister = await signIn(E2E_USERS.minister)
     const { error } = await minister
       .from("budget_periods")
-      .insert({ label: "RLS test — should fail", start_date: "2099-01-01", end_date: "2099-01-31" })
+      .insert({
+        label: "RLS test — should fail",
+        year: 2096,
+        start_date: "2099-01-01",
+        end_date: "2099-01-31"
+      })
     expect(error).not.toBeNull()
     await minister.auth.signOut()
   })
@@ -174,7 +184,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const admin = await signIn(E2E_USERS.admin)
     const { data, error } = await admin
       .from("budget_periods")
-      .insert({ label: "RLS test — admin", start_date: "2099-02-01", end_date: "2099-02-28" })
+      .insert({
+        label: "RLS test — admin",
+        year: 2095,
+        start_date: "2099-02-01",
+        end_date: "2099-02-28"
+      })
       .select()
       .single()
     expect(error).toBeNull()
@@ -191,7 +206,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const bursar = await signIn(E2E_USERS.bursar)
     const { data, error } = await bursar
       .from("budget_periods")
-      .insert({ label: "RLS test — bursar", start_date: "2099-03-01", end_date: "2099-03-31" })
+      .insert({
+        label: "RLS test — bursar",
+        year: 2094,
+        start_date: "2099-03-01",
+        end_date: "2099-03-31"
+      })
       .select()
       .single()
     expect(error).toBeNull()
@@ -235,7 +255,12 @@ describeIfLocal("RLS + RPC: budget_items", () => {
     const admin = adminClient()
     const { data: period, error: periodError } = await admin
       .from("budget_periods")
-      .insert({ label: "Items fixture", start_date: "2098-01-01", end_date: "2098-01-31" })
+      .insert({
+        label: "Items fixture",
+        year: 2098,
+        start_date: "2098-01-01",
+        end_date: "2098-01-31"
+      })
       .select()
       .single()
     if (periodError) throw periodError

@@ -204,6 +204,7 @@ export type Database = {
           label: string
           start_date: string
           updated_at: string
+          year: number
         }
         ComputedFields: never
         Insert: {
@@ -214,6 +215,7 @@ export type Database = {
           label: string
           start_date: string
           updated_at?: string
+          year: number
         }
         Update: {
           created_at?: string
@@ -223,6 +225,7 @@ export type Database = {
           label?: string
           start_date?: string
           updated_at?: string
+          year?: number
         }
         Relationships: [
           {

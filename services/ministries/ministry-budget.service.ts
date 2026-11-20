@@ -2,10 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { auditService } from "@/services/audit/audit.service"
-import type {
-  UpsertBudgetPeriodInput,
-  UpsertMinistryBudgetInput
-} from "@/lib/validators/ministry-budget"
+import { budgetPeriodRange } from "@/lib/utils/budget-period"
+import type { UpsertMinistryBudgetInput } from "@/lib/validators/ministry-budget"
 
 type DB = SupabaseClient<Database>
 
@@ -27,7 +25,7 @@ export const ministryBudgetService = {
     const { data, error } = await db
       .from("budget_periods")
       .select("*")
-      .order("start_date", { ascending: false })
+      .order("year", { ascending: false })
     if (error) throw error
     return data
   },
@@ -44,42 +42,24 @@ export const ministryBudgetService = {
     return data
   },
 
-  async upsertPeriod(db: DB, input: UpsertBudgetPeriodInput, userId: string) {
-    const { id, ...rest } = input
-
-    if (id) {
-      const { data, error } = await db
-        .from("budget_periods")
-        .update({ ...rest, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single()
-      if (error) throw error
-
-      await auditService.logSystem({
-        entity: "MINISTRY_BUDGET_PERIOD",
-        action: "BUDGET_PERIOD_UPDATED",
-        user_id: userId,
-        entity_id: data.id,
-        new_value: rest
-      })
-
-      return data
-    }
-
+  async createPeriodForYear(db: DB, year: number, userId: string) {
+    const values = { year, label: `Presupuesto ${year}`, ...budgetPeriodRange(year) }
     const { data, error } = await db
       .from("budget_periods")
-      .insert({ ...rest, created_by: userId })
+      .insert({ ...values, created_by: userId })
       .select()
       .single()
-    if (error) throw error
+    if (error) {
+      if (error.code === "23505") throw new Error("Ya existe un presupuesto para ese año")
+      throw error
+    }
 
     await auditService.logSystem({
       entity: "MINISTRY_BUDGET_PERIOD",
       action: "BUDGET_PERIOD_CREATED",
       user_id: userId,
       entity_id: data.id,
-      new_value: rest
+      new_value: values
     })
 
     return data

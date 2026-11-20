@@ -1,7 +1,5 @@
 import { z } from "zod"
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido")
-
 // Not z.string().uuid(): Zod v4's .uuid() enforces the RFC4122 version/variant
 // nibbles, which the repo's own local seed IDs (e.g. "e2e00000-0000-0000-0000-
 // 0000000000a1") don't follow. These are DB foreign keys — Postgres already
@@ -10,17 +8,9 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inv
 export const uuidSchema = (message: string) =>
   z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, message)
 
-export const upsertBudgetPeriodSchema = z
-  .object({
-    id: uuidSchema("ID de período inválido").optional(),
-    label: z.string().min(2, "El nombre del período debe tener al menos 2 caracteres"),
-    start_date: dateSchema,
-    end_date: dateSchema
-  })
-  .refine((data) => data.end_date > data.start_date, {
-    message: "La fecha de término debe ser posterior a la fecha de inicio",
-    path: ["end_date"]
-  })
+export const createBudgetPeriodSchema = z.object({
+  year: z.number().int("Año inválido").min(2000, "Año inválido").max(2100, "Año inválido")
+})
 
 export const upsertMinistryBudgetSchema = z.object({
   ministry_id: uuidSchema("Ministerio inválido"),
@@ -33,5 +23,5 @@ export const upsertMinistryBudgetSchema = z.object({
   notes: z.string().optional()
 })
 
-export type UpsertBudgetPeriodInput = z.infer<typeof upsertBudgetPeriodSchema>
+export type CreateBudgetPeriodInput = z.infer<typeof createBudgetPeriodSchema>
 export type UpsertMinistryBudgetInput = z.infer<typeof upsertMinistryBudgetSchema>

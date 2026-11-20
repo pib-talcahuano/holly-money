@@ -1,11 +1,11 @@
-import { upsertBudgetPeriod, upsertMinistryBudget } from "../ministry-budgets"
-import { upsertBudgetPeriodSchema, upsertMinistryBudgetSchema } from "@/lib/validators/ministry-budget"
+import { createBudgetPeriod, upsertMinistryBudget } from "../ministry-budgets"
+import { upsertMinistryBudgetSchema } from "@/lib/validators/ministry-budget"
 
 const mockGetCurrentUser = jest.fn()
 const mockDb = {}
 const mockCreateSupabaseServerClient = jest.fn(() => Promise.resolve(mockDb))
 const mockCan = jest.fn()
-const mockUpsertPeriod = jest.fn()
+const mockCreatePeriod = jest.fn()
 const mockUpsertBudget = jest.fn()
 const mockRevalidatePath = jest.fn()
 
@@ -21,7 +21,7 @@ jest.mock("@/lib/permissions/rbac", () => ({
 
 jest.mock("@/services/ministries/ministry-budget.service", () => ({
   ministryBudgetService: {
-    upsertPeriod: (...args: unknown[]) => mockUpsertPeriod(...args),
+    createPeriodForYear: (...args: unknown[]) => mockCreatePeriod(...args),
     upsertBudget: (...args: unknown[]) => mockUpsertBudget(...args)
   }
 }))
@@ -32,43 +32,31 @@ jest.mock("next/cache", () => ({
 
 const mockUser = { id: "user-1", permissions: ["MANAGE_BUDGETS"] }
 
-describe("upsertBudgetPeriod", () => {
+describe("createBudgetPeriod", () => {
   beforeEach(() => jest.clearAllMocks())
 
   it("throws when lacking MANAGE_BUDGETS", async () => {
     mockGetCurrentUser.mockResolvedValue(mockUser)
     mockCan.mockReturnValue(false)
-    await expect(
-      upsertBudgetPeriod({ label: "2026", start_date: "2026-01-01", end_date: "2026-12-31" })
-    ).rejects.toThrow("Sin permisos")
+    await expect(createBudgetPeriod({ year: 2026 })).rejects.toThrow("Sin permisos")
   })
 
-  it("rejects end_date before start_date before hitting the service", async () => {
+  it("rejects an out-of-range year before hitting the service", async () => {
     mockGetCurrentUser.mockResolvedValue(mockUser)
     mockCan.mockReturnValue(true)
-    await expect(
-      upsertBudgetPeriod({ label: "2026", start_date: "2026-12-31", end_date: "2026-01-01" })
-    ).rejects.toThrow("posterior")
-    expect(mockUpsertPeriod).not.toHaveBeenCalled()
+    await expect(createBudgetPeriod({ year: 1990 })).rejects.toThrow("Año inválido")
+    expect(mockCreatePeriod).not.toHaveBeenCalled()
   })
 
-  it("creates period and revalidates /ministries", async () => {
-    const created = { id: "p-1", label: "2026" }
+  it("creates the period for the year and revalidates /ministries", async () => {
+    const created = { id: "p-1", label: "Presupuesto 2026" }
     mockGetCurrentUser.mockResolvedValue(mockUser)
     mockCan.mockReturnValue(true)
-    mockUpsertPeriod.mockResolvedValue(created)
+    mockCreatePeriod.mockResolvedValue(created)
 
-    const data = await upsertBudgetPeriod({
-      label: "2026",
-      start_date: "2026-01-01",
-      end_date: "2026-12-31"
-    })
+    const data = await createBudgetPeriod({ year: 2026 })
 
-    expect(mockUpsertPeriod).toHaveBeenCalledWith(
-      mockDb,
-      { label: "2026", start_date: "2026-01-01", end_date: "2026-12-31" },
-      mockUser.id
-    )
+    expect(mockCreatePeriod).toHaveBeenCalledWith(mockDb, 2026, mockUser.id)
     expect(mockRevalidatePath).toHaveBeenCalledWith("/ministries")
     expect(data).toEqual(created)
   })
@@ -120,30 +108,8 @@ describe("upsertMinistryBudget", () => {
 
     expect(mockUpsertBudget).toHaveBeenCalledWith(mockDb, input, mockUser.id)
     expect(mockRevalidatePath).toHaveBeenCalledWith("/ministries")
-    expect(mockRevalidatePath).toHaveBeenCalledWith(
-      `/ministries/${input.ministry_id}`
-    )
+    expect(mockRevalidatePath).toHaveBeenCalledWith(`/ministries/${input.ministry_id}`)
     expect(data).toEqual(result)
-  })
-})
-
-describe("upsertBudgetPeriodSchema", () => {
-  it("rejects end_date <= start_date", () => {
-    const result = upsertBudgetPeriodSchema.safeParse({
-      label: "2026",
-      start_date: "2026-06-01",
-      end_date: "2026-06-01"
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it("accepts a valid period", () => {
-    const result = upsertBudgetPeriodSchema.safeParse({
-      label: "2026",
-      start_date: "2026-01-01",
-      end_date: "2026-12-31"
-    })
-    expect(result.success).toBe(true)
   })
 })
 
