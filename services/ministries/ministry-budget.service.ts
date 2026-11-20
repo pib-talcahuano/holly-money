@@ -78,22 +78,37 @@ export const ministryBudgetService = {
   },
 
   async upsertBudget(db: DB, input: UpsertMinistryBudgetInput, userId: string) {
-    const { data, error } = await db
-      .from("ministry_budgets")
-      .upsert(
-        {
-          ministry_id: input.ministry_id,
-          budget_period_id: input.budget_period_id,
-          assigned_amount: input.assigned_amount,
-          initial_used_amount: input.initial_used_amount,
-          notes: input.notes ?? null,
-          created_by: userId,
-          updated_at: new Date().toISOString()
-        },
-        { onConflict: "ministry_id,budget_period_id" }
-      )
-      .select()
-      .single()
+    const { assigned_amount } = input
+    // No assigned amount = a parent whose total is the sum of its sub-items: only the initial
+    // used amount changes and the stored assigned amount stays intact.
+    const { data, error } =
+      assigned_amount === undefined
+        ? await db
+            .from("ministry_budgets")
+            .update({
+              initial_used_amount: input.initial_used_amount,
+              updated_at: new Date().toISOString()
+            })
+            .eq("ministry_id", input.ministry_id)
+            .eq("budget_period_id", input.budget_period_id)
+            .select()
+            .single()
+        : await db
+            .from("ministry_budgets")
+            .upsert(
+              {
+                ministry_id: input.ministry_id,
+                budget_period_id: input.budget_period_id,
+                assigned_amount,
+                initial_used_amount: input.initial_used_amount,
+                notes: input.notes ?? null,
+                created_by: userId,
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: "ministry_id,budget_period_id" }
+            )
+            .select()
+            .single()
     if (error) throw error
 
     await auditService.logSystem({

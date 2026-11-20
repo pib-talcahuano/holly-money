@@ -76,6 +76,14 @@ export function SubItemDialog({
   const router = useRouter()
   const [pending, setPending] = useState<SubItemFormInput | null>(null)
   const [busy, setBusy] = useState(false)
+  // Each time the dialog opens it starts at the form: a confirmation left over from a previous
+  // session (whatever way it closed) must never come back. Adjusted during render, not in an
+  // effect, per React's "storing information from previous renders".
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setPending(null)
+  }
   const form = useForm<FormValues, unknown, SubItemFormInput>({
     resolver: zodResolver(subItemFormSchema),
     defaultValues: defaultsFor(subItem)
@@ -114,6 +122,7 @@ export function SubItemDialog({
         category_id: parent.kind === "item" ? (values.category_id ?? null) : null
       })
       toast.success("Sub-ítem guardado")
+      setPending(null)
       onOpenChange(false)
       router.refresh()
     } catch (err) {

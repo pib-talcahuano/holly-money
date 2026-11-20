@@ -52,6 +52,16 @@ export function MinistryBudgetBreakdown({
                 </td>
               </tr>
             ))}
+            {budget.initial_used_amount > 0 && (
+              <tr>
+                <td className="px-5 py-3 italic text-muted-foreground">Usado inicial</td>
+                <td />
+                <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">
+                  {formatCLP(budget.initial_used_amount)}
+                </td>
+                <td />
+              </tr>
+            )}
             {budget.unassigned_used > 0 && (
               <tr>
                 <td className="px-5 py-3 italic text-muted-foreground">Sin asignar</td>

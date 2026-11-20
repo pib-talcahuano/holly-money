@@ -21,7 +21,8 @@ export const setBudgetItemActiveSchema = z.object({
 
 export const updateBudgetItemAmountsSchema = z.object({
   id: uuidSchema("ID de ítem inválido"),
-  assigned_amount: z.coerce.number().min(0, "El monto asignado no puede ser negativo"),
+  // Omitted for a parent whose total is the sum of its sub-items: the stored amount is kept.
+  assigned_amount: z.coerce.number().min(0, "El monto asignado no puede ser negativo").optional(),
   initial_used_amount: z.coerce
     .number()
     .min(0, "El monto inicial utilizado no puede ser negativo")

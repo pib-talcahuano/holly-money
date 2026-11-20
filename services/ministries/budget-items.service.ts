@@ -100,7 +100,7 @@ export const budgetItemsService = {
   // which change only through the dialog (upsertItem).
   async updateAmounts(db: DB, input: UpdateBudgetItemAmountsInput, userId: string) {
     const values = {
-      assigned_amount: input.assigned_amount,
+      ...(input.assigned_amount === undefined ? {} : { assigned_amount: input.assigned_amount }),
       initial_used_amount: input.initial_used_amount
     }
     const { data, error } = await db

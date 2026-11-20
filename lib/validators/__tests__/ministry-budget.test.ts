@@ -22,6 +22,11 @@ describe("upsertMinistryBudgetSchema", () => {
     )
   })
 
+  it("lets assigned_amount be omitted (derived parent: keep the stored amount)", () => {
+    const parsed = upsertMinistryBudgetSchema.parse({ ...base, initial_used_amount: 5 })
+    expect(parsed.assigned_amount).toBeUndefined()
+  })
+
   it("rejects a negative assigned amount", () => {
     const result = upsertMinistryBudgetSchema.safeParse({ ...base, assigned_amount: -1 })
     expect(result.error?.issues[0].message).toBe("El monto asignado no puede ser negativo")

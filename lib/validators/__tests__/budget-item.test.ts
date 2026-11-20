@@ -58,6 +58,11 @@ describe("updateBudgetItemAmountsSchema", () => {
     expect(parsed).toEqual({ id: PERIOD_ID, assigned_amount: 700, initial_used_amount: 0 })
   })
 
+  it("lets assigned_amount be omitted (derived parent: keep the stored amount)", () => {
+    const parsed = updateBudgetItemAmountsSchema.parse({ id: PERIOD_ID, initial_used_amount: 4 })
+    expect(parsed.assigned_amount).toBeUndefined()
+  })
+
   it("accepts an assigned amount of 0", () => {
     const parsed = updateBudgetItemAmountsSchema.parse({ id: PERIOD_ID, assigned_amount: 0 })
     expect(parsed.assigned_amount).toBe(0)

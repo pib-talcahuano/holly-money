@@ -61,6 +61,44 @@ describe("ministryBudgetService.createPeriodForYear", () => {
   })
 })
 
+describe("ministryBudgetService.upsertBudget without assigned_amount", () => {
+  it("updates only the initial amount of the existing row instead of upserting", async () => {
+    const calls: { op: string; payload?: unknown; filters: unknown[][] }[] = []
+    const chain: Record<string, unknown> = {}
+    const filters: unknown[][] = []
+    chain.update = (payload: unknown) => {
+      calls.push({ op: "update", payload, filters })
+      return chain
+    }
+    chain.upsert = (payload: unknown) => {
+      calls.push({ op: "upsert", payload, filters })
+      return chain
+    }
+    chain.eq = (...args: unknown[]) => {
+      filters.push(args)
+      return chain
+    }
+    chain.select = () => chain
+    chain.single = () => Promise.resolve({ data: { id: "mb-1" }, error: null })
+    const db = { from: () => chain } as never
+    await ministryBudgetService.upsertBudget(
+      db,
+      { ministry_id: "m-1", budget_period_id: "p-1", initial_used_amount: 7 },
+      "user-1"
+    )
+    expect(calls).toHaveLength(1)
+    expect(calls[0].op).toBe("update")
+    expect(Object.keys(calls[0].payload as object).sort()).toEqual([
+      "initial_used_amount",
+      "updated_at"
+    ])
+    expect(filters).toEqual([
+      ["ministry_id", "m-1"],
+      ["budget_period_id", "p-1"]
+    ])
+  })
+})
+
 describe("ministryBudgetService.listPeriods", () => {
   it("orders by year descending", async () => {
     const { db, orders } = fakeDb({ data: [], error: null })

@@ -151,7 +151,8 @@ export type Draft = { assigned?: string; initial?: string }
 export type PendingEdit = {
   kind: BudgetRow["kind"]
   id: string
-  assigned: number
+  // undefined for a derived parent: its stored amount must not be overwritten by the sum.
+  assigned: number | undefined
   initial: number
 }
 
@@ -162,12 +163,12 @@ export function pendingEdits(rows: BudgetRow[], drafts: Record<string, Draft>): 
     const draft = drafts[r.id]
     if (!draft) return []
     const assigned = draft.assigned ?? (r.assigned === null ? "" : String(r.assigned))
-    if (!assigned) return []
+    if (!assigned && !r.derived) return []
     return [
       {
         kind: r.kind,
         id: r.id,
-        assigned: Number(assigned),
+        assigned: r.derived ? undefined : Number(assigned),
         initial: Number(draft.initial ?? r.initial)
       }
     ]

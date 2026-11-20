@@ -823,13 +823,15 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
       .from("movement_categories")
       .insert([
         { movement_type: "EXPENSE", name: "Sub-items fixture X" },
-        { movement_type: "EXPENSE", name: "Sub-items fixture Y" }
+        { movement_type: "EXPENSE", name: "Sub-items fixture Y" },
+        { movement_type: "EXPENSE", name: "Sub-items fixture Z" }
       ])
       .select()
     if (categoryError) throw categoryError
     categoryIds.push(...categories.map((c) => c.id))
     const catX = categories.find((c) => c.name.endsWith("X"))!.id
     const catY = categories.find((c) => c.name.endsWith("Y"))!.id
+    const catZ = categories.find((c) => c.name.endsWith("Z"))!.id
 
     const { data: item, error: itemError } = await db
       .from("budget_items")
@@ -867,6 +869,22 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
       .single()
     if (dupSubError) throw dupSubError
     subIds.YOld = dupSub.id
+
+    // Deactivated sub-item on its own category Z: its spend still counts for the parent and
+    // must show up as "Sin asignar" because no visible line claims it.
+    const { data: zSub, error: zSubError } = await db
+      .from("budget_sub_items")
+      .insert({
+        budget_item_id: itemId,
+        name: "Z old",
+        assigned_amount: 10,
+        category_id: catZ,
+        is_active: false
+      })
+      .select()
+      .single()
+    if (zSubError) throw zSubError
+    subIds.ZOld = zSub.id
     categoryY = catY
 
     const base = {
@@ -878,7 +896,8 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
       .from("movements")
       .insert([
         { ...base, category_id: catY, amount: 60, movement_date: "2097-01-05T12:00:00Z" },
-        { ...base, category_id: catX, amount: 30, movement_date: "2097-01-06T12:00:00Z" }
+        { ...base, category_id: catX, amount: 30, movement_date: "2097-01-06T12:00:00Z" },
+        { ...base, category_id: catZ, amount: 25, movement_date: "2097-01-07T12:00:00Z" }
       ])
       .select("id")
     if (movementError) throw movementError
@@ -910,10 +929,40 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
     )!
     expect(row).toMatchObject({
       assigned_amount: 500, // A 300 + B 200; deactivated C and the stored 9999 are ignored
-      used_amount: 280, // initial 10 + A 120 + C 100 (deactivated, still counts) + unassigned 50
-      unassigned_used: 50,
+      used_amount: 280, // initial 10 + A 120 + unassigned 150 (50 without fund + C 100, deactivated)
+      unassigned_used: 150,
       remaining: 220
     })
+  })
+
+  it("every summary row adds up: used = initial + active sub-items used + unassigned", async () => {
+    const db = admin()
+    const [ministries, items, subItems] = await Promise.all([
+      db.rpc("get_ministry_budget_summary", { p_period_id: periodId }),
+      db.rpc("get_budget_items_summary", { p_period_id: periodId }),
+      db.rpc("get_budget_sub_items_summary", { p_period_id: periodId })
+    ])
+    expect(ministries.error).toBeNull()
+    expect(items.error).toBeNull()
+    expect(subItems.error).toBeNull()
+    type Parent = {
+      ministry_id?: string
+      item_id?: string
+      initial_used_amount: number
+      used_amount: number
+      unassigned_used: number
+    }
+    type Sub = { ministry_id: string | null; budget_item_id: string | null; used_amount: number }
+    const subs = subItems.data as unknown as Sub[]
+    const check = (rows: Parent[], belongs: (s: Sub, r: Parent) => boolean) => {
+      expect(rows.length).toBeGreaterThan(0)
+      for (const r of rows) {
+        const subsUsed = subs.filter((s) => belongs(s, r)).reduce((a, s) => a + s.used_amount, 0)
+        expect(r.used_amount).toBe(r.initial_used_amount + subsUsed + r.unassigned_used)
+      }
+    }
+    check(ministries.data as unknown as Parent[], (s, r) => s.ministry_id === r.ministry_id)
+    check(items.data as unknown as Parent[], (s, r) => s.budget_item_id === r.item_id)
   })
 
   it("sub-item summary: per-fund used/remaining for active sub-items only", async () => {
@@ -950,9 +999,9 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
     const row = (data as unknown as Record<string, unknown>[]).find((r) => r.item_id === itemId)
     expect(row).toMatchObject({
       assigned_amount: 150,
-      used_amount: 90, // Y 60 + own category X 30
-      unassigned_used: 30,
-      remaining: 60
+      used_amount: 115, // Y 60 + own category X 30 + deactivated Z 25
+      unassigned_used: 55, // X 30 + Z 25: no visible line claims them
+      remaining: 35
     })
   })
 

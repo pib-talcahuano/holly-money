@@ -201,6 +201,17 @@ describe("pendingEdits", () => {
     ])
   })
 
+  it("never sends assigned for a derived parent (the stored amount stays intact)", () => {
+    const derived = buildBudgetRows(
+      [ministry("m1", "Alfa")],
+      [ministryRow("m1", 9999, 100, 350)],
+      [],
+      [subItem("s1", { ministry_id: "m1" }, "Niños", 300, 0)]
+    )
+    const [edit] = pendingEdits(derived, { m1: { initial: "40" } })
+    expect(edit).toEqual({ kind: "ministry", id: "m1", assigned: undefined, initial: 40 })
+  })
+
   it("skips an edited row whose assigned amount was cleared", () => {
     expect(pendingEdits(rows, { m1: { assigned: "" } })).toEqual([])
   })
