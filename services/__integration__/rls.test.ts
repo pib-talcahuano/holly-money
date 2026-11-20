@@ -72,6 +72,7 @@ describeIfLocal("RLS: admin client bypasses all policies", () => {
 const E2E_USERS = {
   admin: { email: "e2e-admin@local.test", password: "Testing123!" },
   bursar: { email: "e2e-bursar@local.test", password: "Testing123!" },
+  finance: { email: "e2e-finance@local.test", password: "Testing123!" },
   minister: { email: "e2e-minister@local.test", password: "Testing123!" }
 }
 const E2E_MINISTRY_ID = "e2e00000-0000-0000-0000-0000000000a1"
@@ -147,14 +148,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
 
   it("MINISTER cannot insert a budget_periods row", async () => {
     const minister = await signIn(E2E_USERS.minister)
-    const { error } = await minister
-      .from("budget_periods")
-      .insert({
-        label: "RLS test — should fail",
-        year: 2096,
-        start_date: "2099-01-01",
-        end_date: "2099-01-31"
-      })
+    const { error } = await minister.from("budget_periods").insert({
+      label: "RLS test — should fail",
+      year: 2096,
+      start_date: "2099-01-01",
+      end_date: "2099-01-31"
+    })
     expect(error).not.toBeNull()
     await minister.auth.signOut()
   })
@@ -553,5 +552,155 @@ describeIfLocal("RPC: delete_ministry_if_unused", () => {
 
     await admin.from("ministry_assignments").delete().eq("ministry_id", created!.id)
     await admin.rpc("delete_ministry_if_unused", { p_ministry_id: created!.id })
+  })
+})
+
+describeIfLocal("RLS: budget_sub_items", () => {
+  let periodId = ""
+  let otherMinistryId = ""
+  let budgetItemId = ""
+  let ownBudgetId = ""
+  let otherBudgetId = ""
+  const adminClient = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+
+  beforeAll(async () => {
+    const admin = adminClient()
+    const { data: period, error: periodError } = await admin
+      .from("budget_periods")
+      .insert({
+        label: "Sub-items fixture",
+        year: 2097,
+        start_date: "2097-03-01",
+        end_date: "2098-02-28"
+      })
+      .select()
+      .single()
+    if (periodError) throw periodError
+    periodId = period.id
+
+    const { data: ministry, error: ministryError } = await admin
+      .from("ministries")
+      .insert({ name: `tmp-subitems-${Date.now()}` })
+      .select("id")
+      .single()
+    if (ministryError) throw ministryError
+    otherMinistryId = ministry.id
+
+    const { data: budgets, error: budgetsError } = await admin
+      .from("ministry_budgets")
+      .insert([
+        { ministry_id: E2E_MINISTRY_ID, budget_period_id: periodId, assigned_amount: 0 },
+        { ministry_id: otherMinistryId, budget_period_id: periodId, assigned_amount: 0 }
+      ])
+      .select()
+    if (budgetsError) throw budgetsError
+    ownBudgetId = budgets.find((b) => b.ministry_id === E2E_MINISTRY_ID)!.id
+    otherBudgetId = budgets.find((b) => b.ministry_id === otherMinistryId)!.id
+
+    const { data: item, error: itemError } = await admin
+      .from("budget_items")
+      .insert({ budget_period_id: periodId, name: "Sub-items parent", assigned_amount: 0 })
+      .select()
+      .single()
+    if (itemError) throw itemError
+    budgetItemId = item.id
+
+    const { error: subError } = await admin.from("budget_sub_items").insert([
+      { ministry_budget_id: ownBudgetId, name: "Own sub", assigned_amount: 10 },
+      { ministry_budget_id: otherBudgetId, name: "Other sub", assigned_amount: 10 },
+      { budget_item_id: budgetItemId, name: "Item sub", assigned_amount: 10 }
+    ])
+    if (subError) throw subError
+  })
+
+  afterAll(async () => {
+    if (!periodId) return
+    const admin = adminClient()
+    await admin
+      .from("budget_sub_items")
+      .delete()
+      .in("ministry_budget_id", [ownBudgetId, otherBudgetId].filter(Boolean))
+    await admin.from("budget_sub_items").delete().eq("budget_item_id", budgetItemId)
+    await admin.from("budget_items").delete().eq("budget_period_id", periodId)
+    await admin.from("ministry_budgets").delete().eq("budget_period_id", periodId)
+    await admin.from("ministries").delete().eq("id", otherMinistryId)
+    await admin.from("budget_periods").delete().eq("id", periodId)
+  })
+
+  it("anon cannot read budget_sub_items", async () => {
+    const anon = createClient<Database>(SUPABASE_URL, PUBLISHABLE_KEY)
+    const { data } = await anon.from("budget_sub_items").select("id").limit(1)
+    expect(data ?? []).toHaveLength(0)
+  })
+
+  it.each([["admin"], ["bursar"]] as const)("%s can insert and update", async (who) => {
+    const client = await signIn(E2E_USERS[who])
+    const { data, error } = await client
+      .from("budget_sub_items")
+      .insert({ budget_item_id: budgetItemId, name: `${who} sub`, assigned_amount: 5 })
+      .select()
+      .single()
+    expect(error).toBeNull()
+    const { error: updateError } = await client
+      .from("budget_sub_items")
+      .update({ is_active: false })
+      .eq("id", data!.id)
+    expect(updateError).toBeNull()
+    await client.auth.signOut()
+  })
+
+  it("FINANCE reads every sub-item but cannot insert", async () => {
+    const finance = await signIn(E2E_USERS.finance)
+    const { data } = await finance
+      .from("budget_sub_items")
+      .select("name")
+      .in("name", ["Own sub", "Other sub", "Item sub"])
+    expect((data ?? []).map((r) => r.name).sort()).toEqual(["Item sub", "Other sub", "Own sub"])
+    const { error } = await finance
+      .from("budget_sub_items")
+      .insert({ budget_item_id: budgetItemId, name: "Finance sub", assigned_amount: 1 })
+    expect(error).not.toBeNull()
+    await finance.auth.signOut()
+  })
+
+  it("MINISTER reads only sub-items of their own ministry budget, and cannot insert", async () => {
+    const minister = await signIn(E2E_USERS.minister)
+    const { data } = await minister
+      .from("budget_sub_items")
+      .select("name")
+      .in("name", ["Own sub", "Other sub", "Item sub"])
+    expect((data ?? []).map((r) => r.name)).toEqual(["Own sub"])
+    const { error } = await minister
+      .from("budget_sub_items")
+      .insert({ ministry_budget_id: ownBudgetId, name: "Minister sub", assigned_amount: 1 })
+    expect(error).not.toBeNull()
+    await minister.auth.signOut()
+  })
+
+  it("nobody can delete (no DELETE policy)", async () => {
+    const admin = await signIn(E2E_USERS.admin)
+    const { data } = await admin.from("budget_sub_items").delete().eq("name", "Item sub").select()
+    expect(data ?? []).toHaveLength(0)
+    await admin.auth.signOut()
+  })
+
+  it("rejects a sub-item with both parents or none", async () => {
+    const admin = adminClient()
+    const both = await admin.from("budget_sub_items").insert({
+      ministry_budget_id: ownBudgetId,
+      budget_item_id: budgetItemId,
+      name: "Both",
+      assigned_amount: 1
+    })
+    expect(both.error).not.toBeNull()
+    const none = await admin.from("budget_sub_items").insert({ name: "None", assigned_amount: 1 })
+    expect(none.error).not.toBeNull()
+  })
+
+  it("rejects a duplicate active name (case-insensitive) under the same parent", async () => {
+    const { error } = await adminClient()
+      .from("budget_sub_items")
+      .insert({ budget_item_id: budgetItemId, name: "ITEM SUB", assigned_amount: 1 })
+    expect(error?.code).toBe("23505")
   })
 })

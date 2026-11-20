@@ -237,6 +237,78 @@ export type Database = {
           }
         ]
       }
+      budget_sub_items: {
+        Row: {
+          assigned_amount: number
+          budget_item_id: string | null
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          ministry_budget_id: string | null
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          assigned_amount: number
+          budget_item_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          ministry_budget_id?: string | null
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_amount?: number
+          budget_item_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          ministry_budget_id?: string | null
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_sub_items_budget_item_id_fkey"
+            columns: ["budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_sub_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "movement_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_sub_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_sub_items_ministry_budget_id_fkey"
+            columns: ["ministry_budget_id"]
+            isOneToOne: false
+            referencedRelation: "ministry_budgets"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       expense_settlements: {
         Row: {
           amount: number

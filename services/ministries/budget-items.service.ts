@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { auditService } from "@/services/audit/audit.service"
+import { assertExpenseCategory } from "@/services/ministries/budget-category"
 import type {
   SetBudgetItemActiveInput,
   UpdateBudgetItemAmountsInput,
@@ -23,18 +24,6 @@ export type BudgetItemSummaryRow = {
 }
 
 const UNIQUE_VIOLATION = "23505"
-
-async function assertExpenseCategory(db: DB, categoryId: string) {
-  const { data, error } = await db
-    .from("movement_categories")
-    .select("movement_type")
-    .eq("id", categoryId)
-    .maybeSingle()
-  if (error) throw error
-  if (data?.movement_type !== "EXPENSE") {
-    throw new Error("Solo se pueden vincular categorías de egreso")
-  }
-}
 
 function rethrowFriendly(error: { code?: string; message?: string }): never {
   if (error.code === UNIQUE_VIOLATION) {
