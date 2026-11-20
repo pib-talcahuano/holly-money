@@ -300,11 +300,15 @@ export const intentionsService = {
     })
   },
 
+  // Single source of truth for "already rendida" (setFund and the UI's Cambiar flag). Any status
+  // except CANCELLED blocks, REJECTED included. DRAFT rows are hidden from treasury sessions by
+  // the expense_settlements_select policy, so they don't block ADMIN/BURSAR.
   async hasSettlement(db: DB, intentionId: string): Promise<boolean> {
     const { data, error } = await db
       .from("expense_settlements")
       .select("id")
       .eq("intention_id", intentionId)
+      .neq("status", "CANCELLED")
       .limit(1)
     if (error) throw error
     return (data?.length ?? 0) > 0

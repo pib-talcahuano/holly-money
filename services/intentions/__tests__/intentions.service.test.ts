@@ -96,7 +96,7 @@ function chainDb(results: Record<string, { data?: unknown; error?: unknown }[]>)
     from: (table: string) => {
       const result = (results[table] ?? []).shift() ?? { data: null, error: null }
       const chain: Record<string, unknown> = {}
-      for (const method of ["select", "update", "eq", "limit"]) {
+      for (const method of ["select", "update", "eq", "neq", "limit"]) {
         chain[method] = (...args: unknown[]) => {
           calls.push({ table, method, args })
           return chain
@@ -188,6 +188,27 @@ describe("intentionsService.setFund", () => {
       "No se puede cambiar el fondo: la solicitud ya tiene rendición"
     )
     expect(logSystem).not.toHaveBeenCalled()
+  })
+
+  it("ignores CANCELLED settlements and still blocks any other status", async () => {
+    const { db, calls } = chainDb({
+      expense_settlements: [{ data: [] }, { data: [{ id: "s1" }] }]
+    })
+    expect(await intentionsService.hasSettlement(db, "i1")).toBe(false)
+    expect(await intentionsService.hasSettlement(db, "i1")).toBe(true)
+    expect(calls.filter((c) => c.method === "neq")).toEqual([
+      { table: "expense_settlements", method: "neq", args: ["status", "CANCELLED"] },
+      { table: "expense_settlements", method: "neq", args: ["status", "CANCELLED"] }
+    ])
+  })
+
+  it("allows changing the fund when only a CANCELLED settlement exists", async () => {
+    // The filter excludes the cancelled row, so the query returns no rows.
+    const { db } = chainDb({
+      budget_intentions: [{ data: { status: "APPROVED", budget_sub_item_id: null } }, { data: {} }],
+      expense_settlements: [{ data: [] }]
+    })
+    await expect(intentionsService.setFund(db, "i1", "sub-1", "u1")).resolves.toBeUndefined()
   })
 
   it("rejects when the request is not approved", async () => {
