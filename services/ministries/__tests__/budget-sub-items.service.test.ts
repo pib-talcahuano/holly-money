@@ -227,3 +227,25 @@ describe("budgetSubItemsService.getSummary", () => {
     await expect(budgetSubItemsService.getSummary()).rejects.toThrow("boom")
   })
 })
+
+describe("category unique violation", () => {
+  const categoryDup = {
+    code: "23505",
+    message:
+      'duplicate key value violates unique constraint "budget_sub_items_item_category_unique"'
+  }
+
+  it("maps it to a distinct friendly error on reactivation", async () => {
+    const { db } = fakeDb({ write: { data: null, error: categoryDup } })
+    await expect(
+      budgetSubItemsService.setActive(db, { id: SUB_ID, is_active: true }, "user-1")
+    ).rejects.toThrow("Esa categoría ya está vinculada a otro sub-ítem de este ítem")
+  })
+
+  it("maps it to the same error on insert", async () => {
+    const { db } = fakeDb({ categoryType: "EXPENSE", write: { data: null, error: categoryDup } })
+    await expect(
+      budgetSubItemsService.upsert(db, { ...underItem, category_id: CATEGORY_ID }, "user-1")
+    ).rejects.toThrow("Esa categoría ya está vinculada")
+  })
+})

@@ -717,6 +717,7 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
   const intentionIds: string[] = []
   const movementIds: string[] = []
   const categoryIds: string[] = []
+  let categoryY = ""
 
   beforeAll(async () => {
     const db = admin()
@@ -851,6 +852,23 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
     if (itemSubError) throw itemSubError
     subIds.Y = itemSub.id
 
+    // Deactivated sibling sharing category Y: allowed by the partial unique index, and must not
+    // make the parent count Y's spend twice.
+    const { data: dupSub, error: dupSubError } = await db
+      .from("budget_sub_items")
+      .insert({
+        budget_item_id: itemId,
+        name: "Y old",
+        assigned_amount: 40,
+        category_id: catY,
+        is_active: false
+      })
+      .select()
+      .single()
+    if (dupSubError) throw dupSubError
+    subIds.YOld = dupSub.id
+    categoryY = catY
+
     const base = {
       created_by_id: E2E_ADMIN_ID,
       status: "ACTIVE" as const,
@@ -936,5 +954,21 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
       unassigned_used: 30,
       remaining: 60
     })
+  })
+
+  it("rejects two active sub-items of one item with the same category", async () => {
+    const { error } = await admin()
+      .from("budget_sub_items")
+      .insert({ budget_item_id: itemId, name: "Y dup", assigned_amount: 1, category_id: categoryY })
+    expect(error?.code).toBe("23505")
+    expect(error?.message).toContain("budget_sub_items_item_category_unique")
+  })
+
+  it("rejects reactivating a sub-item whose category is taken by an active sibling", async () => {
+    const { error } = await admin()
+      .from("budget_sub_items")
+      .update({ is_active: true })
+      .eq("id", subIds.YOld)
+    expect(error?.code).toBe("23505")
   })
 })

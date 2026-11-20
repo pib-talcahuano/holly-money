@@ -24,6 +24,9 @@ const UNIQUE_VIOLATION = "23505"
 
 function rethrowFriendly(error: { code?: string; message?: string }): never {
   if (error.code === UNIQUE_VIOLATION) {
+    if (error.message?.includes("budget_sub_items_item_category_unique")) {
+      throw new Error("Esa categoría ya está vinculada a otro sub-ítem de este ítem")
+    }
     throw new Error("Ya existe un sub-ítem con ese nombre")
   }
   throw error
