@@ -152,7 +152,8 @@ export function MinistryDetailClient({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirmName, setDeleteConfirmName] = useState("")
   const [deleting, setDeleting] = useState(false)
-  const [deleteBlocked, setDeleteBlocked] = useState(false)
+  const [deleteBlockers, setDeleteBlockers] = useState<Record<string, number> | null>(null)
+  const deleteBlocked = deleteBlockers !== null
 
   const canManageDelegates = canManage || isAssignedMinister
 
@@ -255,20 +256,22 @@ export function MinistryDetailClient({
     setDeleteOpen(open)
     if (!open) {
       setDeleteConfirmName("")
-      setDeleteBlocked(false)
+      setDeleteBlockers(null)
     }
   }
 
   async function handleDelete() {
     setDeleting(true)
     try {
-      await deleteMinistry(ministry.id, deleteConfirmName)
+      const result = await deleteMinistry(ministry.id, deleteConfirmName)
+      if (!result.ok) {
+        setDeleteBlockers(result.blockers)
+        return
+      }
       toast.success("Ministerio eliminado")
       router.push("/ministries")
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error al eliminar"
-      if (message.includes("tiene historial")) setDeleteBlocked(true)
-      toast.error(message)
+      toast.error(err instanceof Error ? err.message : "Error al eliminar")
     } finally {
       setDeleting(false)
     }
@@ -580,8 +583,11 @@ export function MinistryDetailClient({
                     />
                     {deleteBlocked && (
                       <p className="text-sm text-muted-foreground">
-                        Este ministerio tiene historial y no se puede eliminar. Puedes desactivarlo
-                        para que deje de usarse.
+                        Este ministerio tiene historial y no se puede eliminar (
+                        {Object.entries(deleteBlockers ?? {})
+                          .map(([table, n]) => `${table}: ${n}`)
+                          .join(", ")}
+                        ). Puedes desactivarlo para que deje de usarse.
                       </p>
                     )}
                     <div className="flex justify-end gap-2 pt-2">

@@ -507,4 +507,26 @@ describeIfLocal("RPC: delete_ministry_if_unused", () => {
     const { data: gone } = await admin.from("ministries").select("id").eq("id", created!.id)
     expect(gone).toHaveLength(0)
   })
+  it("blocks a ministry whose only history is an inactive assignment", async () => {
+    const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+    const { data: someUser } = await admin.from("users").select("id").limit(1).single()
+    const { data: created } = await admin
+      .from("ministries")
+      .insert({ name: `tmp-history-${Date.now()}` })
+      .select("id")
+      .single()
+    await admin.from("ministry_assignments").insert({
+      ministry_id: created!.id,
+      user_id: someUser!.id,
+      unassigned_at: new Date().toISOString()
+    })
+    const { data, error } = await admin.rpc("delete_ministry_if_unused", {
+      p_ministry_id: created!.id
+    })
+    expect(error).toBeNull()
+    expect(data).toEqual({ deleted: false, blockers: { ministry_assignments: 1 } })
+
+    await admin.from("ministry_assignments").delete().eq("ministry_id", created!.id)
+    await admin.rpc("delete_ministry_if_unused", { p_ministry_id: created!.id })
+  })
 })

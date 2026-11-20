@@ -44,7 +44,15 @@ export async function createMinistry(input: CreateMinistryInput) {
   return data
 }
 
-export async function deleteMinistry(id: string, confirmName: string) {
+// Blocked-by-history is an expected outcome, so it is returned (not thrown): Next.js
+// strips thrown server-action messages in production builds.
+export type DeleteMinistryResult =
+  { ok: true } | { ok: false; reason: "HAS_HISTORY"; blockers: Record<string, number> }
+
+export async function deleteMinistry(
+  id: string,
+  confirmName: string
+): Promise<DeleteMinistryResult> {
   const user = assertMinistriesAccess(await getCurrentUser())
   const { confirmName: typedName } = deleteMinistrySchema.parse({ confirmName })
   const db = await createSupabaseServerClient()
@@ -54,9 +62,10 @@ export async function deleteMinistry(id: string, confirmName: string) {
   }
   const result = await ministriesService.delete(db, id, user.id)
   if (!result.deleted) {
-    throw new Error("No se puede eliminar: tiene historial. Puedes desactivarlo.")
+    return { ok: false, reason: "HAS_HISTORY", blockers: result.blockers }
   }
   revalidatePath("/ministries")
+  return { ok: true }
 }
 
 export async function getMinistryAssignments(ministryId: string) {
