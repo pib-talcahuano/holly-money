@@ -464,3 +464,47 @@ describeIfLocal("RPC privileges: service-role-only summaries", () => {
     expect(error).toBeNull()
   })
 })
+
+describeIfLocal("RPC: delete_ministry_if_unused", () => {
+  const args = { p_ministry_id: E2E_MINISTRY_ID }
+
+  it("is not callable by a MINISTER", async () => {
+    const minister = await signIn(E2E_USERS.minister)
+    const { error } = await minister.rpc("delete_ministry_if_unused", args)
+    expect(error).not.toBeNull()
+    await minister.auth.signOut()
+  })
+
+  it("is not callable by anon", async () => {
+    const anon = createClient<Database>(SUPABASE_URL, PUBLISHABLE_KEY)
+    const { error } = await anon.rpc("delete_ministry_if_unused", args)
+    expect(error).not.toBeNull()
+  })
+
+  it("reports blockers and keeps a ministry that has history", async () => {
+    const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+    const { data, error } = await admin.rpc("delete_ministry_if_unused", args)
+    expect(error).toBeNull()
+    expect(data).toMatchObject({ deleted: false })
+    expect(Object.keys((data as { blockers: object }).blockers).length).toBeGreaterThan(0)
+    const { data: still } = await admin.from("ministries").select("id").eq("id", E2E_MINISTRY_ID)
+    expect(still).toHaveLength(1)
+  })
+
+  it("deletes a ministry with no dependents", async () => {
+    const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+    const { data: created, error: createError } = await admin
+      .from("ministries")
+      .insert({ name: `tmp-delete-${Date.now()}` })
+      .select("id")
+      .single()
+    expect(createError).toBeNull()
+    const { data, error } = await admin.rpc("delete_ministry_if_unused", {
+      p_ministry_id: created!.id
+    })
+    expect(error).toBeNull()
+    expect(data).toEqual({ deleted: true })
+    const { data: gone } = await admin.from("ministries").select("id").eq("id", created!.id)
+    expect(gone).toHaveLength(0)
+  })
+})

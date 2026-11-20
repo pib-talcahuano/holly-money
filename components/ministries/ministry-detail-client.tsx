@@ -14,6 +14,7 @@ import {
   ClipboardList,
   HandCoins,
   Pencil,
+  Trash2,
   TrendingDown,
   UserPlus,
   UserMinus,
@@ -53,6 +54,7 @@ import {
   assignMinister,
   unassignMinister,
   updateMinistry,
+  deleteMinistry,
   inviteDelegate,
   removeDelegate
 } from "@/app/actions/ministries"
@@ -147,6 +149,10 @@ export function MinistryDetailClient({
   const [unassigning, setUnassigning] = useState(false)
   const [changeMinisterOpen, setChangeMinisterOpen] = useState(false)
   const [addDelegateOpen, setAddDelegateOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
+  const [deleting, setDeleting] = useState(false)
+  const [deleteBlocked, setDeleteBlocked] = useState(false)
 
   const canManageDelegates = canManage || isAssignedMinister
 
@@ -242,6 +248,44 @@ export function MinistryDetailClient({
       toast.success("Ministerio actualizado")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al actualizar")
+    }
+  }
+
+  function handleDeleteOpenChange(open: boolean) {
+    setDeleteOpen(open)
+    if (!open) {
+      setDeleteConfirmName("")
+      setDeleteBlocked(false)
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await deleteMinistry(ministry.id, deleteConfirmName)
+      toast.success("Ministerio eliminado")
+      router.push("/ministries")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al eliminar"
+      if (message.includes("tiene historial")) setDeleteBlocked(true)
+      toast.error(message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleDeactivate() {
+    setDeleting(true)
+    try {
+      const updated = await updateMinistry(ministry.id, { is_active: false })
+      setMinistry((prev) => ({ ...prev, ...(updated as unknown as Ministry) }))
+      editForm.setValue("is_active", false)
+      handleDeleteOpenChange(false)
+      toast.success("Ministerio desactivado")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al desactivar")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -509,6 +553,59 @@ export function MinistryDetailClient({
                         {editForm.formState.isSubmitting ? "Guardando..." : "Guardar cambios"}
                       </Button>
                     </form>
+                  </DialogContent>
+                </Dialog>
+                <Dialog open={deleteOpen} onOpenChange={handleDeleteOpenChange}>
+                  <DialogTrigger
+                    render={
+                      <Button variant="outline" className="text-destructive">
+                        <Trash2 className="size-4" />
+                        Eliminar ministerio
+                      </Button>
+                    }
+                  />
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Eliminar ministerio</DialogTitle>
+                      <DialogDescription>
+                        Solo se pueden eliminar ministerios sin historial. Escribe{" "}
+                        <strong>{ministry.name}</strong> para confirmar.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <Input
+                      aria-label="Nombre del ministerio"
+                      value={deleteConfirmName}
+                      onChange={(e) => setDeleteConfirmName(e.target.value)}
+                      disabled={deleting}
+                    />
+                    {deleteBlocked && (
+                      <p className="text-sm text-muted-foreground">
+                        Este ministerio tiene historial y no se puede eliminar. Puedes desactivarlo
+                        para que deje de usarse.
+                      </p>
+                    )}
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleDeleteOpenChange(false)}
+                      >
+                        Cancelar
+                      </Button>
+                      {deleteBlocked && ministry.is_active && (
+                        <Button type="button" onClick={handleDeactivate} disabled={deleting}>
+                          Desactivar
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={handleDelete}
+                        disabled={deleting || deleteConfirmName.trim() !== ministry.name}
+                      >
+                        {deleting ? "Eliminando..." : "Eliminar"}
+                      </Button>
+                    </div>
                   </DialogContent>
                 </Dialog>
                 <Button render={<Link href="/movements/new" />} nativeButton={false}>
@@ -839,7 +936,10 @@ export function MinistryDetailClient({
           <div className="rounded-2xl bg-card border border-border overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h2 className="text-sm font-bold text-foreground">Solicitudes del ministerio</h2>
-              <Link href="/requests" className="py-2 -my-2 text-xs font-bold text-primary hover:underline">
+              <Link
+                href="/requests"
+                className="py-2 -my-2 text-xs font-bold text-primary hover:underline"
+              >
                 Ver todas →
               </Link>
             </div>

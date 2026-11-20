@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { auditService } from "@/services/audit/audit.service"
 import { usersService } from "@/services/users/users.service"
 import type {
@@ -69,6 +70,39 @@ export const ministriesService = {
     })
 
     return data
+  },
+
+  // Hard-deletes a ministry only when nothing references it. The RPC checks every
+  // dependent table and deletes atomically (row lock); service_role only, so it goes
+  // through the admin client. The name is read first so the audit entry can record it.
+  async delete(
+    db: DB,
+    id: string,
+    userId: string
+  ): Promise<{ deleted: true } | { deleted: false; blockers: Record<string, number> }> {
+    const { data: ministry, error: fetchError } = await db
+      .from("ministries")
+      .select("name")
+      .eq("id", id)
+      .single()
+    if (fetchError) throw fetchError
+
+    const { data, error } = await createSupabaseAdminClient().rpc("delete_ministry_if_unused", {
+      p_ministry_id: id
+    })
+    if (error) throw error
+
+    const result = data as { deleted: boolean; blockers?: Record<string, number> }
+    if (!result.deleted) return { deleted: false, blockers: result.blockers ?? {} }
+
+    await auditService.logSystem({
+      entity: "MINISTRY",
+      action: "MINISTRY_DELETED",
+      user_id: userId,
+      entity_id: id,
+      previous_value: { name: ministry.name }
+    })
+    return { deleted: true }
   },
 
   async listCurrentAssignments(db: DB) {
@@ -160,12 +194,7 @@ export const ministriesService = {
   // fails after the account was created, the user still exists but unlinked —
   // acceptable here since account creation is the step far more likely to fail
   // (duplicate email), and an orphaned account is harmless (see removeDelegate).
-  async inviteDelegate(
-    db: DB,
-    ministryId: string,
-    input: InviteDelegateInput,
-    assignedBy: string
-  ) {
+  async inviteDelegate(db: DB, ministryId: string, input: InviteDelegateInput, assignedBy: string) {
     const created = await usersService.invite(
       { full_name: input.full_name, email: input.email, roles: ["DELEGATE"] },
       assignedBy
@@ -253,19 +282,21 @@ export const ministriesService = {
     const intentionIds = (intentions ?? []).map((i) => i.id)
     if (intentionIds.length === 0) return []
 
-    const [{ data: transfers, error: transfersError }, { data: settlements, error: settlementsError }] =
-      await Promise.all([
-        db
-          .from("intention_transfers")
-          .select("movement_id")
-          .in("intention_id", intentionIds)
-          .not("movement_id", "is", null),
-        db
-          .from("expense_settlements")
-          .select("movement_id")
-          .in("intention_id", intentionIds)
-          .not("movement_id", "is", null)
-      ])
+    const [
+      { data: transfers, error: transfersError },
+      { data: settlements, error: settlementsError }
+    ] = await Promise.all([
+      db
+        .from("intention_transfers")
+        .select("movement_id")
+        .in("intention_id", intentionIds)
+        .not("movement_id", "is", null),
+      db
+        .from("expense_settlements")
+        .select("movement_id")
+        .in("intention_id", intentionIds)
+        .not("movement_id", "is", null)
+    ])
     if (transfersError) throw transfersError
     if (settlementsError) throw settlementsError
 

@@ -1387,6 +1387,7 @@ export type Database = {
         Args: { p_email: string; p_full_name: string; p_password: string }
         Returns: string
       }
+      delete_ministry_if_unused: { Args: { p_ministry_id: string }; Returns: Json }
       get_budget_items_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_dashboard_summary: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       get_ministry_budget_summary: { Args: { p_period_id?: string }; Returns: Json }
