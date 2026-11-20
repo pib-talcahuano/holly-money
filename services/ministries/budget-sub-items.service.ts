@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
+import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { auditService } from "@/services/audit/audit.service"
 import { assertExpenseCategory } from "@/services/ministries/budget-category"
 import type { SetSubItemActiveInput, UpsertSubItemInput } from "@/lib/validators/budget-sub-item"
@@ -7,6 +8,17 @@ import type { SetSubItemActiveInput, UpsertSubItemInput } from "@/lib/validators
 type DB = SupabaseClient<Database>
 
 export type SubItemParent = { ministry_budget_id: string } | { budget_item_id: string }
+
+export type BudgetSubItemSummaryRow = {
+  sub_item_id: string
+  parent_type: "MINISTRY" | "ITEM"
+  ministry_id: string | null
+  budget_item_id: string | null
+  name: string
+  assigned_amount: number
+  used_amount: number
+  remaining: number
+}
 
 const UNIQUE_VIOLATION = "23505"
 
@@ -114,5 +126,15 @@ export const budgetSubItemsService = {
         : await query.eq("budget_item_id", parent.budget_item_id)
     if (error) throw error
     return data
+  },
+
+  // Admin client: the RPC is service_role-only. Permission is checked by the page/action.
+  async getSummary(periodId?: string): Promise<BudgetSubItemSummaryRow[]> {
+    const admin = createSupabaseAdminClient()
+    const { data, error } = await admin.rpc("get_budget_sub_items_summary", {
+      p_period_id: periodId
+    })
+    if (error) throw error
+    return (data ?? []) as unknown as BudgetSubItemSummaryRow[]
   }
 }

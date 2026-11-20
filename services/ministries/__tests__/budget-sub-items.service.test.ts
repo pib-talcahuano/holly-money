@@ -2,6 +2,11 @@
  * @jest-environment node
  */
 const mockLogSystem = jest.fn()
+const mockRpc = jest.fn()
+
+jest.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: () => ({ rpc: (...args: unknown[]) => mockRpc(...args) })
+}))
 
 jest.mock("@/services/audit/audit.service", () => ({
   auditService: { logSystem: (...args: unknown[]) => mockLogSystem(...args) }
@@ -202,5 +207,23 @@ describe("budgetSubItemsService.list", () => {
     const { db, filters } = fakeDb({ list: { data: [], error: null } })
     await budgetSubItemsService.list(db, { budget_item_id: ITEM_ID })
     expect(filters).toContainEqual(["budget_item_id", ITEM_ID])
+  })
+})
+
+describe("budgetSubItemsService.getSummary", () => {
+  beforeEach(() => mockRpc.mockReset())
+
+  it("calls the RPC with the period and returns the rows", async () => {
+    const rows = [{ sub_item_id: SUB_ID, parent_type: "MINISTRY", remaining: 180 }]
+    mockRpc.mockResolvedValue({ data: rows, error: null })
+    await expect(budgetSubItemsService.getSummary("p1")).resolves.toEqual(rows)
+    expect(mockRpc).toHaveBeenCalledWith("get_budget_sub_items_summary", { p_period_id: "p1" })
+  })
+
+  it("returns an empty list when there is no data and throws on RPC error", async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: null })
+    await expect(budgetSubItemsService.getSummary()).resolves.toEqual([])
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error("boom") })
+    await expect(budgetSubItemsService.getSummary()).rejects.toThrow("boom")
   })
 })

@@ -56,6 +56,7 @@ export type Database = {
       budget_intentions: {
         Row: {
           amount: number
+          budget_sub_item_id: string | null
           created_at: string
           date_needed: string | null
           funding_method: Database["public"]["Enums"]["intention_funding_method"]
@@ -74,6 +75,7 @@ export type Database = {
         ComputedFields: never
         Insert: {
           amount: number
+          budget_sub_item_id?: string | null
           created_at?: string
           date_needed?: string | null
           funding_method: Database["public"]["Enums"]["intention_funding_method"]
@@ -91,6 +93,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          budget_sub_item_id?: string | null
           created_at?: string
           date_needed?: string | null
           funding_method?: Database["public"]["Enums"]["intention_funding_method"]
@@ -107,6 +110,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "budget_intentions_budget_sub_item_id_fkey"
+            columns: ["budget_sub_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_sub_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "budget_intentions_ministry_id_fkey"
             columns: ["ministry_id"]
@@ -1464,6 +1474,7 @@ export type Database = {
       }
       delete_ministry_if_unused: { Args: { p_ministry_id: string }; Returns: Json }
       get_budget_items_summary: { Args: { p_period_id?: string }; Returns: Json }
+      get_budget_sub_items_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_dashboard_summary: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       get_ministry_budget_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_ministry_leftover_summary: {

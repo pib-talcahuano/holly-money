@@ -466,6 +466,8 @@ describeIfLocal("RPC privileges: service-role-only summaries", () => {
   // RPCs bypass RLS and are only meant to be called through the admin client.
   const rpcs = [
     ["get_ministry_budget_summary", {}],
+    ["get_budget_items_summary", {}],
+    ["get_budget_sub_items_summary", {}],
     ["get_ministry_leftover_summary", { p_ministry_id: E2E_MINISTRY_ID }]
   ] as const
 
@@ -702,5 +704,237 @@ describeIfLocal("RLS: budget_sub_items", () => {
       .from("budget_sub_items")
       .insert({ budget_item_id: budgetItemId, name: "ITEM SUB", assigned_amount: 1 })
     expect(error?.code).toBe("23505")
+  })
+})
+
+describeIfLocal("RPC: budget summaries with sub-items", () => {
+  // Far-future period so the fixture never overlaps real data. Torn down children-first.
+  const admin = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+  let periodId = ""
+  let ministryBudgetId = ""
+  let itemId = ""
+  const subIds: Record<string, string> = {}
+  const intentionIds: string[] = []
+  const movementIds: string[] = []
+  const categoryIds: string[] = []
+
+  beforeAll(async () => {
+    const db = admin()
+    const { data: period, error: periodError } = await db
+      .from("budget_periods")
+      .insert({
+        label: "Sub-items fixture",
+        year: 2097,
+        start_date: "2097-01-01",
+        end_date: "2097-01-31"
+      })
+      .select()
+      .single()
+    if (periodError) throw periodError
+    periodId = period.id
+
+    const { data: mb, error: mbError } = await db
+      .from("ministry_budgets")
+      .insert({
+        budget_period_id: periodId,
+        ministry_id: E2E_MINISTRY_ID,
+        assigned_amount: 9999,
+        initial_used_amount: 10
+      })
+      .select()
+      .single()
+    if (mbError) throw mbError
+    ministryBudgetId = mb.id
+
+    const { data: subs, error: subsError } = await db
+      .from("budget_sub_items")
+      .insert([
+        { ministry_budget_id: ministryBudgetId, name: "A", assigned_amount: 300 },
+        { ministry_budget_id: ministryBudgetId, name: "B", assigned_amount: 200 },
+        { ministry_budget_id: ministryBudgetId, name: "C", assigned_amount: 100 }
+      ])
+      .select()
+    if (subsError) throw subsError
+    for (const sub of subs) subIds[sub.name] = sub.id
+
+    const intention = (
+      over: Pick<
+        Database["public"]["Tables"]["budget_intentions"]["Insert"],
+        "amount" | "funding_method"
+      > &
+        Partial<Database["public"]["Tables"]["budget_intentions"]["Insert"]>
+    ) => ({
+      ministry_id: E2E_MINISTRY_ID,
+      requested_by: E2E_ADMIN_ID,
+      purpose: "Sub-items fixture",
+      status: "APPROVED" as const,
+      ...over
+    })
+    const { data: intentions, error: intentionsError } = await db
+      .from("budget_intentions")
+      .insert([
+        intention({ amount: 120, funding_method: "TRANSFER", budget_sub_item_id: subIds.A }),
+        intention({ amount: 400, funding_method: "TRANSFER", budget_sub_item_id: subIds.A }),
+        intention({
+          amount: 50,
+          funding_method: "REIMBURSEMENT",
+          reviewed_at: "2097-01-12T12:00:00Z"
+        }),
+        intention({ amount: 100, funding_method: "TRANSFER", budget_sub_item_id: subIds.C })
+      ])
+      .select()
+    if (intentionsError) throw intentionsError
+    intentionIds.push(...intentions.map((i) => i.id))
+    const byAmount = (n: number) => intentions.find((i) => i.amount === n)!.id
+
+    const { error: transfersError } = await db.from("intention_transfers").insert([
+      {
+        intention_id: byAmount(120),
+        amount: 120,
+        transfer_date: "2097-01-10",
+        registered_by: E2E_ADMIN_ID
+      },
+      // outside the period -> ignored
+      {
+        intention_id: byAmount(400),
+        amount: 400,
+        transfer_date: "2097-02-05",
+        registered_by: E2E_ADMIN_ID
+      },
+      {
+        intention_id: byAmount(100),
+        amount: 100,
+        transfer_date: "2097-01-15",
+        registered_by: E2E_ADMIN_ID
+      }
+    ])
+    if (transfersError) throw transfersError
+
+    // C is deactivated after it already has spend: spend keeps counting, assignment does not.
+    const { error: deactivateError } = await db
+      .from("budget_sub_items")
+      .update({ is_active: false })
+      .eq("id", subIds.C)
+    if (deactivateError) throw deactivateError
+
+    // Item side: own category X (30 unassigned) and a sub-item on category Y (60).
+    const { data: categories, error: categoryError } = await db
+      .from("movement_categories")
+      .insert([
+        { movement_type: "EXPENSE", name: "Sub-items fixture X" },
+        { movement_type: "EXPENSE", name: "Sub-items fixture Y" }
+      ])
+      .select()
+    if (categoryError) throw categoryError
+    categoryIds.push(...categories.map((c) => c.id))
+    const catX = categories.find((c) => c.name.endsWith("X"))!.id
+    const catY = categories.find((c) => c.name.endsWith("Y"))!.id
+
+    const { data: item, error: itemError } = await db
+      .from("budget_items")
+      .insert({
+        budget_period_id: periodId,
+        name: "Item with subs",
+        assigned_amount: 0,
+        category_id: catX
+      })
+      .select()
+      .single()
+    if (itemError) throw itemError
+    itemId = item.id
+
+    const { data: itemSub, error: itemSubError } = await db
+      .from("budget_sub_items")
+      .insert({ budget_item_id: itemId, name: "Y fund", assigned_amount: 150, category_id: catY })
+      .select()
+      .single()
+    if (itemSubError) throw itemSubError
+    subIds.Y = itemSub.id
+
+    const base = {
+      created_by_id: E2E_ADMIN_ID,
+      status: "ACTIVE" as const,
+      movement_type: "EXPENSE" as const
+    }
+    const { data: movements, error: movementError } = await db
+      .from("movements")
+      .insert([
+        { ...base, category_id: catY, amount: 60, movement_date: "2097-01-05T12:00:00Z" },
+        { ...base, category_id: catX, amount: 30, movement_date: "2097-01-06T12:00:00Z" }
+      ])
+      .select("id")
+    if (movementError) throw movementError
+    movementIds.push(...movements.map((m) => m.id))
+  })
+
+  afterAll(async () => {
+    if (!periodId) return
+    const db = admin()
+    if (intentionIds.length) {
+      await db.from("intention_transfers").delete().in("intention_id", intentionIds)
+      await db.from("budget_intentions").delete().in("id", intentionIds)
+    }
+    await db.from("budget_sub_items").delete().in("id", Object.values(subIds))
+    await db.from("budget_items").delete().eq("budget_period_id", periodId)
+    await db.from("ministry_budgets").delete().eq("budget_period_id", periodId)
+    if (movementIds.length) await db.from("movements").delete().in("id", movementIds)
+    if (categoryIds.length) await db.from("movement_categories").delete().in("id", categoryIds)
+    await db.from("budget_periods").delete().eq("id", periodId)
+  })
+
+  it("ministry summary: parent assigned is the sum of active sub-items and used includes all spend", async () => {
+    const { data, error } = await admin().rpc("get_ministry_budget_summary", {
+      p_period_id: periodId
+    })
+    expect(error).toBeNull()
+    const row = (data as unknown as Record<string, unknown>[]).find(
+      (r) => r.ministry_id === E2E_MINISTRY_ID
+    )!
+    expect(row).toMatchObject({
+      assigned_amount: 500, // A 300 + B 200; deactivated C and the stored 9999 are ignored
+      used_amount: 280, // initial 10 + A 120 + C 100 (deactivated, still counts) + unassigned 50
+      unassigned_used: 50,
+      remaining: 220
+    })
+  })
+
+  it("sub-item summary: per-fund used/remaining for active sub-items only", async () => {
+    const { data, error } = await admin().rpc("get_budget_sub_items_summary", {
+      p_period_id: periodId
+    })
+    expect(error).toBeNull()
+    const rows = data as unknown as Record<string, unknown>[]
+    const byName = (n: string) => rows.find((r) => r.name === n)
+    expect(byName("A")).toMatchObject({
+      sub_item_id: subIds.A,
+      parent_type: "MINISTRY",
+      ministry_id: E2E_MINISTRY_ID,
+      budget_item_id: null,
+      assigned_amount: 300,
+      used_amount: 120,
+      remaining: 180
+    })
+    expect(byName("B")).toMatchObject({ used_amount: 0, remaining: 200 })
+    expect(byName("C")).toBeUndefined()
+    expect(byName("Y fund")).toMatchObject({
+      parent_type: "ITEM",
+      ministry_id: null,
+      budget_item_id: itemId,
+      assigned_amount: 150,
+      used_amount: 60,
+      remaining: 90
+    })
+  })
+
+  it("items summary: parent sums sub-items and adds own-category spend not covered by them", async () => {
+    const { data, error } = await admin().rpc("get_budget_items_summary", { p_period_id: periodId })
+    expect(error).toBeNull()
+    const row = (data as unknown as Record<string, unknown>[]).find((r) => r.item_id === itemId)
+    expect(row).toMatchObject({
+      assigned_amount: 150,
+      used_amount: 90, // Y 60 + own category X 30
+      unassigned_used: 30,
+      remaining: 60
+    })
   })
 })

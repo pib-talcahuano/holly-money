@@ -17,6 +17,8 @@ export type MinistryBudgetSummaryRow = {
   assigned_amount: number
   initial_used_amount: number
   used_amount: number
+  // Spend of requests with no fund (sub-item) assigned; already included in used_amount.
+  unassigned_used: number
   remaining: number
 }
 

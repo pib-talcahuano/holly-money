@@ -20,6 +20,8 @@ export type BudgetItemSummaryRow = {
   assigned_amount: number
   initial_used_amount: number
   used_amount: number
+  // Expenses of the item's own category not covered by any sub-item; included in used_amount.
+  unassigned_used: number
   remaining: number
 }
 
