@@ -21,6 +21,7 @@ import { updateBudgetItemAmounts, setBudgetItemActive } from "@/app/actions/budg
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
 import type { BudgetSubItemSummaryRow } from "@/services/ministries/budget-sub-items.service"
+import { BudgetCopyPanel, type BudgetCopySource } from "./budget-copy-panel"
 import { BudgetItemDialog } from "./budget-item-dialog"
 import { BudgetRowSubItems } from "./budget-row-sub-items"
 import { SubItemDialog, type EditableSubItem, type SubItemParentRef } from "./sub-item-dialog"
@@ -55,6 +56,8 @@ type Props = {
   // ministry_budgets row ids of the selected period, to attach sub-items to them.
   ministryBudgetIds: { id: string; ministry_id: string }[]
   expenseCategories: { id: string; name: string }[]
+  // Read-only budget of the year to copy from (null when there is no other year).
+  copySource: BudgetCopySource | null
 }
 
 export function MinistryBudgetAdmin({
@@ -67,13 +70,15 @@ export function MinistryBudgetAdmin({
   subItemSummary,
   subItemDetails,
   ministryBudgetIds,
-  expenseCategories
+  expenseCategories,
+  copySource
 }: Props) {
   const router = useRouter()
   const [creatingPeriod, setCreatingPeriod] = useState(false)
   const [itemDialogOpen, setItemDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<BudgetRow | null>(null)
   const [saving, setSaving] = useState(false)
+  const [copyOpen, setCopyOpen] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [subItemDialog, setSubItemDialog] = useState<{
     open: boolean
@@ -87,6 +92,9 @@ export function MinistryBudgetAdmin({
 
   const budgetRows = buildBudgetRows(ministries, summary, itemSummary, subItemSummary)
   const totals = sumTotals(budgetRows)
+  // The copy panel opens by itself on a year with no budget yet, or on demand.
+  const showCopyPanel =
+    !!selectedPeriod && (copyOpen || (summary.length === 0 && itemSummary.length === 0))
 
   function assignedOf(r: BudgetRow) {
     return drafts[r.id]?.assigned ?? (r.assigned === null ? "" : String(r.assigned))
@@ -246,6 +254,11 @@ export function MinistryBudgetAdmin({
               ))}
             </select>
           )}
+          {selectedPeriod && periods.length > 1 && (
+            <Button variant="outline" onClick={() => setCopyOpen((v) => !v)}>
+              Copiar desde otro año
+            </Button>
+          )}
           <Button
             variant={selectedPeriod ? "outline" : "default"}
             onClick={handleCreatePeriod}
@@ -269,159 +282,177 @@ export function MinistryBudgetAdmin({
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="rounded-2xl bg-card border border-border overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-b border-border">
-            <h2 className="text-sm font-bold text-foreground">Presupuesto del período</h2>
-            <Button size="sm" onClick={handleSaveBudgets} disabled={saving}>
-              {saving ? "Guardando..." : "Guardar cambios"}
-            </Button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
-                <tr>
-                  <th className="px-5 py-2.5 text-left font-medium">Nombre</th>
-                  <th className="px-5 py-2.5 text-left font-medium">Tipo</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Asignado</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Usado inicial</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Usado (auto)</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Remanente</th>
-                  <th className="px-5 py-2.5 text-right font-medium">
-                    <span className="sr-only">Acciones</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {budgetRows.map((r) => (
-                  <Fragment key={`${r.kind}-${r.id}`}>
-                    <tr>
-                      <td className="px-5 py-3 font-medium">
-                        <button
-                          type="button"
-                          className="mr-1.5 inline-flex align-middle text-muted-foreground"
-                          aria-expanded={expanded.has(r.id)}
-                          aria-label={`${expanded.has(r.id) ? "Contraer" : "Expandir"} ${r.name}`}
-                          onClick={() => toggleExpanded(r.id)}
-                        >
-                          {expanded.has(r.id) ? (
-                            <ChevronDown className="size-4" />
-                          ) : (
-                            <ChevronRight className="size-4" />
-                          )}
-                        </button>
-                        {r.name}
-                        {r.children.length > 0 && (
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            {r.children.length} sub-ítem{r.children.length === 1 ? "" : "s"}
-                          </span>
-                        )}
-                        {r.kind === "item" && r.categoryName && (
-                          <span className="block text-xs font-normal text-muted-foreground">
-                            {r.categoryName}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                          {r.kind === "ministry" ? "Ministerio" : "Otro"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        {r.derived ? (
-                          <span
-                            className="block font-medium"
-                            title="Suma de sus sub-ítems"
-                            data-testid={`assigned-derived-${r.id}`}
+        <div
+          className={
+            showCopyPanel ? "grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]" : undefined
+          }
+        >
+          <div className="min-w-0 rounded-2xl bg-card border border-border overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-b border-border">
+              <h2 className="text-sm font-bold text-foreground">Presupuesto del período</h2>
+              <Button size="sm" onClick={handleSaveBudgets} disabled={saving}>
+                {saving ? "Guardando..." : "Guardar cambios"}
+              </Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="bg-muted/50 text-xs text-muted-foreground uppercase tracking-wide">
+                  <tr>
+                    <th className="px-5 py-2.5 text-left font-medium">Nombre</th>
+                    <th className="px-5 py-2.5 text-left font-medium">Tipo</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Asignado</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Usado inicial</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Usado (auto)</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Remanente</th>
+                    <th className="px-5 py-2.5 text-right font-medium">
+                      <span className="sr-only">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {budgetRows.map((r) => (
+                    <Fragment key={`${r.kind}-${r.id}`}>
+                      <tr>
+                        <td className="px-5 py-3 font-medium">
+                          <button
+                            type="button"
+                            className="mr-1.5 inline-flex align-middle text-muted-foreground"
+                            aria-expanded={expanded.has(r.id)}
+                            aria-label={`${expanded.has(r.id) ? "Contraer" : "Expandir"} ${r.name}`}
+                            onClick={() => toggleExpanded(r.id)}
                           >
-                            {formatCLP(r.assigned ?? 0)}
+                            {expanded.has(r.id) ? (
+                              <ChevronDown className="size-4" />
+                            ) : (
+                              <ChevronRight className="size-4" />
+                            )}
+                          </button>
+                          {r.name}
+                          {r.children.length > 0 && (
+                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                              {r.children.length} sub-ítem{r.children.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                          {r.kind === "item" && r.categoryName && (
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              {r.categoryName}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                            {r.kind === "ministry" ? "Ministerio" : "Otro"}
                           </span>
-                        ) : (
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {r.derived ? (
+                            <span
+                              className="block font-medium"
+                              title="Suma de sus sub-ítems"
+                              data-testid={`assigned-derived-${r.id}`}
+                            >
+                              {formatCLP(r.assigned ?? 0)}
+                            </span>
+                          ) : (
+                            <Input
+                              type="number"
+                              min="0"
+                              step="1"
+                              aria-label={`Asignado ${r.name}`}
+                              className="w-32 ml-auto text-right"
+                              value={assignedOf(r)}
+                              onChange={(e) => setDraft(r.id, { assigned: e.target.value })}
+                            />
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-right">
                           <Input
                             type="number"
                             min="0"
                             step="1"
-                            aria-label={`Asignado ${r.name}`}
+                            aria-label={`Usado inicial ${r.name}`}
                             className="w-32 ml-auto text-right"
-                            value={assignedOf(r)}
-                            onChange={(e) => setDraft(r.id, { assigned: e.target.value })}
+                            value={initialOf(r)}
+                            onChange={(e) => setDraft(r.id, { initial: e.target.value })}
                           />
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="1"
-                          aria-label={`Usado inicial ${r.name}`}
-                          className="w-32 ml-auto text-right"
-                          value={initialOf(r)}
-                          onChange={(e) => setDraft(r.id, { initial: e.target.value })}
+                        </td>
+                        <td className="px-5 py-3 text-right text-muted-foreground">
+                          {r.used === null ? "—" : formatCLP(r.used)}
+                        </td>
+                        <td
+                          className={`px-5 py-3 text-right font-medium ${
+                            r.remaining !== null && r.remaining < 0 ? "text-destructive" : ""
+                          }`}
+                        >
+                          {r.remaining === null ? "—" : formatCLP(r.remaining)}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {r.kind === "item" && (
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label={`Editar ${r.name}`}
+                                onClick={() => openItemDialog(r)}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label={`Desactivar ${r.name}`}
+                                onClick={() => handleDeactivate(r)}
+                              >
+                                <EyeOff className="size-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                      {expanded.has(r.id) && (
+                        <BudgetRowSubItems
+                          row={r}
+                          onAdd={openAddSubItem}
+                          onEdit={openEditSubItem}
                         />
-                      </td>
-                      <td className="px-5 py-3 text-right text-muted-foreground">
-                        {r.used === null ? "—" : formatCLP(r.used)}
-                      </td>
-                      <td
-                        className={`px-5 py-3 text-right font-medium ${
-                          r.remaining !== null && r.remaining < 0 ? "text-destructive" : ""
-                        }`}
-                      >
-                        {r.remaining === null ? "—" : formatCLP(r.remaining)}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        {r.kind === "item" && (
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label={`Editar ${r.name}`}
-                              onClick={() => openItemDialog(r)}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label={`Desactivar ${r.name}`}
-                              onClick={() => handleDeactivate(r)}
-                            >
-                              <EyeOff className="size-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                    {expanded.has(r.id) && (
-                      <BudgetRowSubItems row={r} onAdd={openAddSubItem} onEdit={openEditSubItem} />
-                    )}
-                  </Fragment>
-                ))}
-                <tr>
-                  <td colSpan={7} className="px-5 py-2">
-                    <Button size="sm" variant="ghost" onClick={() => openItemDialog(null)}>
-                      <Plus className="size-4" /> Agregar ítem
-                    </Button>
-                  </td>
-                </tr>
-              </tbody>
-              <tfoot className="bg-muted/50 text-sm font-bold">
-                <tr>
-                  <td className="px-5 py-3" colSpan={2}>
-                    Total
-                  </td>
-                  <td className="px-5 py-3 text-right">{formatCLP(totals.assigned)}</td>
-                  <td className="px-5 py-3 text-right">{formatCLP(totals.initial)}</td>
-                  <td className="px-5 py-3 text-right">{formatCLP(totals.used)}</td>
-                  <td
-                    className={`px-5 py-3 text-right ${totals.remaining < 0 ? "text-destructive" : ""}`}
-                  >
-                    {formatCLP(totals.remaining)}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+                      )}
+                    </Fragment>
+                  ))}
+                  <tr>
+                    <td colSpan={7} className="px-5 py-2">
+                      <Button size="sm" variant="ghost" onClick={() => openItemDialog(null)}>
+                        <Plus className="size-4" /> Agregar ítem
+                      </Button>
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot className="bg-muted/50 text-sm font-bold">
+                  <tr>
+                    <td className="px-5 py-3" colSpan={2}>
+                      Total
+                    </td>
+                    <td className="px-5 py-3 text-right">{formatCLP(totals.assigned)}</td>
+                    <td className="px-5 py-3 text-right">{formatCLP(totals.initial)}</td>
+                    <td className="px-5 py-3 text-right">{formatCLP(totals.used)}</td>
+                    <td
+                      className={`px-5 py-3 text-right ${totals.remaining < 0 ? "text-destructive" : ""}`}
+                    >
+                      {formatCLP(totals.remaining)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
+          {showCopyPanel && (
+            <BudgetCopyPanel
+              ministries={ministries}
+              targetPeriod={{ id: selectedPeriod.id, year: selectedPeriod.year }}
+              sourcePeriods={periods.filter((p) => p.id !== selectedPeriod.id)}
+              source={copySource}
+            />
+          )}
         </div>
       )}
 

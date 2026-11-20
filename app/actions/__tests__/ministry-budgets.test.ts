@@ -1,4 +1,4 @@
-import { createBudgetPeriod, upsertMinistryBudget } from "../ministry-budgets"
+import { copyBudgetFromPeriod, createBudgetPeriod, upsertMinistryBudget } from "../ministry-budgets"
 import { upsertMinistryBudgetSchema } from "@/lib/validators/ministry-budget"
 
 const mockGetCurrentUser = jest.fn()
@@ -7,6 +7,7 @@ const mockCreateSupabaseServerClient = jest.fn(() => Promise.resolve(mockDb))
 const mockCan = jest.fn()
 const mockCreatePeriod = jest.fn()
 const mockUpsertBudget = jest.fn()
+const mockCopy = jest.fn()
 const mockRevalidatePath = jest.fn()
 
 jest.mock("@/lib/supabase/server", () => ({
@@ -22,7 +23,8 @@ jest.mock("@/lib/permissions/rbac", () => ({
 jest.mock("@/services/ministries/ministry-budget.service", () => ({
   ministryBudgetService: {
     createPeriodForYear: (...args: unknown[]) => mockCreatePeriod(...args),
-    upsertBudget: (...args: unknown[]) => mockUpsertBudget(...args)
+    upsertBudget: (...args: unknown[]) => mockUpsertBudget(...args),
+    copyFromPeriod: (...args: unknown[]) => mockCopy(...args)
   }
 }))
 
@@ -132,5 +134,54 @@ describe("upsertMinistryBudgetSchema", () => {
     })
     expect(result.success).toBe(true)
     expect(result.data?.initial_used_amount).toBe(0)
+  })
+})
+
+describe("copyBudgetFromPeriod", () => {
+  const FROM = "e2e00000-0000-0000-0000-0000000000a1"
+  const TO = "e2e00000-0000-0000-0000-0000000000a2"
+  beforeEach(() => jest.clearAllMocks())
+
+  it("throws when lacking MANAGE_BUDGETS", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(false)
+    await expect(
+      copyBudgetFromPeriod({ from_period_id: FROM, to_period_id: TO, scope: "ALL" })
+    ).rejects.toThrow("Sin permisos")
+    expect(mockCopy).not.toHaveBeenCalled()
+  })
+
+  it("rejects identical periods and malformed scopes before the service", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    await expect(
+      copyBudgetFromPeriod({ from_period_id: FROM, to_period_id: FROM, scope: "ALL" })
+    ).rejects.toThrow("distintos")
+    await expect(
+      copyBudgetFromPeriod({
+        from_period_id: FROM,
+        to_period_id: TO,
+        scope: { ministry_id: "nope" }
+      })
+    ).rejects.toThrow("Ministerio inválido")
+    expect(mockCopy).not.toHaveBeenCalled()
+  })
+
+  it("copies, revalidates /budgets and returns the counts", async () => {
+    const counts = { copied: { sub_items: 2 }, skipped: { sub_items: 0 } }
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockCopy.mockResolvedValue(counts)
+    const scope = { sub_item_id: "e2e00000-0000-0000-0000-0000000000e1" }
+
+    const result = await copyBudgetFromPeriod({ from_period_id: FROM, to_period_id: TO, scope })
+
+    expect(mockCopy).toHaveBeenCalledWith(
+      mockDb,
+      { from_period_id: FROM, to_period_id: TO, scope },
+      mockUser.id
+    )
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/budgets")
+    expect(result).toBe(counts)
   })
 })

@@ -7,13 +7,13 @@ import { budgetItemsService } from "@/services/ministries/budget-items.service"
 import { budgetSubItemsService } from "@/services/ministries/budget-sub-items.service"
 import { MinistryBudgetAdmin } from "@/components/ministries/ministry-budget-admin"
 
-type Props = { searchParams: Promise<{ year?: string }> }
+type Props = { searchParams: Promise<{ year?: string; from?: string }> }
 
 export default async function BudgetsPage({ searchParams }: Props) {
   const user = await getCurrentUser()
   if (!user || !can(user.permissions, PERMISSIONS.MANAGE_BUDGETS)) redirect("/dashboard")
 
-  const { year } = await searchParams
+  const { year, from } = await searchParams
   const db = await createSupabaseServerClient()
   const [ministries, periods, currentPeriod, expenseCategories] = await Promise.all([
     ministriesService.list(db),
@@ -42,6 +42,22 @@ export default async function BudgetsPage({ searchParams }: Props) {
         ])
       : [[], [], [], [], []]
 
+  // Copy source: ?from= if it names another existing year, else the previous year that exists
+  // (periods come ordered by year desc).
+  const otherPeriods = selectedPeriod ? periods.filter((p) => p.id !== selectedPeriod.id) : []
+  const sourcePeriod =
+    otherPeriods.find((p) => String(p.year) === from) ??
+    otherPeriods.find((p) => p.year < (selectedPeriod?.year ?? 0)) ??
+    null
+  const copySource = sourcePeriod
+    ? {
+        period: { id: sourcePeriod.id, year: sourcePeriod.year },
+        summary: await ministryBudgetService.getSummary(sourcePeriod.id),
+        itemSummary: await budgetItemsService.getSummary(sourcePeriod.id),
+        subItemSummary: await budgetSubItemsService.getSummary(sourcePeriod.id)
+      }
+    : null
+
   return (
     <section className="flex flex-col gap-6">
       <div>
@@ -64,6 +80,7 @@ export default async function BudgetsPage({ searchParams }: Props) {
         subItemDetails={subItemDetails}
         ministryBudgetIds={ministryBudgetIds}
         expenseCategories={expenseCategories}
+        copySource={copySource}
       />
     </section>
   )

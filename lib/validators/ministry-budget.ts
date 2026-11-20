@@ -24,5 +24,22 @@ export const upsertMinistryBudgetSchema = z.object({
   notes: z.string().optional()
 })
 
+export const copyBudgetSchema = z
+  .object({
+    from_period_id: uuidSchema("Período de origen inválido"),
+    to_period_id: uuidSchema("Período de destino inválido"),
+    scope: z.union([
+      z.literal("ALL"),
+      z.object({ ministry_id: uuidSchema("Ministerio inválido") }).strict(),
+      z.object({ budget_item_id: uuidSchema("Ítem inválido") }).strict(),
+      z.object({ sub_item_id: uuidSchema("Sub-ítem inválido") }).strict()
+    ])
+  })
+  .refine((v) => v.from_period_id !== v.to_period_id, {
+    message: "El período de origen y destino deben ser distintos",
+    path: ["to_period_id"]
+  })
+
 export type CreateBudgetPeriodInput = z.infer<typeof createBudgetPeriodSchema>
 export type UpsertMinistryBudgetInput = z.infer<typeof upsertMinistryBudgetSchema>
+export type CopyBudgetInput = z.infer<typeof copyBudgetSchema>

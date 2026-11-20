@@ -6,8 +6,10 @@ import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/serve
 import { PERMISSIONS, can } from "@/lib/permissions/rbac"
 import { ministryBudgetService } from "@/services/ministries/ministry-budget.service"
 import {
+  copyBudgetSchema,
   createBudgetPeriodSchema,
   upsertMinistryBudgetSchema,
+  type CopyBudgetInput,
   type CreateBudgetPeriodInput,
   type UpsertMinistryBudgetInput
 } from "@/lib/validators/ministry-budget"
@@ -49,4 +51,13 @@ export async function upsertMinistryBudget(input: UpsertMinistryBudgetInput) {
   const data = await ministryBudgetService.upsertBudget(db, parsed, user.id)
   revalidateBudgetConsumers(parsed.ministry_id)
   return data
+}
+
+export async function copyBudgetFromPeriod(input: CopyBudgetInput) {
+  const user = assertBudgetsAccess(await getCurrentUser())
+  const parsed = parseOrThrow(copyBudgetSchema, input)
+  const db = await createSupabaseServerClient()
+  const result = await ministryBudgetService.copyFromPeriod(db, parsed, user.id)
+  revalidatePath("/budgets")
+  return result
 }
