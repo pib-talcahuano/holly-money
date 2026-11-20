@@ -255,7 +255,11 @@ export function MinistryBudgetAdmin({
             </select>
           )}
           {selectedPeriod && periods.length > 1 && (
-            <Button variant="outline" onClick={() => setCopyOpen((v) => !v)}>
+            <Button
+              variant={showCopyPanel ? "secondary" : "outline"}
+              aria-pressed={showCopyPanel}
+              onClick={() => setCopyOpen((v) => !v)}
+            >
               Copiar desde otro año
             </Button>
           )}
@@ -451,6 +455,7 @@ export function MinistryBudgetAdmin({
               targetPeriod={{ id: selectedPeriod.id, year: selectedPeriod.year }}
               sourcePeriods={periods.filter((p) => p.id !== selectedPeriod.id)}
               source={copySource}
+              onCopied={() => setCopyOpen(true)}
             />
           )}
         </div>

@@ -112,7 +112,7 @@ type Row = Record<string, unknown>
 // Stateful in-memory fake: filters (eq / in) apply to selects, inserts add rows.
 function memoryDb(
   tables: Record<string, Row[]>,
-  failInsert?: (table: string, row: Row) => boolean
+  failInsert?: (table: string, row: Row) => boolean | string
 ) {
   const writes: { table: string; op: string; payload: Row }[] = []
   let seq = 0
@@ -130,13 +130,17 @@ function memoryDb(
         in: (col: string, vals: unknown[]) => (filters.push((r) => vals.includes(r[col])), chain),
         insert: (payload: Row) => {
           writes.push({ table, op: "insert", payload })
-          if (failInsert?.(table, payload)) {
+          const failure = failInsert?.(table, payload)
+          if (failure) {
+            const code = failure === true ? "23505" : failure
+            // PostgREST errors are plain objects, not Error instances.
+            const error = { code, message: `fallo ${code}` }
             return {
               select: () => ({
-                single: () => Promise.resolve({ data: null, error: { code: "23505" } })
+                single: () => Promise.resolve({ data: null, error })
               }),
               then: (res: (v: unknown) => unknown) =>
-                Promise.resolve({ data: null, error: { code: "23505" } }).then(res)
+                Promise.resolve({ data: null, error }).then(res)
             }
           }
           inserted = { id: `new-${++seq}`, is_active: true, ...payload }
@@ -368,5 +372,45 @@ describe("ministryBudgetService.copyFromPeriod", () => {
     )
     expect(result.copied.sub_items).toBe(0)
     expect(result.skipped.sub_items).toBe(1)
+  })
+
+  it("on a mid-copy failure audits once with the partial counts and failed true, then throws with the counts", async () => {
+    const { db } = memoryDb(fixtures(), (table) => table === "budget_items" && "XX000")
+    const promise = ministryBudgetService.copyFromPeriod(
+      db,
+      { from_period_id: SRC, to_period_id: DST, scope: "ALL" },
+      "u-1"
+    )
+    await expect(promise).rejects.toThrow(
+      /La copia se interrumpió: se copiaron 1 ministerios, 0 ítems y 0 sub-ítems.*fallo XX000.*volver a ejecutarla/
+    )
+    await expect(promise).rejects.toBeInstanceOf(Error)
+    expect(mockLogSystem).toHaveBeenCalledTimes(1)
+    expect(mockLogSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "BUDGET_COPIED",
+        new_value: {
+          from_period_id: SRC,
+          to_period_id: DST,
+          scope: "ALL",
+          copied: { ministry_budgets: 1, budget_items: 0, sub_items: 0 },
+          skipped: { ministry_budgets: 0, budget_items: 0, sub_items: 0 },
+          failed: true,
+          error: "fallo XX000"
+        }
+      })
+    )
+  })
+
+  it("does not mask the original error when the failure audit itself fails", async () => {
+    mockLogSystem.mockRejectedValueOnce(new Error("audit down"))
+    const { db } = memoryDb(fixtures(), (table) => table === "budget_items" && "XX000")
+    await expect(
+      ministryBudgetService.copyFromPeriod(
+        db,
+        { from_period_id: SRC, to_period_id: DST, scope: "ALL" },
+        "u-1"
+      )
+    ).rejects.toThrow(/fallo XX000/)
   })
 })

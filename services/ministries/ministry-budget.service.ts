@@ -33,6 +33,241 @@ export type MinistryBudgetSummaryRow = {
   remaining: number
 }
 
+async function performCopy(
+  db: DB,
+  input: { from_period_id: string; to_period_id: string; scope: CopyScope },
+  userId: string,
+  copied: CopyCounts,
+  skipped: CopyCounts
+) {
+  const { from_period_id, to_period_id, scope } = input
+  // ── 1. What to copy, read from the source period ──
+  let srcBudgets: MinistryBudgetRow[] = []
+  let srcItems: BudgetItemRow[] = []
+  let srcSubs: SubItemRow[] = []
+  // A single sub-item is copied under a parent created empty (amount 0) when missing.
+  const zeroParents = scope !== "ALL" && "sub_item_id" in scope
+
+  const readBudgets = async (ministryId?: string) => {
+    let q = db.from("ministry_budgets").select("*").eq("budget_period_id", from_period_id)
+    if (ministryId) q = q.eq("ministry_id", ministryId)
+    const { data, error } = await q
+    if (error) throw error
+    return (data ?? []) as MinistryBudgetRow[]
+  }
+  const readItems = async (itemId?: string) => {
+    let q = db
+      .from("budget_items")
+      .select("*")
+      .eq("budget_period_id", from_period_id)
+      .eq("is_active", true)
+    if (itemId) q = q.eq("id", itemId)
+    const { data, error } = await q
+    if (error) throw error
+    return (data ?? []) as BudgetItemRow[]
+  }
+
+  if (scope === "ALL") {
+    srcBudgets = await readBudgets()
+    srcItems = await readItems()
+  } else if ("ministry_id" in scope) {
+    srcBudgets = await readBudgets(scope.ministry_id)
+  } else if ("budget_item_id" in scope) {
+    srcItems = await readItems(scope.budget_item_id)
+  } else {
+    const { data, error } = await db
+      .from("budget_sub_items")
+      .select("*")
+      .eq("id", scope.sub_item_id)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) throw new Error("Sub-ítem no encontrado")
+    const sub = data as SubItemRow
+    if (sub.ministry_budget_id) {
+      const { data: parent, error: parentError } = await db
+        .from("ministry_budgets")
+        .select("*")
+        .eq("id", sub.ministry_budget_id)
+        .eq("budget_period_id", from_period_id)
+        .maybeSingle()
+      if (parentError) throw parentError
+      if (!parent) throw new Error("El sub-ítem no pertenece al período de origen")
+      srcBudgets = [parent as MinistryBudgetRow]
+    } else {
+      const { data: parent, error: parentError } = await db
+        .from("budget_items")
+        .select("*")
+        .eq("id", sub.budget_item_id as string)
+        .eq("budget_period_id", from_period_id)
+        .maybeSingle()
+      if (parentError) throw parentError
+      if (!parent) throw new Error("El sub-ítem no pertenece al período de origen")
+      srcItems = [parent as BudgetItemRow]
+    }
+    srcSubs = [sub]
+  }
+
+  if (!zeroParents) {
+    const readSubs = async (column: "ministry_budget_id" | "budget_item_id", ids: string[]) => {
+      if (ids.length === 0) return []
+      const { data, error } = await db
+        .from("budget_sub_items")
+        .select("*")
+        .eq("is_active", true)
+        .in(column, ids)
+      if (error) throw error
+      return (data ?? []) as SubItemRow[]
+    }
+    srcSubs = [
+      ...(await readSubs(
+        "ministry_budget_id",
+        srcBudgets.map((b) => b.id)
+      )),
+      ...(await readSubs(
+        "budget_item_id",
+        srcItems.map((i) => i.id)
+      ))
+    ]
+  }
+
+  // ── 2. Parents: ministry budgets (by ministry) and items (by lower(name), active) ──
+  const targetBudgetBySource = new Map<string, string>()
+  if (srcBudgets.length > 0) {
+    const { data, error } = await db
+      .from("ministry_budgets")
+      .select("id, ministry_id")
+      .eq("budget_period_id", to_period_id)
+    if (error) throw error
+    const existing = new Map((data ?? []).map((b) => [b.ministry_id, b.id]))
+    for (const src of srcBudgets) {
+      const existingId = existing.get(src.ministry_id)
+      if (existingId) {
+        targetBudgetBySource.set(src.id, existingId)
+        skipped.ministry_budgets++
+        continue
+      }
+      const { data: created, error: insertError } = await db
+        .from("ministry_budgets")
+        .insert({
+          ministry_id: src.ministry_id,
+          budget_period_id: to_period_id,
+          assigned_amount: zeroParents ? 0 : src.assigned_amount,
+          initial_used_amount: 0,
+          notes: zeroParents ? null : src.notes,
+          created_by: userId
+        })
+        .select("id")
+        .single()
+      if (insertError) throw insertError
+      targetBudgetBySource.set(src.id, created.id)
+      copied.ministry_budgets++
+    }
+  }
+
+  const targetItemBySource = new Map<string, string>()
+  if (srcItems.length > 0) {
+    const { data, error } = await db
+      .from("budget_items")
+      .select("id, name")
+      .eq("budget_period_id", to_period_id)
+      .eq("is_active", true)
+    if (error) throw error
+    const existing = new Map((data ?? []).map((i) => [i.name.toLowerCase(), i.id]))
+    for (const src of srcItems) {
+      const existingId = existing.get(src.name.toLowerCase())
+      if (existingId) {
+        targetItemBySource.set(src.id, existingId)
+        skipped.budget_items++
+        continue
+      }
+      const { data: created, error: insertError } = await db
+        .from("budget_items")
+        .insert({
+          budget_period_id: to_period_id,
+          name: src.name,
+          category_id: src.category_id,
+          assigned_amount: zeroParents ? 0 : src.assigned_amount,
+          initial_used_amount: 0,
+          notes: zeroParents ? null : src.notes,
+          created_by: userId
+        })
+        .select("id")
+        .single()
+      if (insertError) throw insertError
+      targetItemBySource.set(src.id, created.id)
+      copied.budget_items++
+    }
+  }
+
+  // ── 3. Sub-items, skipping name or category clashes under the same target parent ──
+  const targetParentIds = [...targetBudgetBySource.values(), ...targetItemBySource.values()]
+  const taken = new Map<string, { names: Set<string>; categories: Set<string> }>()
+  const slot = (parentId: string) => {
+    let s = taken.get(parentId)
+    if (!s) {
+      s = { names: new Set(), categories: new Set() }
+      taken.set(parentId, s)
+    }
+    return s
+  }
+  if (srcSubs.length > 0 && targetParentIds.length > 0) {
+    for (const column of ["ministry_budget_id", "budget_item_id"] as const) {
+      const { data, error } = await db
+        .from("budget_sub_items")
+        .select("ministry_budget_id, budget_item_id, name, category_id")
+        .eq("is_active", true)
+        .in(column, targetParentIds)
+      if (error) throw error
+      for (const row of data ?? []) {
+        const s = slot((row.ministry_budget_id ?? row.budget_item_id) as string)
+        s.names.add(row.name.toLowerCase())
+        if (row.category_id) s.categories.add(row.category_id)
+      }
+    }
+  }
+
+  for (const src of srcSubs) {
+    const isMinistry = src.ministry_budget_id !== null
+    const parentId = isMinistry
+      ? targetBudgetBySource.get(src.ministry_budget_id as string)
+      : targetItemBySource.get(src.budget_item_id as string)
+    if (!parentId) continue
+    const s = slot(parentId)
+    const categoryId = isMinistry ? null : src.category_id
+    if (s.names.has(src.name.toLowerCase()) || (categoryId && s.categories.has(categoryId))) {
+      skipped.sub_items++
+      continue
+    }
+    const { error } = await db.from("budget_sub_items").insert({
+      ministry_budget_id: isMinistry ? parentId : null,
+      budget_item_id: isMinistry ? null : parentId,
+      name: src.name,
+      assigned_amount: src.assigned_amount,
+      notes: src.notes,
+      category_id: categoryId,
+      created_by: userId
+    })
+    if (error) {
+      if (error.code === "23505") {
+        skipped.sub_items++
+        continue
+      }
+      throw error
+    }
+    s.names.add(src.name.toLowerCase())
+    if (categoryId) s.categories.add(categoryId)
+    copied.sub_items++
+  }
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === "object" && "message" in err)
+    return String((err as { message: unknown }).message)
+  return "Error desconocido"
+}
+
 export const ministryBudgetService = {
   async listPeriods(db: DB) {
     const { data, error } = await db
@@ -161,223 +396,33 @@ export const ministryBudgetService = {
     const copied: CopyCounts = { ministry_budgets: 0, budget_items: 0, sub_items: 0 }
     const skipped: CopyCounts = { ministry_budgets: 0, budget_items: 0, sub_items: 0 }
 
-    // ── 1. What to copy, read from the source period ──
-    let srcBudgets: MinistryBudgetRow[] = []
-    let srcItems: BudgetItemRow[] = []
-    let srcSubs: SubItemRow[] = []
-    // A single sub-item is copied under a parent created empty (amount 0) when missing.
-    const zeroParents = scope !== "ALL" && "sub_item_id" in scope
-
-    const readBudgets = async (ministryId?: string) => {
-      let q = db.from("ministry_budgets").select("*").eq("budget_period_id", from_period_id)
-      if (ministryId) q = q.eq("ministry_id", ministryId)
-      const { data, error } = await q
-      if (error) throw error
-      return (data ?? []) as MinistryBudgetRow[]
-    }
-    const readItems = async (itemId?: string) => {
-      let q = db
-        .from("budget_items")
-        .select("*")
-        .eq("budget_period_id", from_period_id)
-        .eq("is_active", true)
-      if (itemId) q = q.eq("id", itemId)
-      const { data, error } = await q
-      if (error) throw error
-      return (data ?? []) as BudgetItemRow[]
-    }
-
-    if (scope === "ALL") {
-      srcBudgets = await readBudgets()
-      srcItems = await readItems()
-    } else if ("ministry_id" in scope) {
-      srcBudgets = await readBudgets(scope.ministry_id)
-    } else if ("budget_item_id" in scope) {
-      srcItems = await readItems(scope.budget_item_id)
-    } else {
-      const { data, error } = await db
-        .from("budget_sub_items")
-        .select("*")
-        .eq("id", scope.sub_item_id)
-        .eq("is_active", true)
-        .maybeSingle()
-      if (error) throw error
-      if (!data) throw new Error("Sub-ítem no encontrado")
-      const sub = data as SubItemRow
-      if (sub.ministry_budget_id) {
-        const { data: parent, error: parentError } = await db
-          .from("ministry_budgets")
-          .select("*")
-          .eq("id", sub.ministry_budget_id)
-          .eq("budget_period_id", from_period_id)
-          .maybeSingle()
-        if (parentError) throw parentError
-        if (!parent) throw new Error("El sub-ítem no pertenece al período de origen")
-        srcBudgets = [parent as MinistryBudgetRow]
-      } else {
-        const { data: parent, error: parentError } = await db
-          .from("budget_items")
-          .select("*")
-          .eq("id", sub.budget_item_id as string)
-          .eq("budget_period_id", from_period_id)
-          .maybeSingle()
-        if (parentError) throw parentError
-        if (!parent) throw new Error("El sub-ítem no pertenece al período de origen")
-        srcItems = [parent as BudgetItemRow]
+    try {
+      await performCopy(db, input, userId, copied, skipped)
+    } catch (err) {
+      // Rows written before the failure stay (the copy is re-runnable): audit them anyway.
+      const message = errorMessage(err)
+      try {
+        await auditService.logSystem({
+          entity: "BUDGET_PERIOD",
+          action: "BUDGET_COPIED",
+          user_id: userId,
+          entity_id: to_period_id,
+          new_value: {
+            from_period_id,
+            to_period_id,
+            scope,
+            copied,
+            skipped,
+            failed: true,
+            error: message
+          }
+        })
+      } catch {
+        // Never mask the original error.
       }
-      srcSubs = [sub]
-    }
-
-    if (!zeroParents) {
-      const readSubs = async (column: "ministry_budget_id" | "budget_item_id", ids: string[]) => {
-        if (ids.length === 0) return []
-        const { data, error } = await db
-          .from("budget_sub_items")
-          .select("*")
-          .eq("is_active", true)
-          .in(column, ids)
-        if (error) throw error
-        return (data ?? []) as SubItemRow[]
-      }
-      srcSubs = [
-        ...(await readSubs(
-          "ministry_budget_id",
-          srcBudgets.map((b) => b.id)
-        )),
-        ...(await readSubs(
-          "budget_item_id",
-          srcItems.map((i) => i.id)
-        ))
-      ]
-    }
-
-    // ── 2. Parents: ministry budgets (by ministry) and items (by lower(name), active) ──
-    const targetBudgetBySource = new Map<string, string>()
-    if (srcBudgets.length > 0) {
-      const { data, error } = await db
-        .from("ministry_budgets")
-        .select("id, ministry_id")
-        .eq("budget_period_id", to_period_id)
-      if (error) throw error
-      const existing = new Map((data ?? []).map((b) => [b.ministry_id, b.id]))
-      for (const src of srcBudgets) {
-        const existingId = existing.get(src.ministry_id)
-        if (existingId) {
-          targetBudgetBySource.set(src.id, existingId)
-          skipped.ministry_budgets++
-          continue
-        }
-        const { data: created, error: insertError } = await db
-          .from("ministry_budgets")
-          .insert({
-            ministry_id: src.ministry_id,
-            budget_period_id: to_period_id,
-            assigned_amount: zeroParents ? 0 : src.assigned_amount,
-            initial_used_amount: 0,
-            notes: zeroParents ? null : src.notes,
-            created_by: userId
-          })
-          .select("id")
-          .single()
-        if (insertError) throw insertError
-        targetBudgetBySource.set(src.id, created.id)
-        copied.ministry_budgets++
-      }
-    }
-
-    const targetItemBySource = new Map<string, string>()
-    if (srcItems.length > 0) {
-      const { data, error } = await db
-        .from("budget_items")
-        .select("id, name")
-        .eq("budget_period_id", to_period_id)
-        .eq("is_active", true)
-      if (error) throw error
-      const existing = new Map((data ?? []).map((i) => [i.name.toLowerCase(), i.id]))
-      for (const src of srcItems) {
-        const existingId = existing.get(src.name.toLowerCase())
-        if (existingId) {
-          targetItemBySource.set(src.id, existingId)
-          skipped.budget_items++
-          continue
-        }
-        const { data: created, error: insertError } = await db
-          .from("budget_items")
-          .insert({
-            budget_period_id: to_period_id,
-            name: src.name,
-            category_id: src.category_id,
-            assigned_amount: zeroParents ? 0 : src.assigned_amount,
-            initial_used_amount: 0,
-            notes: zeroParents ? null : src.notes,
-            created_by: userId
-          })
-          .select("id")
-          .single()
-        if (insertError) throw insertError
-        targetItemBySource.set(src.id, created.id)
-        copied.budget_items++
-      }
-    }
-
-    // ── 3. Sub-items, skipping name or category clashes under the same target parent ──
-    const targetParentIds = [...targetBudgetBySource.values(), ...targetItemBySource.values()]
-    const taken = new Map<string, { names: Set<string>; categories: Set<string> }>()
-    const slot = (parentId: string) => {
-      let s = taken.get(parentId)
-      if (!s) {
-        s = { names: new Set(), categories: new Set() }
-        taken.set(parentId, s)
-      }
-      return s
-    }
-    if (srcSubs.length > 0 && targetParentIds.length > 0) {
-      for (const column of ["ministry_budget_id", "budget_item_id"] as const) {
-        const { data, error } = await db
-          .from("budget_sub_items")
-          .select("ministry_budget_id, budget_item_id, name, category_id")
-          .eq("is_active", true)
-          .in(column, targetParentIds)
-        if (error) throw error
-        for (const row of data ?? []) {
-          const s = slot((row.ministry_budget_id ?? row.budget_item_id) as string)
-          s.names.add(row.name.toLowerCase())
-          if (row.category_id) s.categories.add(row.category_id)
-        }
-      }
-    }
-
-    for (const src of srcSubs) {
-      const isMinistry = src.ministry_budget_id !== null
-      const parentId = isMinistry
-        ? targetBudgetBySource.get(src.ministry_budget_id as string)
-        : targetItemBySource.get(src.budget_item_id as string)
-      if (!parentId) continue
-      const s = slot(parentId)
-      const categoryId = isMinistry ? null : src.category_id
-      if (s.names.has(src.name.toLowerCase()) || (categoryId && s.categories.has(categoryId))) {
-        skipped.sub_items++
-        continue
-      }
-      const { error } = await db.from("budget_sub_items").insert({
-        ministry_budget_id: isMinistry ? parentId : null,
-        budget_item_id: isMinistry ? null : parentId,
-        name: src.name,
-        assigned_amount: src.assigned_amount,
-        notes: src.notes,
-        category_id: categoryId,
-        created_by: userId
-      })
-      if (error) {
-        if (error.code === "23505") {
-          skipped.sub_items++
-          continue
-        }
-        throw error
-      }
-      s.names.add(src.name.toLowerCase())
-      if (categoryId) s.categories.add(categoryId)
-      copied.sub_items++
+      throw new Error(
+        `La copia se interrumpió: se copiaron ${copied.ministry_budgets} ministerios, ${copied.budget_items} ítems y ${copied.sub_items} sub-ítems antes del error (${message}). Puedes volver a ejecutarla para completar.`
+      )
     }
 
     await auditService.logSystem({

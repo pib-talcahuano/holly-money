@@ -28,6 +28,8 @@ type Props = {
   // Every period except the target, to pick the source year.
   sourcePeriods: PeriodRef[]
   source: BudgetCopySource | null
+  // Called after a successful copy so the parent keeps the panel open once rows appear.
+  onCopied?: () => void
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -47,7 +49,13 @@ export function copyToastMessage({ copied, skipped }: CopyResult) {
   return skippedTotal > 0 ? `${text}; ${existed}` : text
 }
 
-export function BudgetCopyPanel({ ministries, targetPeriod, sourcePeriods, source }: Props) {
+export function BudgetCopyPanel({
+  ministries,
+  targetPeriod,
+  sourcePeriods,
+  source,
+  onCopied
+}: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -67,6 +75,7 @@ export function BudgetCopyPanel({ ministries, targetPeriod, sourcePeriods, sourc
         scope
       })
       toast.success(copyToastMessage(result))
+      onCopied?.()
       router.refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al copiar el presupuesto")
