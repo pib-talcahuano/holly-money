@@ -31,6 +31,7 @@ import { Card } from "@/components/ui/card"
 import { IntentionProgress } from "@/components/intentions/intention-progress"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import {
   Dialog,
@@ -67,7 +68,8 @@ import {
   registerTransfer,
   addComment,
   submitRequest,
-  cancelRequest
+  cancelRequest,
+  setRequestFund
 } from "@/app/actions/requests"
 import {
   createMinistrySettlement,
@@ -142,7 +144,10 @@ export function IntentionDetailClient({
   canReview,
   canSubmit: canCreateSettlement,
   canCreateRequest,
-  currentUserId
+  currentUserId,
+  fundOptions,
+  currentFundName,
+  canChangeFund
 }: {
   intention: Intention
   comments: Comment[]
@@ -153,6 +158,10 @@ export function IntentionDetailClient({
   canSubmit: boolean
   canCreateRequest: boolean
   currentUserId: string
+  // Treasury-only; the page sends empty/false/null to everyone else.
+  fundOptions: { id: string; name: string }[]
+  currentFundName: string | null
+  canChangeFund: boolean
 }) {
   const router = useRouter()
   const [comments, setComments] = useState<Comment[]>(initialComments)
@@ -223,6 +232,9 @@ export function IntentionDetailClient({
   }
 
   const [reviewOpen, setReviewOpen] = useState(false)
+  const [fundOpen, setFundOpen] = useState(false)
+  const [fundValue, setFundValue] = useState("")
+  const [fundSaving, setFundSaving] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [settlementOpen, setSettlementOpen] = useState(false)
   const [closeOpen, setCloseOpen] = useState(false)
@@ -313,6 +325,20 @@ export function IntentionDetailClient({
       router.refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al revisar")
+    }
+  }
+
+  async function handleChangeFund() {
+    setFundSaving(true)
+    try {
+      await setRequestFund(intention.id, fundValue || null)
+      toast.success(fundValue ? "Fondo actualizado" : "Fondo quitado")
+      setFundOpen(false)
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al cambiar el fondo")
+    } finally {
+      setFundSaving(false)
     }
   }
 
@@ -602,6 +628,60 @@ export function IntentionDetailClient({
               </p>
             </div>
           )}
+          {canReview && intention.status === "APPROVED" && (
+            <div>
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint mb-1">
+                Fondo
+              </p>
+              <p className="text-[13.5px] font-semibold flex items-center gap-2">
+                {currentFundName ??
+                  (intention.budget_sub_item_id ? "Fondo asignado" : "Sin asignar")}
+                {canChangeFund && (
+                  <Dialog
+                    open={fundOpen}
+                    onOpenChange={(o) => {
+                      setFundOpen(o)
+                      if (o) setFundValue(intention.budget_sub_item_id ?? "")
+                    }}
+                  >
+                    <DialogTrigger
+                      render={
+                        <Button variant="outline" size="sm">
+                          Cambiar
+                        </Button>
+                      }
+                    />
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Cambiar fondo</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-2">
+                        <Field>
+                          <FieldLabel htmlFor="change-fund">Fondo</FieldLabel>
+                          <NativeSelect
+                            id="change-fund"
+                            className="w-full"
+                            value={fundValue}
+                            onChange={(e) => setFundValue(e.target.value)}
+                          >
+                            <NativeSelectOption value="">Sin asignar</NativeSelectOption>
+                            {fundOptions.map((f) => (
+                              <NativeSelectOption key={f.id} value={f.id}>
+                                {f.name}
+                              </NativeSelectOption>
+                            ))}
+                          </NativeSelect>
+                        </Field>
+                        <Button className="w-full" disabled={fundSaving} onClick={handleChangeFund}>
+                          {fundSaving ? "Guardando..." : "Guardar"}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {intention.review_message && reviewBanner && (
@@ -668,6 +748,25 @@ export function IntentionDetailClient({
                     />
                     <FieldError errors={[reviewForm.formState.errors.message]} />
                   </Field>
+                  {canReview && reviewForm.watch("action") === "APPROVED" && (
+                    <Field>
+                      <FieldLabel htmlFor="review-fund">Fondo</FieldLabel>
+                      <NativeSelect
+                        id="review-fund"
+                        className="w-full"
+                        {...reviewForm.register("fund_sub_item_id", {
+                          setValueAs: (v: string) => v || undefined
+                        })}
+                      >
+                        <NativeSelectOption value="">Sin asignar</NativeSelectOption>
+                        {fundOptions.map((f) => (
+                          <NativeSelectOption key={f.id} value={f.id}>
+                            {f.name}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </Field>
+                  )}
                   <Button
                     type="submit"
                     className="w-full"

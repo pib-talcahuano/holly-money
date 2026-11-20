@@ -972,3 +972,181 @@ describeIfLocal("RPC: budget summaries with sub-items", () => {
     expect(error?.code).toBe("23505")
   })
 })
+
+describeIfLocal("Trigger: budget_intentions fund validation", () => {
+  const admin = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+  let periodId = ""
+  let otherMinistryId = ""
+  let ownSubId = ""
+  let otherSubId = ""
+  let itemSubId = ""
+  let itemId = ""
+  let ministerId = ""
+  const intentionIds: string[] = []
+
+  const newIntention = async (requestedBy: string, fund?: string) => {
+    const { data, error } = await admin()
+      .from("budget_intentions")
+      .insert({
+        ministry_id: E2E_MINISTRY_ID,
+        requested_by: requestedBy,
+        purpose: "Fund trigger fixture",
+        amount: 1000,
+        funding_method: "TRANSFER",
+        status: "APPROVED",
+        budget_sub_item_id: fund ?? null
+      })
+      .select("id")
+      .single()
+    if (error) throw error
+    intentionIds.push(data.id)
+    return data.id
+  }
+
+  beforeAll(async () => {
+    const db = admin()
+    const { data: period, error: periodError } = await db
+      .from("budget_periods")
+      .insert({
+        label: "Fund trigger fixture",
+        year: 2096,
+        start_date: "2096-03-01",
+        end_date: "2097-02-28"
+      })
+      .select()
+      .single()
+    if (periodError) throw periodError
+    periodId = period.id
+
+    const { data: ministry, error: ministryError } = await db
+      .from("ministries")
+      .insert({ name: `tmp-fund-${Date.now()}` })
+      .select("id")
+      .single()
+    if (ministryError) throw ministryError
+    otherMinistryId = ministry.id
+
+    const { data: budgets, error: budgetsError } = await db
+      .from("ministry_budgets")
+      .insert([
+        { ministry_id: E2E_MINISTRY_ID, budget_period_id: periodId, assigned_amount: 0 },
+        { ministry_id: otherMinistryId, budget_period_id: periodId, assigned_amount: 0 }
+      ])
+      .select()
+    if (budgetsError) throw budgetsError
+
+    const { data: item, error: itemError } = await db
+      .from("budget_items")
+      .insert({ budget_period_id: periodId, name: "Fund trigger item", assigned_amount: 0 })
+      .select()
+      .single()
+    if (itemError) throw itemError
+    itemId = item.id
+
+    const { data: subs, error: subsError } = await db
+      .from("budget_sub_items")
+      .insert([
+        {
+          ministry_budget_id: budgets.find((b) => b.ministry_id === E2E_MINISTRY_ID)!.id,
+          name: "Own fund",
+          assigned_amount: 10
+        },
+        {
+          ministry_budget_id: budgets.find((b) => b.ministry_id === otherMinistryId)!.id,
+          name: "Other fund",
+          assigned_amount: 10
+        },
+        { budget_item_id: itemId, name: "Item fund", assigned_amount: 10 }
+      ])
+      .select()
+    if (subsError) throw subsError
+    ownSubId = subs.find((s) => s.name === "Own fund")!.id
+    otherSubId = subs.find((s) => s.name === "Other fund")!.id
+    itemSubId = subs.find((s) => s.name === "Item fund")!.id
+
+    const { data: minister, error: ministerError } = await db
+      .from("users")
+      .select("id")
+      .eq("email", E2E_USERS.minister.email)
+      .single()
+    if (ministerError) throw ministerError
+    ministerId = minister.id
+  })
+
+  afterAll(async () => {
+    const db = admin()
+    if (intentionIds.length) await db.from("budget_intentions").delete().in("id", intentionIds)
+    await db
+      .from("budget_sub_items")
+      .delete()
+      .in("id", [ownSubId, otherSubId, itemSubId].filter(Boolean))
+    await db.from("budget_items").delete().eq("budget_period_id", periodId)
+    await db.from("ministry_budgets").delete().eq("budget_period_id", periodId)
+    await db.from("ministries").delete().eq("id", otherMinistryId)
+    await db.from("budget_periods").delete().eq("id", periodId)
+  })
+
+  it("accepts a sub-item of the request's own ministry", async () => {
+    const id = await newIntention(E2E_ADMIN_ID, ownSubId)
+    const { data } = await admin()
+      .from("budget_intentions")
+      .select("budget_sub_item_id")
+      .eq("id", id)
+      .single()
+    expect(data?.budget_sub_item_id).toBe(ownSubId)
+  })
+
+  it("rejects a sub-item of another ministry on insert", async () => {
+    await expect(newIntention(E2E_ADMIN_ID, otherSubId)).rejects.toMatchObject({
+      message: "El fondo no pertenece al ministerio de la solicitud"
+    })
+  })
+
+  it("rejects an item-parented sub-item on update", async () => {
+    const id = await newIntention(E2E_ADMIN_ID)
+    const { error } = await admin()
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: itemSubId })
+      .eq("id", id)
+    expect(error?.message).toContain("El fondo no pertenece al ministerio de la solicitud")
+  })
+
+  it("lets BURSAR set the fund and clear it", async () => {
+    const id = await newIntention(E2E_ADMIN_ID)
+    const bursar = await signIn(E2E_USERS.bursar)
+    const set = await bursar
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: ownSubId })
+      .eq("id", id)
+      .select("budget_sub_item_id")
+      .single()
+    expect(set.error).toBeNull()
+    expect(set.data?.budget_sub_item_id).toBe(ownSubId)
+    const cleared = await bursar
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: null })
+      .eq("id", id)
+      .select("budget_sub_item_id")
+      .single()
+    expect(cleared.error).toBeNull()
+    expect(cleared.data?.budget_sub_item_id).toBeNull()
+    await bursar.auth.signOut()
+  })
+
+  it("does not let the MINISTER owner of a request change its fund", async () => {
+    const id = await newIntention(ministerId)
+    const minister = await signIn(E2E_USERS.minister)
+    const { error } = await minister
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: ownSubId })
+      .eq("id", id)
+    expect(error).not.toBeNull()
+    const { data } = await admin()
+      .from("budget_intentions")
+      .select("budget_sub_item_id")
+      .eq("id", id)
+      .single()
+    expect(data?.budget_sub_item_id).toBeNull()
+    await minister.auth.signOut()
+  })
+})

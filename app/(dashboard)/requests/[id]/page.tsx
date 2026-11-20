@@ -3,6 +3,8 @@ import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/serve
 import { PERMISSIONS, can, canAccessWorkflow, isOwnMinistryScoped } from "@/lib/permissions/rbac"
 import { intentionsService } from "@/services/intentions/intentions.service"
 import { settlementsService } from "@/services/settlements/settlements.service"
+import { budgetSubItemsService } from "@/services/ministries/budget-sub-items.service"
+import { ministryBudgetService } from "@/services/ministries/ministry-budget.service"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import { IntentionDetailClient } from "@/components/intentions/intention-detail-client"
 
@@ -45,9 +47,32 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
     settlements.map((s) => s.id)
   )
 
+  // Fund data is treasury-only: ministers never receive the options, the current fund or a
+  // selector. The fund can be changed only while the request has no settlement.
+  let fundOptions: { id: string; name: string }[] = []
+  let currentFundName: string | null = null
+  let canChangeFund = false
+  if (canReview && (intention.status === "PENDING" || intention.status === "APPROVED")) {
+    const period = await ministryBudgetService.getCurrentPeriod(db)
+    ;[fundOptions, currentFundName, canChangeFund] = await Promise.all([
+      period
+        ? budgetSubItemsService.listForMinistry(db, intention.ministry_id, period.id)
+        : Promise.resolve([]),
+      intention.budget_sub_item_id
+        ? budgetSubItemsService.getName(db, intention.budget_sub_item_id)
+        : Promise.resolve(null),
+      intention.status === "APPROVED"
+        ? intentionsService.hasSettlement(db, id).then((has) => !has)
+        : Promise.resolve(false)
+    ])
+  }
+
   return (
     <IntentionDetailClient
-      intention={intention}
+      intention={canReview ? intention : { ...intention, budget_sub_item_id: null }}
+      fundOptions={fundOptions}
+      currentFundName={currentFundName}
+      canChangeFund={canChangeFund}
       comments={comments}
       transfer={transfer}
       settlements={settlements}

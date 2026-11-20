@@ -21,6 +21,16 @@ type DB = SupabaseClient<Database>
 
 const CANCELLABLE_STATUSES = ["DRAFT", "PENDING"] as const
 const RECENT_PURPOSES_TAG = "recent-purposes"
+const FUND_MINISTRY_MISMATCH = "El fondo no pertenece al ministerio de la solicitud"
+
+// The DB trigger validate_intention_fund raises this message (or a permission error).
+function rethrowFundError(error: { message?: string; code?: string }): never {
+  if (error.message?.includes(FUND_MINISTRY_MISMATCH)) throw new Error(FUND_MINISTRY_MISMATCH)
+  if (error.code === "42501" && error.message?.includes("fondo")) {
+    throw new Error("Sin permisos para asignar el fondo de la solicitud")
+  }
+  throw error
+}
 
 export const intentionsService = {
   async list(db: DB, filters?: { ministryId?: string; status?: string }) {
@@ -214,6 +224,8 @@ export const intentionsService = {
       return { alreadyActioned: true }
     }
 
+    const fundSubItemId = input.action === "APPROVED" ? (input.fund_sub_item_id ?? null) : null
+
     const { data, error } = await db
       .from("budget_intentions")
       .update({
@@ -221,12 +233,14 @@ export const intentionsService = {
         reviewed_by: reviewerId,
         reviewed_at: now,
         review_message: input.message,
+        // The fund only applies to approvals; a rejected request never draws from one.
+        ...(fundSubItemId ? { budget_sub_item_id: fundSubItemId } : {}),
         updated_at: now
       })
       .eq("id", id)
       .select()
       .single()
-    if (error) throw error
+    if (error) rethrowFundError(error)
 
     await auditService.logSystem({
       entity: "BUDGET_INTENTION",
@@ -234,7 +248,11 @@ export const intentionsService = {
       user_id: reviewerId,
       entity_id: id,
       previous_value: { status: "PENDING" },
-      new_value: { status: input.action, message: input.message }
+      new_value: {
+        status: input.action,
+        message: input.message,
+        ...(fundSubItemId ? { budget_sub_item_id: fundSubItemId } : {})
+      }
     })
 
     const ministerUser = current?.users
@@ -245,6 +263,51 @@ export const intentionsService = {
     }
 
     return { alreadyActioned: false, data }
+  },
+
+  // Treasury can reassign the fund of an approved request until it has a settlement.
+  async setFund(db: DB, id: string, subItemId: string | null, userId: string): Promise<void> {
+    const { data: current, error: currentError } = await db
+      .from("budget_intentions")
+      .select("status, budget_sub_item_id")
+      .eq("id", id)
+      .single()
+    if (currentError) throw currentError
+    if (!current) throw new Error("Solicitud no encontrada")
+
+    if (current.status !== "APPROVED") {
+      throw new Error("Solo se puede asignar fondo a solicitudes aprobadas")
+    }
+    if (await this.hasSettlement(db, id)) {
+      throw new Error("No se puede cambiar el fondo: la solicitud ya tiene rendición")
+    }
+
+    const { error } = await db
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: subItemId, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single()
+    if (error) rethrowFundError(error)
+
+    await auditService.logSystem({
+      entity: "BUDGET_INTENTION",
+      action: "INTENTION_FUND_CHANGED",
+      user_id: userId,
+      entity_id: id,
+      previous_value: { budget_sub_item_id: current.budget_sub_item_id },
+      new_value: { budget_sub_item_id: subItemId }
+    })
+  },
+
+  async hasSettlement(db: DB, intentionId: string): Promise<boolean> {
+    const { data, error } = await db
+      .from("expense_settlements")
+      .select("id")
+      .eq("intention_id", intentionId)
+      .limit(1)
+    if (error) throw error
+    return (data?.length ?? 0) > 0
   },
 
   async registerTransfer(

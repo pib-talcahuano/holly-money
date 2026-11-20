@@ -131,6 +131,29 @@ export const budgetSubItemsService = {
     return data
   },
 
+  // Active funds a request of this ministry can draw from in the given budget period.
+  async listForMinistry(db: DB, ministryId: string, periodId: string) {
+    const { data, error } = await db
+      .from("budget_sub_items")
+      .select("id, name, ministry_budgets!inner(ministry_id, budget_period_id)")
+      .eq("is_active", true)
+      .eq("ministry_budgets.ministry_id", ministryId)
+      .eq("ministry_budgets.budget_period_id", periodId)
+      .order("name")
+    if (error) throw error
+    return (data ?? []).map((row) => ({ id: row.id, name: row.name }))
+  },
+
+  async getName(db: DB, id: string): Promise<string | null> {
+    const { data, error } = await db
+      .from("budget_sub_items")
+      .select("name")
+      .eq("id", id)
+      .maybeSingle()
+    if (error) throw error
+    return data?.name ?? null
+  },
+
   // Admin client: the RPC is service_role-only. Permission is checked by the page/action.
   async getSummary(periodId?: string): Promise<BudgetSubItemSummaryRow[]> {
     const admin = createSupabaseAdminClient()

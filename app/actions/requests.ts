@@ -10,6 +10,7 @@ import {
 } from "@/services/intentions/intentions.service"
 import { ministriesService } from "@/services/ministries/ministries.service"
 import { registerTransferSchema } from "@/lib/validators/intention"
+import { uuidSchema } from "@/lib/validators/ministry-budget"
 import type {
   CreateIntentionInput,
   ReviewIntentionInput,
@@ -88,6 +89,19 @@ export async function reviewRequest(
     revalidatePath("/requests")
   }
   return result as { alreadyActioned: true } | { alreadyActioned: false; data: unknown }
+}
+
+export async function setRequestFund(id: string, subItemId: string | null) {
+  const user = await getCurrentUser()
+  if (!user || !can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS)) {
+    throw new Error("Sin permisos para cambiar el fondo de la solicitud")
+  }
+  if (subItemId !== null) uuidSchema("Fondo inválido").parse(subItemId)
+
+  const db = await createSupabaseServerClient()
+  await intentionsService.setFund(db, id, subItemId, user.id)
+  revalidatePath(`/requests/${id}`)
+  revalidatePath("/requests")
 }
 
 export async function registerTransfer(id: string, input: RegisterTransferInput) {
