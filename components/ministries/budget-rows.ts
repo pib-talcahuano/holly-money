@@ -1,5 +1,15 @@
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
+import type { BudgetSubItemSummaryRow } from "@/services/ministries/budget-sub-items.service"
+import { aggregateParentTotals } from "@/services/ministries/budget-totals"
+
+export type SubItemRow = {
+  id: string
+  name: string
+  assigned: number
+  used: number
+  remaining: number
+}
 
 export type BudgetRow = {
   kind: "ministry" | "item"
@@ -13,22 +23,71 @@ export type BudgetRow = {
   // Automatic part of "used" only (excludes the manual initial amount).
   used: number | null
   remaining: number | null
+  // Active sub-items of this parent, sorted by name.
+  children: SubItemRow[]
+  // True when `assigned` is the sum of the children instead of an editable stored amount.
+  derived: boolean
+  // Spend that no sub-item claims ("Sin asignar").
+  unassignedUsed: number
 }
 
 type Ministry = { id: string; name: string; is_active: boolean }
 
 const byName = (a: BudgetRow, b: BudgetRow) => a.name.localeCompare(b.name, "es")
 
+const toSubItemRow = (s: BudgetSubItemSummaryRow): SubItemRow => ({
+  id: s.sub_item_id,
+  name: s.name,
+  assigned: s.assigned_amount,
+  used: s.used_amount,
+  remaining: s.remaining
+})
+
+const childrenOf = (
+  subItems: BudgetSubItemSummaryRow[],
+  isChild: (s: BudgetSubItemSummaryRow) => boolean
+) =>
+  subItems
+    .filter(isChild)
+    .map(toSubItemRow)
+    .sort((a, b) => a.name.localeCompare(b.name, "es"))
+
+// With sub-items the parent's total is their sum (shared helper, same rule as the SQL summaries);
+// "used" is the summary's own figure (it also counts spend of deactivated sub-items).
+function withChildren<T extends Pick<BudgetRow, "assigned" | "initial" | "used" | "remaining">>(
+  base: T,
+  children: SubItemRow[],
+  unassignedUsed: number
+): T & Pick<BudgetRow, "children" | "derived" | "unassignedUsed"> {
+  if (children.length === 0) return { ...base, children, derived: false, unassignedUsed }
+  const { assigned } = aggregateParentTotals({
+    storedAssigned: base.assigned ?? 0,
+    initialUsed: 0,
+    subItems: children.map((c) => ({ assigned: c.assigned, used: 0, is_active: true })),
+    unassignedUsed: 0
+  })
+  const used = base.used ?? 0
+  return {
+    ...base,
+    assigned,
+    remaining: assigned - (base.initial + used),
+    children,
+    derived: true,
+    unassignedUsed
+  }
+}
+
 export function buildBudgetRows(
   ministries: Ministry[],
   ministrySummary: MinistryBudgetSummaryRow[],
-  itemSummary: BudgetItemSummaryRow[]
+  itemSummary: BudgetItemSummaryRow[],
+  subItemSummary: BudgetSubItemSummaryRow[] = []
 ): BudgetRow[] {
   const ministryRows: BudgetRow[] = ministries
     .filter((m) => m.is_active)
     .map((m) => {
       const existing = ministrySummary.find((s) => s.ministry_id === m.id)
-      return {
+      const base = {
         kind: "ministry" as const,
         id: m.id,
         name: m.name,
@@ -37,22 +96,36 @@ export function buildBudgetRows(
         used: existing ? existing.used_amount - existing.initial_used_amount : null,
         remaining: existing?.remaining ?? null
       }
+      return withChildren(
+        base,
+        childrenOf(subItemSummary, (s) => s.parent_type === "MINISTRY" && s.ministry_id === m.id),
+        existing?.unassigned_used ?? 0
+      )
     })
     .sort(byName)
 
   const itemRows: BudgetRow[] = itemSummary
-    .map((i) => ({
-      kind: "item" as const,
-      id: i.item_id,
-      name: i.name,
-      categoryName: i.category_name,
-      categoryId: i.category_id,
-      notes: i.notes,
-      assigned: i.assigned_amount,
-      initial: i.initial_used_amount,
-      used: i.used_amount - i.initial_used_amount,
-      remaining: i.remaining
-    }))
+    .map((i) =>
+      withChildren(
+        {
+          kind: "item" as const,
+          id: i.item_id,
+          name: i.name,
+          categoryName: i.category_name,
+          categoryId: i.category_id,
+          notes: i.notes,
+          assigned: i.assigned_amount,
+          initial: i.initial_used_amount,
+          used: i.used_amount - i.initial_used_amount,
+          remaining: i.remaining
+        },
+        childrenOf(
+          subItemSummary,
+          (s) => s.parent_type === "ITEM" && s.budget_item_id === i.item_id
+        ),
+        i.unassigned_used ?? 0
+      )
+    )
     .sort(byName)
 
   return [...ministryRows, ...itemRows]

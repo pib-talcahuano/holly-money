@@ -15,7 +15,7 @@ export const createBudgetPeriodSchema = z.object({
 export const upsertMinistryBudgetSchema = z.object({
   ministry_id: uuidSchema("Ministerio inválido"),
   budget_period_id: uuidSchema("Período inválido"),
-  assigned_amount: z.coerce.number().positive("El monto asignado debe ser mayor a 0"),
+  assigned_amount: z.coerce.number().min(0, "El monto asignado no puede ser negativo"),
   initial_used_amount: z.coerce
     .number()
     .min(0, "El monto inicial utilizado no puede ser negativo")

@@ -62,6 +62,7 @@ import { USER_ROLES, hasRole } from "@/lib/constants/roles"
 import type { UserRole } from "@/types/auth"
 import type { MinistryLeftoverRow } from "@/services/ministries/ministry-leftover.service"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
+import { MinistryBudgetBreakdown, type BreakdownSubItem } from "./ministry-budget-breakdown"
 import type { intentionsService } from "@/services/intentions/intentions.service"
 import type { ministriesService } from "@/services/ministries/ministries.service"
 import { NewRequestDialog } from "@/components/intentions/new-request-dialog"
@@ -112,6 +113,7 @@ type Props = {
   intentions: MinistryIntention[]
   associatedMovements: AssociatedMovement[]
   budget: MinistryBudgetSummaryRow | null
+  budgetSubItems: BreakdownSubItem[]
   canManage: boolean
   isAssignedMinister: boolean
   canCreateRequest: boolean
@@ -135,6 +137,7 @@ export function MinistryDetailClient({
   intentions,
   associatedMovements,
   budget,
+  budgetSubItems,
   canManage,
   isAssignedMinister,
   canCreateRequest
@@ -721,6 +724,8 @@ export function MinistryDetailClient({
           )}
         </div>
       </div>
+
+      {budget && <MinistryBudgetBreakdown budget={budget} subItems={budgetSubItems} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-4 items-start">
         <div className="flex flex-col gap-4">

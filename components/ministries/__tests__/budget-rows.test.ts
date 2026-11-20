@@ -1,6 +1,7 @@
 import { buildBudgetRows, pendingEdits, sumTotals } from "../budget-rows"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
+import type { BudgetSubItemSummaryRow } from "@/services/ministries/budget-sub-items.service"
 
 const ministry = (id: string, name: string, is_active = true) => ({ id, name, is_active })
 
@@ -30,6 +31,100 @@ const itemRow = (item_id: string, name: string, assigned: number, initial: numbe
     used_amount: used,
     remaining: assigned - used
   }) as BudgetItemSummaryRow
+
+const subItem = (
+  sub_item_id: string,
+  parent: { ministry_id: string } | { budget_item_id: string },
+  name: string,
+  assigned: number,
+  used: number
+) =>
+  ({
+    sub_item_id,
+    parent_type: "ministry_id" in parent ? "MINISTRY" : "ITEM",
+    ministry_id: "ministry_id" in parent ? parent.ministry_id : null,
+    budget_item_id: "budget_item_id" in parent ? parent.budget_item_id : null,
+    name,
+    assigned_amount: assigned,
+    used_amount: used,
+    remaining: assigned - used
+  }) as BudgetSubItemSummaryRow
+
+describe("buildBudgetRows with sub-items", () => {
+  it("gives rows without sub-items an empty children list and no derived total", () => {
+    const [row] = buildBudgetRows([ministry("m1", "Alfa")], [ministryRow("m1", 1000, 0, 0)], [])
+    expect(row.children).toEqual([])
+    expect(row.derived).toBe(false)
+    expect(row.unassignedUsed).toBe(0)
+  })
+
+  it("attaches ministry sub-items to their ministry and item sub-items to their item", () => {
+    const rows = buildBudgetRows(
+      [ministry("m1", "Alfa"), ministry("m2", "Beta")],
+      [ministryRow("m1", 0, 0, 0), ministryRow("m2", 0, 0, 0)],
+      [itemRow("i1", "Directorio", 0, 0, 0)],
+      [
+        subItem("s1", { ministry_id: "m1" }, "Niños", 300, 100),
+        subItem("s2", { ministry_id: "m2" }, "Jóvenes", 50, 0),
+        subItem("s3", { budget_item_id: "i1" }, "Luz", 70, 20)
+      ]
+    )
+    const byName = Object.fromEntries(rows.map((r) => [r.name, r.children.map((c) => c.name)]))
+    expect(byName).toEqual({ Alfa: ["Niños"], Beta: ["Jóvenes"], Directorio: ["Luz"] })
+  })
+
+  it("derives the parent's assigned amount as the sum of its sub-items, ignoring the stored one", () => {
+    const [row] = buildBudgetRows(
+      [ministry("m1", "Alfa")],
+      [ministryRow("m1", 9999, 0, 0)],
+      [],
+      [
+        subItem("s1", { ministry_id: "m1" }, "Niños", 300, 0),
+        subItem("s2", { ministry_id: "m1" }, "Jóvenes", 200, 0)
+      ]
+    )
+    expect(row.derived).toBe(true)
+    expect(row.assigned).toBe(500)
+    expect(row.remaining).toBe(500)
+  })
+
+  it("exposes the unassigned spend of the parent (ministry and item)", () => {
+    const rows = buildBudgetRows(
+      [ministry("m1", "Alfa")],
+      [{ ...ministryRow("m1", 0, 0, 400), unassigned_used: 150 }],
+      [{ ...itemRow("i1", "Directorio", 0, 0, 90), unassigned_used: 90 }],
+      [
+        subItem("s1", { ministry_id: "m1" }, "Niños", 500, 250),
+        subItem("s2", { budget_item_id: "i1" }, "Luz", 100, 0)
+      ]
+    )
+    expect(rows.map((r) => r.unassignedUsed)).toEqual([150, 90])
+  })
+
+  it("keeps the sign of a negative remaining on parent and sub-item", () => {
+    const [row] = buildBudgetRows(
+      [ministry("m1", "Alfa")],
+      [ministryRow("m1", 0, 0, 700)],
+      [],
+      [subItem("s1", { ministry_id: "m1" }, "Niños", 500, 700)]
+    )
+    expect(row.children[0].remaining).toBe(-200)
+    expect(row.remaining).toBe(-200)
+  })
+
+  it("lists sub-items sorted by name", () => {
+    const [row] = buildBudgetRows(
+      [ministry("m1", "Alfa")],
+      [ministryRow("m1", 0, 0, 0)],
+      [],
+      [
+        subItem("s1", { ministry_id: "m1" }, "Zeta", 1, 0),
+        subItem("s2", { ministry_id: "m1" }, "Árbol", 1, 0)
+      ]
+    )
+    expect(row.children.map((c) => c.name)).toEqual(["Árbol", "Zeta"])
+  })
+})
 
 describe("buildBudgetRows", () => {
   it("puts every ministry before every item, each group sorted by name", () => {

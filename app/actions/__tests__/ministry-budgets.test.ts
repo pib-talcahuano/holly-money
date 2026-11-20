@@ -88,7 +88,7 @@ describe("upsertMinistryBudget", () => {
         assigned_amount: -1,
         initial_used_amount: 0
       })
-    ).rejects.toThrow("mayor a 0")
+    ).rejects.toThrow("no puede ser negativo")
     expect(mockUpsertBudget).not.toHaveBeenCalled()
   })
 

@@ -44,6 +44,16 @@ export const ministryBudgetService = {
     return data
   },
 
+  // Ids of the ministry_budgets rows of a period, so sub-items can be attached to them.
+  async listBudgetIds(db: DB, periodId: string) {
+    const { data, error } = await db
+      .from("ministry_budgets")
+      .select("id, ministry_id")
+      .eq("budget_period_id", periodId)
+    if (error) throw error
+    return data
+  },
+
   async createPeriodForYear(db: DB, year: number, userId: string) {
     const values = { year, label: `Presupuesto ${year}`, ...budgetPeriodRange(year) }
     const { data, error } = await db

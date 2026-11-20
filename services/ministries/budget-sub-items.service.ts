@@ -131,6 +131,16 @@ export const budgetSubItemsService = {
     return data
   },
 
+  // Fields the summary doesn't carry (category, notes), for the edit dialog on /budgets.
+  async listDetails(db: DB) {
+    const { data, error } = await db
+      .from("budget_sub_items")
+      .select("id, category_id, notes")
+      .eq("is_active", true)
+    if (error) throw error
+    return data
+  },
+
   // Active funds a request of this ministry can draw from in the given budget period.
   async listForMinistry(db: DB, ministryId: string, periodId: string) {
     const { data, error } = await db

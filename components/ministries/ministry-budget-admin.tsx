@@ -1,9 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { CalendarRange, Pencil, Plus, Wallet, EyeOff } from "lucide-react"
+import {
+  CalendarRange,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Wallet,
+  EyeOff
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty"
@@ -12,8 +20,18 @@ import { createBudgetPeriod, upsertMinistryBudget } from "@/app/actions/ministry
 import { updateBudgetItemAmounts, setBudgetItemActive } from "@/app/actions/budget-items"
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
+import type { BudgetSubItemSummaryRow } from "@/services/ministries/budget-sub-items.service"
 import { BudgetItemDialog } from "./budget-item-dialog"
-import { buildBudgetRows, pendingEdits, sumTotals, type BudgetRow, type Draft } from "./budget-rows"
+import { BudgetRowSubItems } from "./budget-row-sub-items"
+import { SubItemDialog, type EditableSubItem, type SubItemParentRef } from "./sub-item-dialog"
+import {
+  buildBudgetRows,
+  pendingEdits,
+  sumTotals,
+  type BudgetRow,
+  type Draft,
+  type SubItemRow
+} from "./budget-rows"
 
 type Ministry = { id: string; name: string; is_active: boolean }
 type BudgetPeriod = {
@@ -31,6 +49,11 @@ type Props = {
   suggestedYear: number
   summary: MinistryBudgetSummaryRow[]
   itemSummary: BudgetItemSummaryRow[]
+  subItemSummary: BudgetSubItemSummaryRow[]
+  // Category and notes of each active sub-item (the summary doesn't carry them).
+  subItemDetails: { id: string; category_id: string | null; notes: string | null }[]
+  // ministry_budgets row ids of the selected period, to attach sub-items to them.
+  ministryBudgetIds: { id: string; ministry_id: string }[]
   expenseCategories: { id: string; name: string }[]
 }
 
@@ -41,6 +64,9 @@ export function MinistryBudgetAdmin({
   suggestedYear,
   summary,
   itemSummary,
+  subItemSummary,
+  subItemDetails,
+  ministryBudgetIds,
   expenseCategories
 }: Props) {
   const router = useRouter()
@@ -48,11 +74,18 @@ export function MinistryBudgetAdmin({
   const [itemDialogOpen, setItemDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<BudgetRow | null>(null)
   const [saving, setSaving] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [subItemDialog, setSubItemDialog] = useState<{
+    open: boolean
+    parent: SubItemParentRef | null
+    subItem: EditableSubItem | null
+    confirmMessage: string | null
+  }>({ open: false, parent: null, subItem: null, confirmMessage: null })
   // Only the user's pending edits; displayed values fall back to the saved ones from props,
   // so rows added or removed by a refresh never leave stale state behind.
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
 
-  const budgetRows = buildBudgetRows(ministries, summary, itemSummary)
+  const budgetRows = buildBudgetRows(ministries, summary, itemSummary, subItemSummary)
   const totals = sumTotals(budgetRows)
 
   function assignedOf(r: BudgetRow) {
@@ -117,6 +150,55 @@ export function MinistryBudgetAdmin({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al desactivar el ítem")
     }
+  }
+
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  }
+
+  function parentRefOf(r: BudgetRow): SubItemParentRef | null {
+    if (r.kind === "item") return { kind: "item", budgetItemId: r.id, name: r.name }
+    if (!selectedPeriod) return null
+    return {
+      kind: "ministry",
+      ministryId: r.id,
+      periodId: selectedPeriod.id,
+      ministryBudgetId: ministryBudgetIds.find((b) => b.ministry_id === r.id)?.id ?? null,
+      name: r.name
+    }
+  }
+
+  function openAddSubItem(r: BudgetRow) {
+    // The first sub-item replaces a stored amount with the sum of the sub-items: confirm first.
+    const replacesAmount = !r.derived && (r.assigned ?? 0) > 0
+    setSubItemDialog({
+      open: true,
+      parent: parentRefOf(r),
+      subItem: null,
+      confirmMessage: replacesAmount
+        ? `El total de este ${r.kind === "ministry" ? "ministerio" : "ítem"} pasará a ser la suma de sus sub-ítems`
+        : null
+    })
+  }
+
+  function openEditSubItem(r: BudgetRow, c: SubItemRow) {
+    const details = subItemDetails.find((d) => d.id === c.id)
+    setSubItemDialog({
+      open: true,
+      parent: parentRefOf(r),
+      confirmMessage: null,
+      subItem: {
+        id: c.id,
+        name: c.name,
+        assigned: c.assigned,
+        categoryId: details?.category_id ?? null,
+        notes: details?.notes ?? null
+      }
+    })
   }
 
   function openItemDialog(item: BudgetRow | null) {
@@ -211,75 +293,108 @@ export function MinistryBudgetAdmin({
               </thead>
               <tbody className="divide-y divide-border">
                 {budgetRows.map((r) => (
-                  <tr key={`${r.kind}-${r.id}`}>
-                    <td className="px-5 py-3 font-medium">
-                      {r.name}
-                      {r.kind === "item" && r.categoryName && (
-                        <span className="block text-xs font-normal text-muted-foreground">
-                          {r.categoryName}
+                  <Fragment key={`${r.kind}-${r.id}`}>
+                    <tr>
+                      <td className="px-5 py-3 font-medium">
+                        <button
+                          type="button"
+                          className="mr-1.5 inline-flex align-middle text-muted-foreground"
+                          aria-expanded={expanded.has(r.id)}
+                          aria-label={`${expanded.has(r.id) ? "Contraer" : "Expandir"} ${r.name}`}
+                          onClick={() => toggleExpanded(r.id)}
+                        >
+                          {expanded.has(r.id) ? (
+                            <ChevronDown className="size-4" />
+                          ) : (
+                            <ChevronRight className="size-4" />
+                          )}
+                        </button>
+                        {r.name}
+                        {r.children.length > 0 && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            {r.children.length} sub-ítem{r.children.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        {r.kind === "item" && r.categoryName && (
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {r.categoryName}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                          {r.kind === "ministry" ? "Ministerio" : "Otro"}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                        {r.kind === "ministry" ? "Ministerio" : "Otro"}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="1"
-                        aria-label={`Asignado ${r.name}`}
-                        className="w-32 ml-auto text-right"
-                        value={assignedOf(r)}
-                        onChange={(e) => setDraft(r.id, { assigned: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="1"
-                        aria-label={`Usado inicial ${r.name}`}
-                        className="w-32 ml-auto text-right"
-                        value={initialOf(r)}
-                        onChange={(e) => setDraft(r.id, { initial: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-5 py-3 text-right text-muted-foreground">
-                      {r.used === null ? "—" : formatCLP(r.used)}
-                    </td>
-                    <td
-                      className={`px-5 py-3 text-right font-medium ${
-                        r.remaining !== null && r.remaining < 0 ? "text-destructive" : ""
-                      }`}
-                    >
-                      {r.remaining === null ? "—" : formatCLP(r.remaining)}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      {r.kind === "item" && (
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Editar ${r.name}`}
-                            onClick={() => openItemDialog(r)}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        {r.derived ? (
+                          <span
+                            className="block font-medium"
+                            title="Suma de sus sub-ítems"
+                            data-testid={`assigned-derived-${r.id}`}
                           >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Desactivar ${r.name}`}
-                            onClick={() => handleDeactivate(r)}
-                          >
-                            <EyeOff className="size-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
+                            {formatCLP(r.assigned ?? 0)}
+                          </span>
+                        ) : (
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            aria-label={`Asignado ${r.name}`}
+                            className="w-32 ml-auto text-right"
+                            value={assignedOf(r)}
+                            onChange={(e) => setDraft(r.id, { assigned: e.target.value })}
+                          />
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          aria-label={`Usado inicial ${r.name}`}
+                          className="w-32 ml-auto text-right"
+                          value={initialOf(r)}
+                          onChange={(e) => setDraft(r.id, { initial: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-5 py-3 text-right text-muted-foreground">
+                        {r.used === null ? "—" : formatCLP(r.used)}
+                      </td>
+                      <td
+                        className={`px-5 py-3 text-right font-medium ${
+                          r.remaining !== null && r.remaining < 0 ? "text-destructive" : ""
+                        }`}
+                      >
+                        {r.remaining === null ? "—" : formatCLP(r.remaining)}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        {r.kind === "item" && (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Editar ${r.name}`}
+                              onClick={() => openItemDialog(r)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Desactivar ${r.name}`}
+                              onClick={() => handleDeactivate(r)}
+                            >
+                              <EyeOff className="size-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    {expanded.has(r.id) && (
+                      <BudgetRowSubItems row={r} onAdd={openAddSubItem} onEdit={openEditSubItem} />
+                    )}
+                  </Fragment>
                 ))}
                 <tr>
                   <td colSpan={7} className="px-5 py-2">
@@ -309,6 +424,15 @@ export function MinistryBudgetAdmin({
           </div>
         </div>
       )}
+
+      <SubItemDialog
+        open={subItemDialog.open}
+        onOpenChange={(open) => setSubItemDialog((prev) => ({ ...prev, open }))}
+        parent={subItemDialog.parent}
+        categories={expenseCategories}
+        subItem={subItemDialog.subItem}
+        confirmMessage={subItemDialog.confirmMessage}
+      />
 
       {selectedPeriod && (
         <BudgetItemDialog
