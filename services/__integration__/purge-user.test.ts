@@ -166,4 +166,73 @@ describeIfLocal("purge_user", () => {
       .single()
     expect(survivor).toEqual({ id: survivorId, updated_by_id: null })
   })
+
+  it("purges a user who created budget items and sub-items, keeping the rows", async () => {
+    // Fixture years (shared across services/__integration__): see YEARS map in rls.test.ts.
+    const userId = await createUser("budgeter")
+    const { data: ministry } = await getAdmin().from("ministries").select("id").limit(1).single()
+    const { data: period, error: periodError } = await getAdmin()
+      .from("budget_periods")
+      .insert({
+        label: "Purge fixture",
+        year: 2065,
+        start_date: "2065-03-01",
+        end_date: "2066-02-28"
+      })
+      .select("id")
+      .single()
+    expect(periodError).toBeNull()
+    const periodId = period!.id
+    let mbId = ""
+    try {
+      const { data: mb } = await getAdmin()
+        .from("ministry_budgets")
+        .insert({ budget_period_id: periodId, ministry_id: ministry!.id, assigned_amount: 0 })
+        .select("id")
+        .single()
+      mbId = mb!.id
+      const { data: item } = await getAdmin()
+        .from("budget_items")
+        .insert({
+          budget_period_id: periodId,
+          name: "Purge item",
+          assigned_amount: 0,
+          created_by: userId
+        })
+        .select("id")
+        .single()
+      const { data: sub, error: subError } = await getAdmin()
+        .from("budget_sub_items")
+        .insert({
+          ministry_budget_id: mb!.id,
+          name: "Purge sub",
+          assigned_amount: 5,
+          created_by: userId
+        })
+        .select("id")
+        .single()
+      expect(subError).toBeNull()
+
+      const { error } = await getAdmin().rpc("purge_user", { p_user_id: userId })
+      expect(error).toBeNull()
+
+      const { data: subAfter } = await getAdmin()
+        .from("budget_sub_items")
+        .select("created_by")
+        .eq("id", sub!.id)
+        .single()
+      const { data: itemAfter } = await getAdmin()
+        .from("budget_items")
+        .select("created_by")
+        .eq("id", item!.id)
+        .single()
+      expect(subAfter).toEqual({ created_by: null })
+      expect(itemAfter).toEqual({ created_by: null })
+    } finally {
+      if (mbId) await getAdmin().from("budget_sub_items").delete().eq("ministry_budget_id", mbId)
+      await getAdmin().from("budget_items").delete().eq("budget_period_id", periodId)
+      await getAdmin().from("ministry_budgets").delete().eq("budget_period_id", periodId)
+      await getAdmin().from("budget_periods").delete().eq("id", periodId)
+    }
+  })
 })

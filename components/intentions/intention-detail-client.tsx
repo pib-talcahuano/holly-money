@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { withCurrentFundOption } from "./fund-options"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm, Controller, type Resolver } from "react-hook-form"
@@ -665,7 +666,11 @@ export function IntentionDetailClient({
                             onChange={(e) => setFundValue(e.target.value)}
                           >
                             <NativeSelectOption value="">Sin asignar</NativeSelectOption>
-                            {fundOptions.map((f) => (
+                            {withCurrentFundOption(
+                              fundOptions,
+                              intention.budget_sub_item_id,
+                              currentFundName
+                            ).map((f) => (
                               <NativeSelectOption key={f.id} value={f.id}>
                                 {f.name}
                               </NativeSelectOption>

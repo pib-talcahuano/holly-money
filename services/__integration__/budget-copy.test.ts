@@ -23,8 +23,9 @@ const isLocal =
   SUPABASE_URL.startsWith("http://127.0.0.1") || SUPABASE_URL.startsWith("http://localhost")
 const describeIfLocal = isLocal && SECRET_KEY ? describe : describe.skip
 
-const SRC_YEAR = 2093
-const DST_YEAR = 2094
+// Years allocated across services/__integration__: see the map at the top of rls.test.ts.
+const SRC_YEAR = 2081
+const DST_YEAR = 2082
 
 describeIfLocal("copyFromPeriod (local Supabase)", () => {
   const db = createClient<Database>(SUPABASE_URL, SECRET_KEY)

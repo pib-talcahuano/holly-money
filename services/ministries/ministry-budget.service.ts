@@ -132,6 +132,9 @@ async function performCopy(
   }
 
   // ── 2. Parents: ministry budgets (by ministry) and items (by lower(name), active) ──
+  // Target parents that already existed: their (possibly hand-entered) total must not be silently
+  // replaced by a sum of copied sub-items, so only an explicit { sub_item_id } copy adds to them.
+  const preexistingParents = new Set<string>()
   const targetBudgetBySource = new Map<string, string>()
   if (srcBudgets.length > 0) {
     const { data, error } = await db
@@ -144,6 +147,7 @@ async function performCopy(
       const existingId = existing.get(src.ministry_id)
       if (existingId) {
         targetBudgetBySource.set(src.id, existingId)
+        preexistingParents.add(existingId)
         skipped.ministry_budgets++
         continue
       }
@@ -178,6 +182,7 @@ async function performCopy(
       const existingId = existing.get(src.name.toLowerCase())
       if (existingId) {
         targetItemBySource.set(src.id, existingId)
+        preexistingParents.add(existingId)
         skipped.budget_items++
         continue
       }
@@ -233,6 +238,10 @@ async function performCopy(
       ? targetBudgetBySource.get(src.ministry_budget_id as string)
       : targetItemBySource.get(src.budget_item_id as string)
     if (!parentId) continue
+    if (!zeroParents && preexistingParents.has(parentId)) {
+      skipped.sub_items++
+      continue
+    }
     const s = slot(parentId)
     const categoryId = isMinistry ? null : src.category_id
     if (s.names.has(src.name.toLowerCase()) || (categoryId && s.categories.has(categoryId))) {
@@ -309,6 +318,11 @@ export const ministryBudgetService = {
       .single()
     if (error) {
       if (error.code === "23505") throw new Error("Ya existe un presupuesto para ese año")
+      if (error.code === "23P01") {
+        throw new Error(
+          "Las fechas de este año se solapan con otro presupuesto existente. Revisa las fechas del período vigente."
+        )
+      }
       throw error
     }
 

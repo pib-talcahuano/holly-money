@@ -96,6 +96,7 @@ export async function setRequestFund(id: string, subItemId: string | null) {
   if (!user || !can(user.permissions, PERMISSIONS.REVIEW_INTENTIONS)) {
     throw new Error("Sin permisos para cambiar el fondo de la solicitud")
   }
+  uuidSchema("Solicitud inválida").parse(id)
   if (subItemId !== null) uuidSchema("Fondo inválido").parse(subItemId)
 
   const db = await createSupabaseServerClient()

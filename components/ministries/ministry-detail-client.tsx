@@ -1,5 +1,6 @@
 "use client"
 
+import { formatDeleteBlockers } from "./delete-blockers"
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -587,9 +588,7 @@ export function MinistryDetailClient({
                     {deleteBlocked && (
                       <p className="text-sm text-muted-foreground">
                         Este ministerio tiene historial y no se puede eliminar (
-                        {Object.entries(deleteBlockers ?? {})
-                          .map(([table, n]) => `${table}: ${n}`)
-                          .join(", ")}
+                        {formatDeleteBlockers(deleteBlockers)}
                         ). Puedes desactivarlo para que deje de usarse.
                       </p>
                     )}

@@ -19,6 +19,19 @@ const isLocal =
 
 const describeIfLocal = isLocal && SUPABASE_URL && SECRET_KEY ? describe : describe.skip
 
+// Allocated fixture years/dates for ALL files in services/__integration__ (budget_periods has a
+// unique `year` and a no-overlap exclusion on dates; Jest runs files in parallel, so every
+// fixture must own a distinct year AND a non-overlapping date range). March-to-February periods
+// span year Y-03-01..Y+1-02-28 (so Y and Y+1 are adjacent, never both used by unrelated files).
+//   2099 (2099-06), 2095 (2099-02), 2089 (2099-01), 2088 (2099-03)  rls.test.ts: RLS inserts
+//   2098 (2098-01)                                                  rls.test.ts: movements fixture
+//   2097 (2097-01)                                                  rls.test.ts: RPC summaries
+//   2087 (2087-03..2088-02)                                         rls.test.ts: budget_sub_items RLS
+//   2086 (2086-03..2087-02)                                         rls.test.ts: fund trigger
+//   2081, 2082 (2081-03..2083-02)                                   budget-copy.test.ts
+//   2071, 2072 (2071-03..2073-02)                                   rls.test.ts: year-boundary totals
+//   2065 (2065-03..2066-02)                                         purge-user.test.ts
+
 describeIfLocal("RLS: unauthenticated client", () => {
   // createClient inside each test to avoid throwing at collection time when keys are empty
   it("cannot read movements table", async () => {
@@ -150,7 +163,7 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const minister = await signIn(E2E_USERS.minister)
     const { error } = await minister.from("budget_periods").insert({
       label: "RLS test — should fail",
-      year: 2096,
+      year: 2089,
       start_date: "2099-01-01",
       end_date: "2099-01-31"
     })
@@ -207,7 +220,7 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
       .from("budget_periods")
       .insert({
         label: "RLS test — bursar",
-        year: 2094,
+        year: 2088,
         start_date: "2099-03-01",
         end_date: "2099-03-31"
       })
@@ -571,9 +584,9 @@ describeIfLocal("RLS: budget_sub_items", () => {
       .from("budget_periods")
       .insert({
         label: "Sub-items fixture",
-        year: 2097,
-        start_date: "2097-03-01",
-        end_date: "2098-02-28"
+        year: 2087,
+        start_date: "2087-03-01",
+        end_date: "2088-02-28"
       })
       .select()
       .single()
@@ -1058,9 +1071,9 @@ describeIfLocal("Trigger: budget_intentions fund validation", () => {
       .from("budget_periods")
       .insert({
         label: "Fund trigger fixture",
-        year: 2096,
-        start_date: "2096-03-01",
-        end_date: "2097-02-28"
+        year: 2086,
+        start_date: "2086-03-01",
+        end_date: "2087-02-28"
       })
       .select()
       .single()
@@ -1151,6 +1164,15 @@ describeIfLocal("Trigger: budget_intentions fund validation", () => {
     })
   })
 
+  it("rejects changing the request's ministry while it holds another ministry's fund", async () => {
+    const id = await newIntention(E2E_ADMIN_ID, ownSubId)
+    const { error } = await admin()
+      .from("budget_intentions")
+      .update({ ministry_id: otherMinistryId })
+      .eq("id", id)
+    expect(error?.message).toContain("El fondo no pertenece al ministerio de la solicitud")
+  })
+
   it("rejects an item-parented sub-item on update", async () => {
     const id = await newIntention(E2E_ADMIN_ID)
     const { error } = await admin()
@@ -1197,5 +1219,131 @@ describeIfLocal("Trigger: budget_intentions fund validation", () => {
       .single()
     expect(data?.budget_sub_item_id).toBeNull()
     await minister.auth.signOut()
+  })
+})
+
+describeIfLocal("RPC: ministry totals across a year boundary", () => {
+  const admin = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+  const periodIds: string[] = []
+  const subIds: string[] = []
+  const intentionIds: string[] = []
+  let periodB = ""
+
+  beforeAll(async () => {
+    const db = admin()
+    const mkPeriod = async (year: number) => {
+      const { data, error } = await db
+        .from("budget_periods")
+        .insert({
+          label: `Boundary ${year}`,
+          year,
+          start_date: `${year}-03-01`,
+          end_date: `${year + 1}-02-28`
+        })
+        .select("id")
+        .single()
+      if (error) throw error
+      periodIds.push(data.id)
+      const { data: mb, error: mbError } = await db
+        .from("ministry_budgets")
+        .insert({
+          budget_period_id: data.id,
+          ministry_id: E2E_MINISTRY_ID,
+          assigned_amount: 0,
+          initial_used_amount: 5
+        })
+        .select("id")
+        .single()
+      if (mbError) throw mbError
+      const { data: sub, error: subError } = await db
+        .from("budget_sub_items")
+        .insert({ ministry_budget_id: mb.id, name: `Fund ${year}`, assigned_amount: 100 })
+        .select("id")
+        .single()
+      if (subError) throw subError
+      subIds.push(sub.id)
+      return { periodId: data.id, subId: sub.id }
+    }
+    const a = await mkPeriod(2071)
+    const b = await mkPeriod(2072)
+    periodB = b.periodId
+
+    const { data: intentions, error } = await db
+      .from("budget_intentions")
+      .insert([
+        // fund from period A, transfer dated inside period B
+        {
+          ministry_id: E2E_MINISTRY_ID,
+          requested_by: E2E_ADMIN_ID,
+          purpose: "Boundary fixture",
+          status: "APPROVED" as const,
+          amount: 70,
+          funding_method: "TRANSFER" as const,
+          budget_sub_item_id: a.subId
+        },
+        {
+          ministry_id: E2E_MINISTRY_ID,
+          requested_by: E2E_ADMIN_ID,
+          purpose: "Boundary fixture",
+          status: "APPROVED" as const,
+          amount: 40,
+          funding_method: "TRANSFER" as const,
+          budget_sub_item_id: b.subId
+        }
+      ])
+      .select()
+    if (error) throw error
+    intentionIds.push(...intentions.map((i) => i.id))
+    const { error: transfersError } = await db.from("intention_transfers").insert([
+      {
+        intention_id: intentions.find((i) => i.amount === 70)!.id,
+        amount: 70,
+        transfer_date: "2072-03-10",
+        registered_by: E2E_ADMIN_ID
+      },
+      {
+        intention_id: intentions.find((i) => i.amount === 40)!.id,
+        amount: 40,
+        transfer_date: "2072-03-12",
+        registered_by: E2E_ADMIN_ID
+      }
+    ])
+    if (transfersError) throw transfersError
+  })
+
+  afterAll(async () => {
+    const db = admin()
+    if (intentionIds.length) {
+      await db.from("intention_transfers").delete().in("intention_id", intentionIds)
+      await db.from("budget_intentions").delete().in("id", intentionIds)
+    }
+    if (subIds.length) await db.from("budget_sub_items").delete().in("id", subIds)
+    if (periodIds.length) {
+      await db.from("ministry_budgets").delete().in("budget_period_id", periodIds)
+      await db.from("budget_periods").delete().in("id", periodIds)
+    }
+  })
+
+  it("counts spend funded by another period's sub-item as unassigned, and totals add up", async () => {
+    const db = admin()
+    const [ministries, subItems] = await Promise.all([
+      db.rpc("get_ministry_budget_summary", { p_period_id: periodB }),
+      db.rpc("get_budget_sub_items_summary", { p_period_id: periodB })
+    ])
+    expect(ministries.error).toBeNull()
+    expect(subItems.error).toBeNull()
+    const row = (ministries.data as unknown as Record<string, number | string>[]).find(
+      (r) => r.ministry_id === E2E_MINISTRY_ID
+    )!
+    // 70 (fund of A, "Sin asignar" here) + 40 (B's own fund)
+    expect(row.unassigned_used).toBe(70)
+    expect(row.used_amount).toBe(5 + 110)
+    const subsUsed = (subItems.data as unknown as { ministry_id: string; used_amount: number }[])
+      .filter((s) => s.ministry_id === E2E_MINISTRY_ID)
+      .reduce((a, s) => a + s.used_amount, 0)
+    expect(subsUsed).toBe(40)
+    expect(row.used_amount).toBe(
+      (row.initial_used_amount as number) + subsUsed + (row.unassigned_used as number)
+    )
   })
 })

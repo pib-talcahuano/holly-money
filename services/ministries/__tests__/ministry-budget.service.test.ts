@@ -59,6 +59,17 @@ describe("ministryBudgetService.createPeriodForYear", () => {
     )
     expect(mockLogSystem).not.toHaveBeenCalled()
   })
+
+  it("throws a friendly error when the dates overlap another period (23P01)", async () => {
+    const { db } = fakeDb({
+      data: null,
+      error: { code: "23P01", message: "conflicting key value violates exclusion constraint" }
+    })
+    await expect(ministryBudgetService.createPeriodForYear(db, 2027, "user-1")).rejects.toThrow(
+      "Las fechas de este año se solapan con otro presupuesto existente. Revisa las fechas del período vigente."
+    )
+    expect(mockLogSystem).not.toHaveBeenCalled()
+  })
 })
 
 describe("ministryBudgetService.upsertBudget without assigned_amount", () => {
@@ -336,6 +347,88 @@ describe("ministryBudgetService.copyFromPeriod", () => {
       payload: { assigned_amount: 0, initial_used_amount: 0, budget_period_id: DST }
     })
     expect(writes[1]).toMatchObject({ table: "budget_sub_items", payload: { name: "Viajes" } })
+  })
+
+  it("ALL leaves the sub-items of an already-existing target parent alone (hand-entered total)", async () => {
+    const tables = fixtures()
+    tables.ministry_budgets.push({
+      id: "mb-dst",
+      budget_period_id: DST,
+      ministry_id: "m-1",
+      assigned_amount: 777,
+      initial_used_amount: 0
+    })
+    const { db, writes } = memoryDb(tables)
+    const result = await ministryBudgetService.copyFromPeriod(
+      db,
+      { from_period_id: SRC, to_period_id: DST, scope: "ALL" },
+      "u-1"
+    )
+    // mb-1's only active sub-item (s-1) is skipped; the new item and its sub-item are copied.
+    expect(result.copied).toEqual({ ministry_budgets: 0, budget_items: 1, sub_items: 1 })
+    expect(result.skipped).toEqual({ ministry_budgets: 1, budget_items: 0, sub_items: 2 })
+    expect(writes.some((w) => w.table === "budget_sub_items" && w.payload.name === "Viajes")).toBe(
+      false
+    )
+    expect(writes.some((w) => w.table === "ministry_budgets")).toBe(false)
+  })
+
+  it("{ ministry_id } and { budget_item_id } also skip sub-items of an existing target parent", async () => {
+    const tables = fixtures()
+    tables.ministry_budgets.push({
+      id: "mb-dst",
+      budget_period_id: DST,
+      ministry_id: "m-1",
+      assigned_amount: 777,
+      initial_used_amount: 0
+    })
+    tables.budget_items.push({
+      id: "it-dst",
+      budget_period_id: DST,
+      name: "ASEO",
+      is_active: true,
+      assigned_amount: 1,
+      initial_used_amount: 0
+    })
+    const { db, writes } = memoryDb(tables)
+    const byMinistry = await ministryBudgetService.copyFromPeriod(
+      db,
+      { from_period_id: SRC, to_period_id: DST, scope: { ministry_id: "m-1" } },
+      "u-1"
+    )
+    expect(byMinistry.copied.sub_items).toBe(0)
+    expect(byMinistry.skipped.sub_items).toBe(1)
+    const byItem = await ministryBudgetService.copyFromPeriod(
+      db,
+      { from_period_id: SRC, to_period_id: DST, scope: { budget_item_id: "it-1" } },
+      "u-1"
+    )
+    expect(byItem.copied.sub_items).toBe(0)
+    expect(byItem.skipped.sub_items).toBe(2)
+    expect(writes.some((w) => w.table === "budget_sub_items")).toBe(false)
+  })
+
+  it("{ sub_item_id } still adds the sub-item to an existing target parent", async () => {
+    const tables = fixtures()
+    tables.ministry_budgets.push({
+      id: "mb-dst",
+      budget_period_id: DST,
+      ministry_id: "m-1",
+      assigned_amount: 777,
+      initial_used_amount: 0
+    })
+    const { db, writes } = memoryDb(tables)
+    const result = await ministryBudgetService.copyFromPeriod(
+      db,
+      { from_period_id: SRC, to_period_id: DST, scope: { sub_item_id: "s-1" } },
+      "u-1"
+    )
+    expect(result.copied).toEqual({ ministry_budgets: 0, budget_items: 0, sub_items: 1 })
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).toMatchObject({
+      table: "budget_sub_items",
+      payload: { ministry_budget_id: "mb-dst", name: "Viajes" }
+    })
   })
 
   it("{ ministry_id } copies only that ministry's budget and its sub-items", async () => {

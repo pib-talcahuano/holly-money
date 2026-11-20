@@ -1,7 +1,6 @@
 import type { MinistryBudgetSummaryRow } from "@/services/ministries/ministry-budget.service"
 import type { BudgetItemSummaryRow } from "@/services/ministries/budget-items.service"
 import type { BudgetSubItemSummaryRow } from "@/services/ministries/budget-sub-items.service"
-import { aggregateParentTotals } from "@/services/ministries/budget-totals"
 
 export type SubItemRow = {
   id: string
@@ -60,12 +59,7 @@ function withChildren<T extends Pick<BudgetRow, "assigned" | "initial" | "used" 
   unassignedUsed: number
 ): T & Pick<BudgetRow, "children" | "derived" | "unassignedUsed"> {
   if (children.length === 0) return { ...base, children, derived: false, unassignedUsed }
-  const { assigned } = aggregateParentTotals({
-    storedAssigned: base.assigned ?? 0,
-    initialUsed: 0,
-    subItems: children.map((c) => ({ assigned: c.assigned, used: 0, is_active: true })),
-    unassignedUsed: 0
-  })
+  const assigned = children.reduce((sum, c) => sum + c.assigned, 0)
   const used = base.used ?? 0
   return {
     ...base,

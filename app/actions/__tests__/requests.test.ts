@@ -4,7 +4,8 @@ import {
   submitRequest,
   cancelRequest,
   addComment,
-  getRecentPurposes
+  getRecentPurposes,
+  setRequestFund
 } from "../requests"
 
 const mockGetCurrentUser = jest.fn()
@@ -18,6 +19,7 @@ const mockSubmit = jest.fn()
 const mockCancel = jest.fn()
 const mockRegisterTransfer = jest.fn()
 const mockAddComment = jest.fn()
+const mockSetFund = jest.fn()
 const mockRevalidatePath = jest.fn()
 const mockGetCachedRecentPurposes = jest.fn()
 const mockRevalidateRecentPurposes = jest.fn()
@@ -46,6 +48,7 @@ jest.mock("@/services/intentions/intentions.service", () => ({
     submit: (...args: unknown[]) => mockSubmit(...args),
     cancel: (...args: unknown[]) => mockCancel(...args),
     registerTransfer: (...args: unknown[]) => mockRegisterTransfer(...args),
+    setFund: (...args: unknown[]) => mockSetFund(...args),
     addComment: (...args: unknown[]) => mockAddComment(...args)
   },
   getCachedRecentPurposes: (...args: unknown[]) => mockGetCachedRecentPurposes(...args),
@@ -271,5 +274,36 @@ describe("addComment", () => {
       mockUser.id,
       true
     )
+  })
+})
+
+describe("setRequestFund", () => {
+  const requestId = "3f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6b"
+  const subItemId = "7a1c9d2e-8b3f-4c5d-a6e7-0f1a2b3c4d5e"
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+  })
+
+  it("rejects a malformed request id before touching the service", async () => {
+    await expect(setRequestFund("not-a-uuid", subItemId)).rejects.toThrow("Solicitud inválida")
+    expect(mockSetFund).not.toHaveBeenCalled()
+  })
+
+  it("rejects a malformed sub-item id before touching the service", async () => {
+    await expect(setRequestFund(requestId, "nope")).rejects.toThrow("Fondo inválido")
+    expect(mockSetFund).not.toHaveBeenCalled()
+  })
+
+  it("sets the fund and revalidates", async () => {
+    await setRequestFund(requestId, subItemId)
+    expect(mockSetFund).toHaveBeenCalledWith(mockDb, requestId, subItemId, "user-1")
+    expect(mockRevalidatePath).toHaveBeenCalledWith(`/requests/${requestId}`)
+  })
+
+  it("clears the fund with null", async () => {
+    await setRequestFund(requestId, null)
+    expect(mockSetFund).toHaveBeenCalledWith(mockDb, requestId, null, "user-1")
   })
 })
