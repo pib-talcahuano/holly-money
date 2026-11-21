@@ -11,7 +11,9 @@ function chain(result: Result) {
       ;(calls[name] ??= []).push(args)
       return proxy
     }
-  for (const m of ["select", "order", "range", "eq", "ilike", "or", "not", "limit"]) proxy[m] = record(m)
+  for (const m of ["select", "order", "range", "eq", "ilike", "or", "not", "limit", "filter"]) {
+    proxy[m] = record(m)
+  }
   proxy.then = (resolve: (v: Result) => unknown, reject: (e: unknown) => unknown) =>
     Promise.resolve(result).then(resolve, reject)
   return { proxy, calls }
@@ -91,7 +93,7 @@ describe("suggestDeliveredBy", () => {
     error: null
   })
 
-  it("queries active movements of the type with an accent-insensitive ilike", async () => {
+  it("queries active movements of the type with an accent-insensitive imatch", async () => {
     const t = makeDb({ movements: rows() })
     await movementsService.suggestDeliveredBy(t.db, { query: "mabel", movementType: "INCOME" })
     expect(t.from).toHaveBeenCalledWith("movements")
@@ -101,7 +103,8 @@ describe("suggestDeliveredBy", () => {
       ["movement_type", "INCOME"]
     ])
     expect(t.movements.calls.not).toEqual([["delivered_by", "is", null]])
-    expect(t.movements.calls.ilike).toEqual([["delivered_by", "%m_b_l%"]])
+    expect(t.movements.calls.filter).toEqual([["delivered_by", "imatch", "m[aáàâä]b[eéèêë]l"]])
+    expect(t.movements.calls.ilike).toBeUndefined()
     expect(t.movements.calls.order).toEqual([
       ["movement_date", { ascending: false }],
       ["created_at", { ascending: false }]
@@ -122,13 +125,36 @@ describe("suggestDeliveredBy", () => {
       movementType: "INCOME"
     })
     expect(result).toHaveLength(1)
-    expect(result[0].count).toBe(3)
+    expect(result[0]).toEqual({ name: "Mabel", count: 3 })
   })
 
-  it("sanitizes PostgREST metacharacters before the ilike", async () => {
+  it("builds the regex for a plain and a spaced query", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "ana", movementType: "INCOME" })
+    await movementsService.suggestDeliveredBy(t.db, {
+      query: "hna.  mabel",
+      movementType: "INCOME"
+    })
+    expect(t.movements.calls.filter).toEqual([
+      ["delivered_by", "imatch", "[aáàâä][nñ][aáàâä]"],
+      ["delivered_by", "imatch", "h[nñ][aáàâä]\\.\\s+m[aáàâä]b[eéèêë]l"]
+    ])
+  })
+
+  it("escapes metacharacters and keeps % literal", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "a.b", movementType: "INCOME" })
+    await movementsService.suggestDeliveredBy(t.db, { query: "50%", movementType: "INCOME" })
+    expect(t.movements.calls.filter).toEqual([
+      ["delivered_by", "imatch", "[aáàâä]\\.b"],
+      ["delivered_by", "imatch", "50%"]
+    ])
+  })
+
+  it("sanitizes PostgREST metacharacters before the filter", async () => {
     const t = makeDb({ movements: rows() })
     await movementsService.suggestDeliveredBy(t.db, { query: "a,(b)", movementType: "INCOME" })
-    expect(t.movements.calls.ilike).toEqual([["delivered_by", "%_b%"]])
+    expect(t.movements.calls.filter).toEqual([["delivered_by", "imatch", "[aáàâä]b"]])
   })
 
   it("returns [] without querying when the sanitized query is empty", async () => {
@@ -155,6 +181,6 @@ describe("suggestDeliveredBy", () => {
       query: "persona",
       movementType: "INCOME"
     })
-    expect(result).toHaveLength(8)
+    expect(result.map((r) => r.name)).toEqual(names.slice(0, 8))
   })
 })

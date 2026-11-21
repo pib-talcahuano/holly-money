@@ -97,12 +97,15 @@ export function MovementStep2Fields({ state }: { state: MovementFormState }) {
     <div className="grid gap-6 sm:gap-8 grid-cols-1 sm:grid-cols-2">
       {!isCapitalInjection && (
         <Field>
-          <FieldLabel className={labelClass}>{deliveredByLabel}</FieldLabel>
+          <FieldLabel htmlFor="delivered_by" className={labelClass}>
+            {deliveredByLabel}
+          </FieldLabel>
           <Controller
             control={form.control}
             name="delivered_by"
             render={({ field }) => (
               <DeliveredByAutocomplete
+                id="delivered_by"
                 className="h-12 sm:h-14"
                 value={field.value ?? ""}
                 onChange={field.onChange}

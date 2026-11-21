@@ -37,7 +37,26 @@ export function groupNameSuggestions(names: string[], limit: number): NameSugges
     })
 }
 
-/** Builds an `ilike` pattern (without `%`) where accent-prone letters match any single char. */
-export function accentInsensitivePattern(term: string): string {
-  return normalizeName(term).replace(/[aeioun]/g, "_")
+const ACCENT_CLASSES: Record<string, string> = {
+  a: "[aáàâä]",
+  e: "[eéèêë]",
+  i: "[iíìîï]",
+  o: "[oóòôö]",
+  u: "[uúùûü]",
+  n: "[nñ]"
+}
+
+/**
+ * Builds a POSIX regex (for PostgREST `imatch`, i.e. `~*`) where vowels and n match their
+ * accented variants, whitespace runs match any whitespace run and metacharacters are literal.
+ */
+export function accentInsensitiveRegex(term: string): string {
+  let out = ""
+  for (const ch of normalizeName(term)) {
+    if (/\s/.test(ch)) out += "\\s+"
+    else if (ACCENT_CLASSES[ch]) out += ACCENT_CLASSES[ch]
+    else if (/[.*+?^${}|[\]()\\]/.test(ch)) out += `\\${ch}`
+    else out += ch
+  }
+  return out
 }

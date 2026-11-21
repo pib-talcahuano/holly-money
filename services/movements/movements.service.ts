@@ -4,7 +4,7 @@ import { auditService } from "@/services/audit/audit.service"
 import { sanitizePostgrestSearch } from "@/lib/utils/postgrest"
 import { buildMovementSearchFilter } from "@/lib/utils/movement-search"
 import {
-  accentInsensitivePattern,
+  accentInsensitiveRegex,
   groupNameSuggestions,
   normalizeName,
   type NameSuggestion
@@ -131,7 +131,7 @@ export const movementsService = {
       .eq("status", "ACTIVE")
       .eq("movement_type", input.movementType)
       .not("delivered_by", "is", null)
-      .ilike("delivered_by", `%${accentInsensitivePattern(term)}%`)
+      .filter("delivered_by", "imatch", accentInsensitiveRegex(term))
       .order("movement_date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(200)

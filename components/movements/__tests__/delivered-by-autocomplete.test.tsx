@@ -65,6 +65,21 @@ async function type(value: string, advance = 250) {
 }
 
 describe("DeliveredByAutocomplete", () => {
+  it("is reachable through a label pointing at its id", () => {
+    render(
+      <>
+        <label htmlFor="delivered_by">Entregado por</label>
+        <DeliveredByAutocomplete
+          id="delivered_by"
+          value=""
+          movementType="INCOME"
+          onChange={() => {}}
+        />
+      </>
+    )
+    expect(screen.getByLabelText("Entregado por")).toBe(getInput())
+  })
+
   it("shows the stored value on mount without fetching", async () => {
     render(<Harness initial="Ana" />)
     expect(getInput().value).toBe("Ana")

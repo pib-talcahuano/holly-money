@@ -1,5 +1,5 @@
 import {
-  accentInsensitivePattern,
+  accentInsensitiveRegex,
   groupNameSuggestions,
   normalizeName
 } from "@/lib/utils/name-suggestions"
@@ -38,7 +38,14 @@ describe("groupNameSuggestions", () => {
   })
 
   it("respects limit", () => {
-    expect(groupNameSuggestions(["Ana", "Beto", "Carla"], 2)).toHaveLength(2)
+    expect(groupNameSuggestions(["Ana", "Beto", "Carla"], 2).map((s) => s.name)).toEqual([
+      "Ana",
+      "Beto"
+    ])
+  })
+
+  it("groups accent variants into one suggestion", () => {
+    expect(groupNameSuggestions(["Mabel", "Mábel"], 8)).toEqual([{ name: "Mabel", count: 2 }])
   })
 
   it("discards empty and whitespace-only names", () => {
@@ -46,10 +53,23 @@ describe("groupNameSuggestions", () => {
   })
 })
 
-describe("accentInsensitivePattern", () => {
-  it("replaces accent-prone letters with a single-char wildcard", () => {
-    expect(accentInsensitivePattern("mabel")).toBe("m_b_l")
-    expect(accentInsensitivePattern("Mábel")).toBe("m_b_l")
-    expect(accentInsensitivePattern("Peña")).toBe("p___")
+describe("accentInsensitiveRegex", () => {
+  it("expands accent-prone letters into character classes", () => {
+    expect(accentInsensitiveRegex("ana")).toBe("[aáàâä][nñ][aáàâä]")
+    expect(accentInsensitiveRegex("Mábel")).toBe("m[aáàâä]b[eéèêë]l")
+    expect(accentInsensitiveRegex("Peña")).toBe("p[eéèêë][nñ][aáàâä]")
+  })
+
+  it("collapses whitespace runs into \\s+", () => {
+    expect(accentInsensitiveRegex("hna.  mabel")).toBe("h[nñ][aáàâä]\\.\\s+m[aáàâä]b[eéèêë]l")
+  })
+
+  it("escapes regex metacharacters and keeps % and _ literal", () => {
+    expect(accentInsensitiveRegex("a.b")).toBe("[aáàâä]\\.b")
+    expect(accentInsensitiveRegex("50%")).toBe("50%")
+    expect(accentInsensitiveRegex("x_y")).toBe("x_y")
+    expect(accentInsensitiveRegex("*+?^${}|[]()\\")).toBe(
+      "\\*\\+\\?\\^\\$\\{\\}\\|\\[\\]\\(\\)\\\\"
+    )
   })
 })
