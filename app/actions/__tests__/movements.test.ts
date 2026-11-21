@@ -1,4 +1,10 @@
-import { createMovement, updateMovement, cancelMovement, regeneratePdf } from "../movements"
+import {
+  createMovement,
+  updateMovement,
+  cancelMovement,
+  regeneratePdf,
+  searchMovements
+} from "../movements"
 
 const mockGetCurrentUser = jest.fn()
 const mockDb = {}
@@ -7,6 +13,7 @@ const mockCan = jest.fn()
 const mockCreate = jest.fn()
 const mockUpdate = jest.fn()
 const mockCancel = jest.fn()
+const mockList = jest.fn()
 const mockProcessIntegrations = jest.fn()
 const mockRevalidatePath = jest.fn()
 const mockSendVoucherEmail = jest.fn()
@@ -30,7 +37,7 @@ jest.mock("@/services/settings/settings.service", () => ({
 }))
 
 jest.mock("@/lib/permissions/rbac", () => ({
-  PERMISSIONS: { CREATE_MOVEMENT: "CREATE_MOVEMENT" },
+  PERMISSIONS: { CREATE_MOVEMENT: "CREATE_MOVEMENT", VIEW_MOVEMENT: "VIEW_MOVEMENT" },
   can: (...args: unknown[]) => mockCan(...args)
 }))
 
@@ -38,7 +45,8 @@ jest.mock("@/services/movements/movements.service", () => ({
   movementsService: {
     create: (...args: unknown[]) => mockCreate(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
-    cancel: (...args: unknown[]) => mockCancel(...args)
+    cancel: (...args: unknown[]) => mockCancel(...args),
+    list: (...args: unknown[]) => mockList(...args)
   }
 }))
 
@@ -244,5 +252,91 @@ describe("regeneratePdf", () => {
 
     expect(mockProcessIntegrations).toHaveBeenCalledWith("mv-1", mockUser.id)
     expect(mockRevalidatePath).toHaveBeenCalledWith("/movements/mv-1")
+  })
+})
+
+describe("searchMovements", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("throws when unauthenticated", async () => {
+    mockGetCurrentUser.mockResolvedValue(null)
+    await expect(searchMovements("mabel")).rejects.toThrow("Sin permisos para ver movimientos")
+    expect(mockList).not.toHaveBeenCalled()
+  })
+
+  it("throws when the user lacks VIEW_MOVEMENT", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(false)
+    await expect(searchMovements("mabel")).rejects.toThrow("Sin permisos para ver movimientos")
+    expect(mockCan).toHaveBeenCalledWith(mockUser.permissions, "VIEW_MOVEMENT")
+    expect(mockList).not.toHaveBeenCalled()
+  })
+
+  it("returns [] for queries shorter than 2 characters", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    await expect(searchMovements("a")).resolves.toEqual([])
+    expect(mockList).not.toHaveBeenCalled()
+  })
+
+  it("trims the query and calls the service", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({ data: [], count: 0, page: 1, pageSize: 20 })
+    await searchMovements("  mabel ")
+    expect(mockList).toHaveBeenCalledWith(mockDb, { search: "mabel", status: "ALL", pageSize: 20 })
+  })
+
+  it("flattens the category name and omits extra fields", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({
+      data: [
+        {
+          id: "mv-1",
+          movement_date: "2026-05-01",
+          movement_type: "INCOME",
+          amount: 5000,
+          status: "ACTIVE",
+          delivered_by: "Mabel",
+          created_by_id: "user-9",
+          users: { full_name: "X" },
+          movement_categories: { name: "Diezmos" }
+        },
+        {
+          id: "mv-2",
+          movement_date: "2026-05-02",
+          movement_type: "EXPENSE",
+          amount: 100,
+          status: "CANCELLED",
+          delivered_by: null,
+          movement_categories: null
+        }
+      ],
+      count: 2,
+      page: 1,
+      pageSize: 20
+    })
+    const result = await searchMovements("mabel")
+    expect(result).toEqual([
+      {
+        id: "mv-1",
+        movement_date: "2026-05-01",
+        movement_type: "INCOME",
+        amount: 5000,
+        status: "ACTIVE",
+        category_name: "Diezmos",
+        delivered_by: "Mabel"
+      },
+      {
+        id: "mv-2",
+        movement_date: "2026-05-02",
+        movement_type: "EXPENSE",
+        amount: 100,
+        status: "CANCELLED",
+        category_name: null,
+        delivered_by: null
+      }
+    ])
   })
 })
