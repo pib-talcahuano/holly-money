@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { useSidebar } from "@/components/ui/sidebar"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { GlobalSearch } from "@/components/dashboard/global-search"
 import { NotificationBell } from "@/components/dashboard/notification-bell"
 
 const PAGE_LABELS: Record<string, string> = {
@@ -104,6 +105,7 @@ export function SiteHeader() {
         </Breadcrumb>
       </div>
       <div className="flex items-center gap-2.5">
+        <GlobalSearch />
         <ThemeToggle />
         <NotificationBell />
       </div>
