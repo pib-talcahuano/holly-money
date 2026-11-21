@@ -83,6 +83,13 @@ describe("GlobalSearch", () => {
     expect(input).toBeInTheDocument()
   })
 
+  it("has no heading while closed and a named dialog while open", () => {
+    render(<GlobalSearch />)
+    expect(screen.queryByRole("heading", { name: "Buscar movimientos" })).toBeNull()
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true })
+    expect(screen.getByRole("dialog", { name: "Buscar movimientos" })).toBeInTheDocument()
+  })
+
   it("opens from the header button", () => {
     render(<GlobalSearch />)
     fireEvent.click(screen.getByRole("button", { name: "Abrir buscador" }))
