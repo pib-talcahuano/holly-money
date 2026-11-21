@@ -1481,6 +1481,20 @@ export type Database = {
         Args: { p_as_of?: string; p_ministry_id?: string }
         Returns: Json
       }
+      get_movement_totals: {
+        Args: {
+          p_amount?: number
+          p_category_ids?: string[]
+          p_movement_type?: string
+          p_subcategory_ids?: string[]
+          p_term?: string
+        }
+        Returns: {
+          movement_type: string
+          record_count: number
+          total: number
+        }[]
+      }
       get_my_active_ministries: { Args: Record<PropertyKey, never>; Returns: string[] }
       get_my_ministries_as_minister: { Args: Record<PropertyKey, never>; Returns: string[] }
       get_pending_reminders: { Args: Record<PropertyKey, never>; Returns: Json }
