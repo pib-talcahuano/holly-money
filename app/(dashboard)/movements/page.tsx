@@ -91,6 +91,7 @@ export default async function MovementsPage({ searchParams }: Props) {
         rows={rows.map((row) => ({
           id: row.id,
           movement_date: row.movement_date,
+          created_at: row.created_at,
           movement_type: row.movement_type,
           amount: String(row.amount),
           category_name: (row.movement_categories as { name: string } | null)?.name ?? "—",
