@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
 import { auditService } from "@/services/audit/audit.service"
 import { sanitizePostgrestSearch } from "@/lib/utils/postgrest"
+import { buildMovementSearchFilter } from "@/lib/utils/movement-search"
 import type {
   AttachmentInput,
   CancelMovementInput,
@@ -92,12 +93,17 @@ export const movementsService = {
     if (filters.search?.trim()) {
       const s = sanitizePostgrestSearch(filters.search)
       if (s) {
-        // category is no longer a plain text column on movements (it's now
-        // category_id, a FK to movement_categories) so it can't be ilike'd
-        // directly here. PostgREST .or() filters can't reach into an
-        // embedded relation's column, so category name search is dropped
-        // rather than attempting a fragile embedded-filter workaround.
-        query = query.ilike("delivered_by", `%${s}%`)
+        const [categories, subcategories] = await Promise.all([
+          db.from("movement_categories").select("id").ilike("name", `%${s}%`),
+          db.from("movement_subcategories").select("id").ilike("name", `%${s}%`)
+        ])
+        if (categories.error) throw categories.error
+        if (subcategories.error) throw subcategories.error
+        const orFilter = buildMovementSearchFilter(s, {
+          categoryIds: (categories.data ?? []).map((c) => c.id),
+          subcategoryIds: (subcategories.data ?? []).map((c) => c.id)
+        })
+        if (orFilter) query = query.or(orFilter)
       }
     }
 
