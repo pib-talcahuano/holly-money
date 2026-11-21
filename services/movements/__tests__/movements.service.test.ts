@@ -11,7 +11,7 @@ function chain(result: Result) {
       ;(calls[name] ??= []).push(args)
       return proxy
     }
-  for (const m of ["select", "order", "range", "eq", "ilike", "or"]) proxy[m] = record(m)
+  for (const m of ["select", "order", "range", "eq", "ilike", "or", "not", "limit"]) proxy[m] = record(m)
   proxy.then = (resolve: (v: Result) => unknown, reject: (e: unknown) => unknown) =>
     Promise.resolve(result).then(resolve, reject)
   return { proxy, calls }
@@ -82,5 +82,79 @@ describe("movementsService.list search", () => {
     await movementsService.list(t.db, { search: "   " })
     expect(t.movements.calls.or).toBeUndefined()
     expect(t.from).not.toHaveBeenCalledWith("movement_categories")
+  })
+})
+
+describe("suggestDeliveredBy", () => {
+  const rows = (...names: string[]) => ({
+    data: names.map((delivered_by) => ({ delivered_by })),
+    error: null
+  })
+
+  it("queries active movements of the type with an accent-insensitive ilike", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "mabel", movementType: "INCOME" })
+    expect(t.from).toHaveBeenCalledWith("movements")
+    expect(t.movements.calls.select).toEqual([["delivered_by"]])
+    expect(t.movements.calls.eq).toEqual([
+      ["status", "ACTIVE"],
+      ["movement_type", "INCOME"]
+    ])
+    expect(t.movements.calls.not).toEqual([["delivered_by", "is", null]])
+    expect(t.movements.calls.ilike).toEqual([["delivered_by", "%m_b_l%"]])
+    expect(t.movements.calls.order).toEqual([
+      ["movement_date", { ascending: false }],
+      ["created_at", { ascending: false }]
+    ])
+    expect(t.movements.calls.limit).toEqual([[200]])
+  })
+
+  it("filters by EXPENSE when requested", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "mabel", movementType: "EXPENSE" })
+    expect(t.movements.calls.eq).toContainEqual(["movement_type", "EXPENSE"])
+  })
+
+  it("groups spellings and drops rows that do not match in JavaScript", async () => {
+    const t = makeDb({ movements: rows("Mabel", "Mábel", "MABEL", "Juan") })
+    const result = await movementsService.suggestDeliveredBy(t.db, {
+      query: "mabel",
+      movementType: "INCOME"
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0].count).toBe(3)
+  })
+
+  it("sanitizes PostgREST metacharacters before the ilike", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "a,(b)", movementType: "INCOME" })
+    expect(t.movements.calls.ilike).toEqual([["delivered_by", "%_b%"]])
+  })
+
+  it("returns [] without querying when the sanitized query is empty", async () => {
+    const t = makeDb({ movements: rows("Mabel") })
+    const result = await movementsService.suggestDeliveredBy(t.db, {
+      query: " (,) ",
+      movementType: "INCOME"
+    })
+    expect(result).toEqual([])
+    expect(t.from).not.toHaveBeenCalled()
+  })
+
+  it("throws database errors", async () => {
+    const t = makeDb({ movements: { data: null, error: new Error("boom") } })
+    await expect(
+      movementsService.suggestDeliveredBy(t.db, { query: "mabel", movementType: "INCOME" })
+    ).rejects.toThrow("boom")
+  })
+
+  it("returns at most 8 suggestions", async () => {
+    const names = Array.from({ length: 12 }, (_, i) => `Persona${String.fromCharCode(97 + i)}`)
+    const t = makeDb({ movements: rows(...names) })
+    const result = await movementsService.suggestDeliveredBy(t.db, {
+      query: "persona",
+      movementType: "INCOME"
+    })
+    expect(result).toHaveLength(8)
   })
 })

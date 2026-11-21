@@ -3,6 +3,12 @@ import type { Database } from "@/types/database.types"
 import { auditService } from "@/services/audit/audit.service"
 import { sanitizePostgrestSearch } from "@/lib/utils/postgrest"
 import { buildMovementSearchFilter } from "@/lib/utils/movement-search"
+import {
+  accentInsensitivePattern,
+  groupNameSuggestions,
+  normalizeName,
+  type NameSuggestion
+} from "@/lib/utils/name-suggestions"
 import type {
   AttachmentInput,
   CancelMovementInput,
@@ -110,6 +116,32 @@ export const movementsService = {
     const { data, error, count } = await query
     if (error) throw error
     return { data: data ?? [], count: count ?? 0, page, pageSize }
+  },
+
+  async suggestDeliveredBy(
+    db: DB,
+    input: { query: string; movementType: "INCOME" | "EXPENSE" }
+  ): Promise<NameSuggestion[]> {
+    const term = sanitizePostgrestSearch(input.query)
+    if (!term) return []
+
+    const { data, error } = await db
+      .from("movements")
+      .select("delivered_by")
+      .eq("status", "ACTIVE")
+      .eq("movement_type", input.movementType)
+      .not("delivered_by", "is", null)
+      .ilike("delivered_by", `%${accentInsensitivePattern(term)}%`)
+      .order("movement_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(200)
+    if (error) throw error
+
+    const needle = normalizeName(term)
+    const names = (data ?? [])
+      .map((row) => row.delivered_by)
+      .filter((name): name is string => !!name && normalizeName(name).includes(needle))
+    return groupNameSuggestions(names, 8)
   },
 
   async findById(db: DB, id: string) {
