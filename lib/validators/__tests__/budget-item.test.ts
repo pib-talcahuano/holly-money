@@ -14,9 +14,13 @@ describe("upsertBudgetItemSchema", () => {
     expect(result.error?.issues[0].message).toBe("El nombre debe tener al menos 2 caracteres")
   })
 
-  it("rejects an assigned amount of 0", () => {
-    const result = upsertBudgetItemSchema.safeParse({ ...valid, assigned_amount: 0 })
-    expect(result.error?.issues[0].message).toBe("El monto asignado debe ser mayor a 0")
+  it("accepts an assigned amount of 0 (a parent that will hold sub-items)", () => {
+    expect(upsertBudgetItemSchema.parse({ ...valid, assigned_amount: 0 }).assigned_amount).toBe(0)
+  })
+
+  it("rejects a negative assigned amount", () => {
+    const result = upsertBudgetItemSchema.safeParse({ ...valid, assigned_amount: -1 })
+    expect(result.error?.issues[0].message).toBe("El monto asignado no puede ser negativo")
   })
 
   it("rejects a negative initial used amount", () => {
@@ -54,8 +58,18 @@ describe("updateBudgetItemAmountsSchema", () => {
     expect(parsed).toEqual({ id: PERIOD_ID, assigned_amount: 700, initial_used_amount: 0 })
   })
 
-  it("rejects a non-positive assigned amount", () => {
-    const result = updateBudgetItemAmountsSchema.safeParse({ id: PERIOD_ID, assigned_amount: 0 })
-    expect(result.error?.issues[0].message).toBe("El monto asignado debe ser mayor a 0")
+  it("lets assigned_amount be omitted (derived parent: keep the stored amount)", () => {
+    const parsed = updateBudgetItemAmountsSchema.parse({ id: PERIOD_ID, initial_used_amount: 4 })
+    expect(parsed.assigned_amount).toBeUndefined()
+  })
+
+  it("accepts an assigned amount of 0", () => {
+    const parsed = updateBudgetItemAmountsSchema.parse({ id: PERIOD_ID, assigned_amount: 0 })
+    expect(parsed.assigned_amount).toBe(0)
+  })
+
+  it("rejects a negative assigned amount", () => {
+    const result = updateBudgetItemAmountsSchema.safeParse({ id: PERIOD_ID, assigned_amount: -5 })
+    expect(result.error?.issues[0].message).toBe("El monto asignado no puede ser negativo")
   })
 })

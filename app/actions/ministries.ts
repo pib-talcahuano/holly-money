@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/server"
 import { PERMISSIONS, can } from "@/lib/permissions/rbac"
 import { ministriesService } from "@/services/ministries/ministries.service"
+import { deleteMinistrySchema } from "@/lib/validators/ministry"
 import type {
   CreateMinistryInput,
   UpdateMinistryInput,
@@ -41,6 +42,30 @@ export async function createMinistry(input: CreateMinistryInput) {
   const data = await ministriesService.create(db, input, user.id)
   revalidatePath("/ministries")
   return data
+}
+
+// Blocked-by-history is an expected outcome, so it is returned (not thrown): Next.js
+// strips thrown server-action messages in production builds.
+export type DeleteMinistryResult =
+  { ok: true } | { ok: false; reason: "HAS_HISTORY"; blockers: Record<string, number> }
+
+export async function deleteMinistry(
+  id: string,
+  confirmName: string
+): Promise<DeleteMinistryResult> {
+  const user = assertMinistriesAccess(await getCurrentUser())
+  const { confirmName: typedName } = deleteMinistrySchema.parse({ confirmName })
+  const db = await createSupabaseServerClient()
+  const ministry = await ministriesService.getById(db, id)
+  if (typedName.trim() !== ministry.name) {
+    throw new Error("El nombre no coincide")
+  }
+  const result = await ministriesService.delete(db, id, user.id)
+  if (!result.deleted) {
+    return { ok: false, reason: "HAS_HISTORY", blockers: result.blockers }
+  }
+  revalidatePath("/ministries")
+  return { ok: true }
 }
 
 export async function getMinistryAssignments(ministryId: string) {

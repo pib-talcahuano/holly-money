@@ -56,6 +56,7 @@ export type Database = {
       budget_intentions: {
         Row: {
           amount: number
+          budget_sub_item_id: string | null
           created_at: string
           date_needed: string | null
           funding_method: Database["public"]["Enums"]["intention_funding_method"]
@@ -74,6 +75,7 @@ export type Database = {
         ComputedFields: never
         Insert: {
           amount: number
+          budget_sub_item_id?: string | null
           created_at?: string
           date_needed?: string | null
           funding_method: Database["public"]["Enums"]["intention_funding_method"]
@@ -91,6 +93,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          budget_sub_item_id?: string | null
           created_at?: string
           date_needed?: string | null
           funding_method?: Database["public"]["Enums"]["intention_funding_method"]
@@ -107,6 +110,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "budget_intentions_budget_sub_item_id_fkey"
+            columns: ["budget_sub_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_sub_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "budget_intentions_ministry_id_fkey"
             columns: ["ministry_id"]
@@ -204,6 +214,7 @@ export type Database = {
           label: string
           start_date: string
           updated_at: string
+          year: number
         }
         ComputedFields: never
         Insert: {
@@ -214,6 +225,7 @@ export type Database = {
           label: string
           start_date: string
           updated_at?: string
+          year: number
         }
         Update: {
           created_at?: string
@@ -223,6 +235,7 @@ export type Database = {
           label?: string
           start_date?: string
           updated_at?: string
+          year?: number
         }
         Relationships: [
           {
@@ -230,6 +243,78 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      budget_sub_items: {
+        Row: {
+          assigned_amount: number
+          budget_item_id: string | null
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          ministry_budget_id: string | null
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          assigned_amount: number
+          budget_item_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          ministry_budget_id?: string | null
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_amount?: number
+          budget_item_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          ministry_budget_id?: string | null
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_sub_items_budget_item_id_fkey"
+            columns: ["budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "budget_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_sub_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "movement_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_sub_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_sub_items_ministry_budget_id_fkey"
+            columns: ["ministry_budget_id"]
+            isOneToOne: false
+            referencedRelation: "ministry_budgets"
             referencedColumns: ["id"]
           }
         ]
@@ -1387,7 +1472,9 @@ export type Database = {
         Args: { p_email: string; p_full_name: string; p_password: string }
         Returns: string
       }
+      delete_ministry_if_unused: { Args: { p_ministry_id: string }; Returns: Json }
       get_budget_items_summary: { Args: { p_period_id?: string }; Returns: Json }
+      get_budget_sub_items_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_dashboard_summary: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       get_ministry_budget_summary: { Args: { p_period_id?: string }; Returns: Json }
       get_ministry_leftover_summary: {

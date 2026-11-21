@@ -1,7 +1,5 @@
 import { z } from "zod"
 
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido")
-
 // Not z.string().uuid(): Zod v4's .uuid() enforces the RFC4122 version/variant
 // nibbles, which the repo's own local seed IDs (e.g. "e2e00000-0000-0000-0000-
 // 0000000000a1") don't follow. These are DB foreign keys — Postgres already
@@ -10,22 +8,15 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inv
 export const uuidSchema = (message: string) =>
   z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, message)
 
-export const upsertBudgetPeriodSchema = z
-  .object({
-    id: uuidSchema("ID de período inválido").optional(),
-    label: z.string().min(2, "El nombre del período debe tener al menos 2 caracteres"),
-    start_date: dateSchema,
-    end_date: dateSchema
-  })
-  .refine((data) => data.end_date > data.start_date, {
-    message: "La fecha de término debe ser posterior a la fecha de inicio",
-    path: ["end_date"]
-  })
+export const createBudgetPeriodSchema = z.object({
+  year: z.number().int("Año inválido").min(2000, "Año inválido").max(2100, "Año inválido")
+})
 
 export const upsertMinistryBudgetSchema = z.object({
   ministry_id: uuidSchema("Ministerio inválido"),
   budget_period_id: uuidSchema("Período inválido"),
-  assigned_amount: z.coerce.number().positive("El monto asignado debe ser mayor a 0"),
+  // Omitted for a parent whose total is the sum of its sub-items: the stored amount is kept.
+  assigned_amount: z.coerce.number().min(0, "El monto asignado no puede ser negativo").optional(),
   initial_used_amount: z.coerce
     .number()
     .min(0, "El monto inicial utilizado no puede ser negativo")
@@ -33,5 +24,22 @@ export const upsertMinistryBudgetSchema = z.object({
   notes: z.string().optional()
 })
 
-export type UpsertBudgetPeriodInput = z.infer<typeof upsertBudgetPeriodSchema>
+export const copyBudgetSchema = z
+  .object({
+    from_period_id: uuidSchema("Período de origen inválido"),
+    to_period_id: uuidSchema("Período de destino inválido"),
+    scope: z.union([
+      z.literal("ALL"),
+      z.object({ ministry_id: uuidSchema("Ministerio inválido") }).strict(),
+      z.object({ budget_item_id: uuidSchema("Ítem inválido") }).strict(),
+      z.object({ sub_item_id: uuidSchema("Sub-ítem inválido") }).strict()
+    ])
+  })
+  .refine((v) => v.from_period_id !== v.to_period_id, {
+    message: "El período de origen y destino deben ser distintos",
+    path: ["to_period_id"]
+  })
+
+export type CreateBudgetPeriodInput = z.infer<typeof createBudgetPeriodSchema>
 export type UpsertMinistryBudgetInput = z.infer<typeof upsertMinistryBudgetSchema>
+export type CopyBudgetInput = z.infer<typeof copyBudgetSchema>

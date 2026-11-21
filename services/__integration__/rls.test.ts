@@ -19,6 +19,19 @@ const isLocal =
 
 const describeIfLocal = isLocal && SUPABASE_URL && SECRET_KEY ? describe : describe.skip
 
+// Allocated fixture years/dates for ALL files in services/__integration__ (budget_periods has a
+// unique `year` and a no-overlap exclusion on dates; Jest runs files in parallel, so every
+// fixture must own a distinct year AND a non-overlapping date range). March-to-February periods
+// span year Y-03-01..Y+1-02-28 (so Y and Y+1 are adjacent, never both used by unrelated files).
+//   2099 (2099-06), 2095 (2099-02), 2089 (2099-01), 2088 (2099-03)  rls.test.ts: RLS inserts
+//   2098 (2098-01)                                                  rls.test.ts: movements fixture
+//   2097 (2097-01)                                                  rls.test.ts: RPC summaries
+//   2087 (2087-03..2088-02)                                         rls.test.ts: budget_sub_items RLS
+//   2086 (2086-03..2087-02)                                         rls.test.ts: fund trigger
+//   2081, 2082 (2081-03..2083-02)                                   budget-copy.test.ts
+//   2071, 2072 (2071-03..2073-02)                                   rls.test.ts: year-boundary totals
+//   2065 (2065-03..2066-02)                                         purge-user.test.ts
+
 describeIfLocal("RLS: unauthenticated client", () => {
   // createClient inside each test to avoid throwing at collection time when keys are empty
   it("cannot read movements table", async () => {
@@ -72,6 +85,7 @@ describeIfLocal("RLS: admin client bypasses all policies", () => {
 const E2E_USERS = {
   admin: { email: "e2e-admin@local.test", password: "Testing123!" },
   bursar: { email: "e2e-bursar@local.test", password: "Testing123!" },
+  finance: { email: "e2e-finance@local.test", password: "Testing123!" },
   minister: { email: "e2e-minister@local.test", password: "Testing123!" }
 }
 const E2E_MINISTRY_ID = "e2e00000-0000-0000-0000-0000000000a1"
@@ -117,7 +131,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
     const { data: period, error: periodError } = await admin
       .from("budget_periods")
-      .insert({ label: "RLS fixture", start_date: "2099-06-01", end_date: "2099-06-30" })
+      .insert({
+        label: "RLS fixture",
+        year: 2099,
+        start_date: "2099-06-01",
+        end_date: "2099-06-30"
+      })
       .select()
       .single()
     if (periodError) throw periodError
@@ -142,9 +161,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
 
   it("MINISTER cannot insert a budget_periods row", async () => {
     const minister = await signIn(E2E_USERS.minister)
-    const { error } = await minister
-      .from("budget_periods")
-      .insert({ label: "RLS test — should fail", start_date: "2099-01-01", end_date: "2099-01-31" })
+    const { error } = await minister.from("budget_periods").insert({
+      label: "RLS test — should fail",
+      year: 2089,
+      start_date: "2099-01-01",
+      end_date: "2099-01-31"
+    })
     expect(error).not.toBeNull()
     await minister.auth.signOut()
   })
@@ -174,7 +196,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const admin = await signIn(E2E_USERS.admin)
     const { data, error } = await admin
       .from("budget_periods")
-      .insert({ label: "RLS test — admin", start_date: "2099-02-01", end_date: "2099-02-28" })
+      .insert({
+        label: "RLS test — admin",
+        year: 2095,
+        start_date: "2099-02-01",
+        end_date: "2099-02-28"
+      })
       .select()
       .single()
     expect(error).toBeNull()
@@ -191,7 +218,12 @@ describeIfLocal("RLS: ministry_budgets write access (Etapa 10)", () => {
     const bursar = await signIn(E2E_USERS.bursar)
     const { data, error } = await bursar
       .from("budget_periods")
-      .insert({ label: "RLS test — bursar", start_date: "2099-03-01", end_date: "2099-03-31" })
+      .insert({
+        label: "RLS test — bursar",
+        year: 2088,
+        start_date: "2099-03-01",
+        end_date: "2099-03-31"
+      })
       .select()
       .single()
     expect(error).toBeNull()
@@ -235,7 +267,12 @@ describeIfLocal("RLS + RPC: budget_items", () => {
     const admin = adminClient()
     const { data: period, error: periodError } = await admin
       .from("budget_periods")
-      .insert({ label: "Items fixture", start_date: "2098-01-01", end_date: "2098-01-31" })
+      .insert({
+        label: "Items fixture",
+        year: 2098,
+        start_date: "2098-01-01",
+        end_date: "2098-01-31"
+      })
       .select()
       .single()
     if (periodError) throw periodError
@@ -442,6 +479,8 @@ describeIfLocal("RPC privileges: service-role-only summaries", () => {
   // RPCs bypass RLS and are only meant to be called through the admin client.
   const rpcs = [
     ["get_ministry_budget_summary", {}],
+    ["get_budget_items_summary", {}],
+    ["get_budget_sub_items_summary", {}],
     ["get_ministry_leftover_summary", { p_ministry_id: E2E_MINISTRY_ID }]
   ] as const
 
@@ -462,5 +501,849 @@ describeIfLocal("RPC privileges: service-role-only summaries", () => {
     const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
     const { error } = await admin.rpc(name, args)
     expect(error).toBeNull()
+  })
+})
+
+describeIfLocal("RPC: delete_ministry_if_unused", () => {
+  const args = { p_ministry_id: E2E_MINISTRY_ID }
+
+  it("is not callable by a MINISTER", async () => {
+    const minister = await signIn(E2E_USERS.minister)
+    const { error } = await minister.rpc("delete_ministry_if_unused", args)
+    expect(error).not.toBeNull()
+    await minister.auth.signOut()
+  })
+
+  it("is not callable by anon", async () => {
+    const anon = createClient<Database>(SUPABASE_URL, PUBLISHABLE_KEY)
+    const { error } = await anon.rpc("delete_ministry_if_unused", args)
+    expect(error).not.toBeNull()
+  })
+
+  it("reports blockers and keeps a ministry that has history", async () => {
+    const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+    const { data, error } = await admin.rpc("delete_ministry_if_unused", args)
+    expect(error).toBeNull()
+    expect(data).toMatchObject({ deleted: false })
+    expect(Object.keys((data as { blockers: object }).blockers).length).toBeGreaterThan(0)
+    const { data: still } = await admin.from("ministries").select("id").eq("id", E2E_MINISTRY_ID)
+    expect(still).toHaveLength(1)
+  })
+
+  it("deletes a ministry with no dependents", async () => {
+    const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+    const { data: created, error: createError } = await admin
+      .from("ministries")
+      .insert({ name: `tmp-delete-${Date.now()}` })
+      .select("id")
+      .single()
+    expect(createError).toBeNull()
+    const { data, error } = await admin.rpc("delete_ministry_if_unused", {
+      p_ministry_id: created!.id
+    })
+    expect(error).toBeNull()
+    expect(data).toEqual({ deleted: true })
+    const { data: gone } = await admin.from("ministries").select("id").eq("id", created!.id)
+    expect(gone).toHaveLength(0)
+  })
+  it("blocks a ministry whose only history is an inactive assignment", async () => {
+    const admin = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+    const { data: someUser } = await admin.from("users").select("id").limit(1).single()
+    const { data: created } = await admin
+      .from("ministries")
+      .insert({ name: `tmp-history-${Date.now()}` })
+      .select("id")
+      .single()
+    await admin.from("ministry_assignments").insert({
+      ministry_id: created!.id,
+      user_id: someUser!.id,
+      unassigned_at: new Date().toISOString()
+    })
+    const { data, error } = await admin.rpc("delete_ministry_if_unused", {
+      p_ministry_id: created!.id
+    })
+    expect(error).toBeNull()
+    expect(data).toEqual({ deleted: false, blockers: { ministry_assignments: 1 } })
+
+    await admin.from("ministry_assignments").delete().eq("ministry_id", created!.id)
+    await admin.rpc("delete_ministry_if_unused", { p_ministry_id: created!.id })
+  })
+})
+
+describeIfLocal("RLS: budget_sub_items", () => {
+  let periodId = ""
+  let otherMinistryId = ""
+  let budgetItemId = ""
+  let ownBudgetId = ""
+  let otherBudgetId = ""
+  const adminClient = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+
+  beforeAll(async () => {
+    const admin = adminClient()
+    const { data: period, error: periodError } = await admin
+      .from("budget_periods")
+      .insert({
+        label: "Sub-items fixture",
+        year: 2087,
+        start_date: "2087-03-01",
+        end_date: "2088-02-28"
+      })
+      .select()
+      .single()
+    if (periodError) throw periodError
+    periodId = period.id
+
+    const { data: ministry, error: ministryError } = await admin
+      .from("ministries")
+      .insert({ name: `tmp-subitems-${Date.now()}` })
+      .select("id")
+      .single()
+    if (ministryError) throw ministryError
+    otherMinistryId = ministry.id
+
+    const { data: budgets, error: budgetsError } = await admin
+      .from("ministry_budgets")
+      .insert([
+        { ministry_id: E2E_MINISTRY_ID, budget_period_id: periodId, assigned_amount: 0 },
+        { ministry_id: otherMinistryId, budget_period_id: periodId, assigned_amount: 0 }
+      ])
+      .select()
+    if (budgetsError) throw budgetsError
+    ownBudgetId = budgets.find((b) => b.ministry_id === E2E_MINISTRY_ID)!.id
+    otherBudgetId = budgets.find((b) => b.ministry_id === otherMinistryId)!.id
+
+    const { data: item, error: itemError } = await admin
+      .from("budget_items")
+      .insert({ budget_period_id: periodId, name: "Sub-items parent", assigned_amount: 0 })
+      .select()
+      .single()
+    if (itemError) throw itemError
+    budgetItemId = item.id
+
+    const { error: subError } = await admin.from("budget_sub_items").insert([
+      { ministry_budget_id: ownBudgetId, name: "Own sub", assigned_amount: 10 },
+      { ministry_budget_id: otherBudgetId, name: "Other sub", assigned_amount: 10 },
+      { budget_item_id: budgetItemId, name: "Item sub", assigned_amount: 10 }
+    ])
+    if (subError) throw subError
+  })
+
+  afterAll(async () => {
+    if (!periodId) return
+    const admin = adminClient()
+    await admin
+      .from("budget_sub_items")
+      .delete()
+      .in("ministry_budget_id", [ownBudgetId, otherBudgetId].filter(Boolean))
+    await admin.from("budget_sub_items").delete().eq("budget_item_id", budgetItemId)
+    await admin.from("budget_items").delete().eq("budget_period_id", periodId)
+    await admin.from("ministry_budgets").delete().eq("budget_period_id", periodId)
+    await admin.from("ministries").delete().eq("id", otherMinistryId)
+    await admin.from("budget_periods").delete().eq("id", periodId)
+  })
+
+  it("anon cannot read budget_sub_items", async () => {
+    const anon = createClient<Database>(SUPABASE_URL, PUBLISHABLE_KEY)
+    const { data } = await anon.from("budget_sub_items").select("id").limit(1)
+    expect(data ?? []).toHaveLength(0)
+  })
+
+  it.each([["admin"], ["bursar"]] as const)("%s can insert and update", async (who) => {
+    const client = await signIn(E2E_USERS[who])
+    const { data, error } = await client
+      .from("budget_sub_items")
+      .insert({ budget_item_id: budgetItemId, name: `${who} sub`, assigned_amount: 5 })
+      .select()
+      .single()
+    expect(error).toBeNull()
+    const { error: updateError } = await client
+      .from("budget_sub_items")
+      .update({ is_active: false })
+      .eq("id", data!.id)
+    expect(updateError).toBeNull()
+    await client.auth.signOut()
+  })
+
+  it("FINANCE reads every sub-item but cannot insert", async () => {
+    const finance = await signIn(E2E_USERS.finance)
+    const { data } = await finance
+      .from("budget_sub_items")
+      .select("name")
+      .in("name", ["Own sub", "Other sub", "Item sub"])
+    expect((data ?? []).map((r) => r.name).sort()).toEqual(["Item sub", "Other sub", "Own sub"])
+    const { error } = await finance
+      .from("budget_sub_items")
+      .insert({ budget_item_id: budgetItemId, name: "Finance sub", assigned_amount: 1 })
+    expect(error).not.toBeNull()
+    await finance.auth.signOut()
+  })
+
+  it("MINISTER reads only sub-items of their own ministry budget, and cannot insert", async () => {
+    const minister = await signIn(E2E_USERS.minister)
+    const { data } = await minister
+      .from("budget_sub_items")
+      .select("name")
+      .in("name", ["Own sub", "Other sub", "Item sub"])
+    expect((data ?? []).map((r) => r.name)).toEqual(["Own sub"])
+    const { error } = await minister
+      .from("budget_sub_items")
+      .insert({ ministry_budget_id: ownBudgetId, name: "Minister sub", assigned_amount: 1 })
+    expect(error).not.toBeNull()
+    await minister.auth.signOut()
+  })
+
+  it("nobody can delete (no DELETE policy)", async () => {
+    const admin = await signIn(E2E_USERS.admin)
+    const { data } = await admin.from("budget_sub_items").delete().eq("name", "Item sub").select()
+    expect(data ?? []).toHaveLength(0)
+    await admin.auth.signOut()
+  })
+
+  it("rejects a sub-item with both parents or none", async () => {
+    const admin = adminClient()
+    const both = await admin.from("budget_sub_items").insert({
+      ministry_budget_id: ownBudgetId,
+      budget_item_id: budgetItemId,
+      name: "Both",
+      assigned_amount: 1
+    })
+    expect(both.error).not.toBeNull()
+    const none = await admin.from("budget_sub_items").insert({ name: "None", assigned_amount: 1 })
+    expect(none.error).not.toBeNull()
+  })
+
+  it("rejects a duplicate active name (case-insensitive) under the same parent", async () => {
+    const { error } = await adminClient()
+      .from("budget_sub_items")
+      .insert({ budget_item_id: budgetItemId, name: "ITEM SUB", assigned_amount: 1 })
+    expect(error?.code).toBe("23505")
+  })
+})
+
+describeIfLocal("RPC: budget summaries with sub-items", () => {
+  // Far-future period so the fixture never overlaps real data. Torn down children-first.
+  const admin = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+  let periodId = ""
+  let ministryBudgetId = ""
+  let itemId = ""
+  const subIds: Record<string, string> = {}
+  const intentionIds: string[] = []
+  const movementIds: string[] = []
+  const categoryIds: string[] = []
+  let categoryY = ""
+
+  beforeAll(async () => {
+    const db = admin()
+    const { data: period, error: periodError } = await db
+      .from("budget_periods")
+      .insert({
+        label: "Sub-items fixture",
+        year: 2097,
+        start_date: "2097-01-01",
+        end_date: "2097-01-31"
+      })
+      .select()
+      .single()
+    if (periodError) throw periodError
+    periodId = period.id
+
+    const { data: mb, error: mbError } = await db
+      .from("ministry_budgets")
+      .insert({
+        budget_period_id: periodId,
+        ministry_id: E2E_MINISTRY_ID,
+        assigned_amount: 9999,
+        initial_used_amount: 10
+      })
+      .select()
+      .single()
+    if (mbError) throw mbError
+    ministryBudgetId = mb.id
+
+    const { data: subs, error: subsError } = await db
+      .from("budget_sub_items")
+      .insert([
+        { ministry_budget_id: ministryBudgetId, name: "A", assigned_amount: 300 },
+        { ministry_budget_id: ministryBudgetId, name: "B", assigned_amount: 200 },
+        { ministry_budget_id: ministryBudgetId, name: "C", assigned_amount: 100 }
+      ])
+      .select()
+    if (subsError) throw subsError
+    for (const sub of subs) subIds[sub.name] = sub.id
+
+    const intention = (
+      over: Pick<
+        Database["public"]["Tables"]["budget_intentions"]["Insert"],
+        "amount" | "funding_method"
+      > &
+        Partial<Database["public"]["Tables"]["budget_intentions"]["Insert"]>
+    ) => ({
+      ministry_id: E2E_MINISTRY_ID,
+      requested_by: E2E_ADMIN_ID,
+      purpose: "Sub-items fixture",
+      status: "APPROVED" as const,
+      ...over
+    })
+    const { data: intentions, error: intentionsError } = await db
+      .from("budget_intentions")
+      .insert([
+        intention({ amount: 120, funding_method: "TRANSFER", budget_sub_item_id: subIds.A }),
+        intention({ amount: 400, funding_method: "TRANSFER", budget_sub_item_id: subIds.A }),
+        intention({
+          amount: 50,
+          funding_method: "REIMBURSEMENT",
+          reviewed_at: "2097-01-12T12:00:00Z"
+        }),
+        intention({ amount: 100, funding_method: "TRANSFER", budget_sub_item_id: subIds.C })
+      ])
+      .select()
+    if (intentionsError) throw intentionsError
+    intentionIds.push(...intentions.map((i) => i.id))
+    const byAmount = (n: number) => intentions.find((i) => i.amount === n)!.id
+
+    const { error: transfersError } = await db.from("intention_transfers").insert([
+      {
+        intention_id: byAmount(120),
+        amount: 120,
+        transfer_date: "2097-01-10",
+        registered_by: E2E_ADMIN_ID
+      },
+      // outside the period -> ignored
+      {
+        intention_id: byAmount(400),
+        amount: 400,
+        transfer_date: "2097-02-05",
+        registered_by: E2E_ADMIN_ID
+      },
+      {
+        intention_id: byAmount(100),
+        amount: 100,
+        transfer_date: "2097-01-15",
+        registered_by: E2E_ADMIN_ID
+      }
+    ])
+    if (transfersError) throw transfersError
+
+    // C is deactivated after it already has spend: spend keeps counting, assignment does not.
+    const { error: deactivateError } = await db
+      .from("budget_sub_items")
+      .update({ is_active: false })
+      .eq("id", subIds.C)
+    if (deactivateError) throw deactivateError
+
+    // Item side: own category X (30 unassigned) and a sub-item on category Y (60).
+    const { data: categories, error: categoryError } = await db
+      .from("movement_categories")
+      .insert([
+        { movement_type: "EXPENSE", name: "Sub-items fixture X" },
+        { movement_type: "EXPENSE", name: "Sub-items fixture Y" },
+        { movement_type: "EXPENSE", name: "Sub-items fixture Z" }
+      ])
+      .select()
+    if (categoryError) throw categoryError
+    categoryIds.push(...categories.map((c) => c.id))
+    const catX = categories.find((c) => c.name.endsWith("X"))!.id
+    const catY = categories.find((c) => c.name.endsWith("Y"))!.id
+    const catZ = categories.find((c) => c.name.endsWith("Z"))!.id
+
+    const { data: item, error: itemError } = await db
+      .from("budget_items")
+      .insert({
+        budget_period_id: periodId,
+        name: "Item with subs",
+        assigned_amount: 0,
+        category_id: catX
+      })
+      .select()
+      .single()
+    if (itemError) throw itemError
+    itemId = item.id
+
+    const { data: itemSub, error: itemSubError } = await db
+      .from("budget_sub_items")
+      .insert({ budget_item_id: itemId, name: "Y fund", assigned_amount: 150, category_id: catY })
+      .select()
+      .single()
+    if (itemSubError) throw itemSubError
+    subIds.Y = itemSub.id
+
+    // Deactivated sibling sharing category Y: allowed by the partial unique index, and must not
+    // make the parent count Y's spend twice.
+    const { data: dupSub, error: dupSubError } = await db
+      .from("budget_sub_items")
+      .insert({
+        budget_item_id: itemId,
+        name: "Y old",
+        assigned_amount: 40,
+        category_id: catY,
+        is_active: false
+      })
+      .select()
+      .single()
+    if (dupSubError) throw dupSubError
+    subIds.YOld = dupSub.id
+
+    // Deactivated sub-item on its own category Z: its spend still counts for the parent and
+    // must show up as "Sin asignar" because no visible line claims it.
+    const { data: zSub, error: zSubError } = await db
+      .from("budget_sub_items")
+      .insert({
+        budget_item_id: itemId,
+        name: "Z old",
+        assigned_amount: 10,
+        category_id: catZ,
+        is_active: false
+      })
+      .select()
+      .single()
+    if (zSubError) throw zSubError
+    subIds.ZOld = zSub.id
+    categoryY = catY
+
+    const base = {
+      created_by_id: E2E_ADMIN_ID,
+      status: "ACTIVE" as const,
+      movement_type: "EXPENSE" as const
+    }
+    const { data: movements, error: movementError } = await db
+      .from("movements")
+      .insert([
+        { ...base, category_id: catY, amount: 60, movement_date: "2097-01-05T12:00:00Z" },
+        { ...base, category_id: catX, amount: 30, movement_date: "2097-01-06T12:00:00Z" },
+        { ...base, category_id: catZ, amount: 25, movement_date: "2097-01-07T12:00:00Z" }
+      ])
+      .select("id")
+    if (movementError) throw movementError
+    movementIds.push(...movements.map((m) => m.id))
+  })
+
+  afterAll(async () => {
+    if (!periodId) return
+    const db = admin()
+    if (intentionIds.length) {
+      await db.from("intention_transfers").delete().in("intention_id", intentionIds)
+      await db.from("budget_intentions").delete().in("id", intentionIds)
+    }
+    await db.from("budget_sub_items").delete().in("id", Object.values(subIds))
+    await db.from("budget_items").delete().eq("budget_period_id", periodId)
+    await db.from("ministry_budgets").delete().eq("budget_period_id", periodId)
+    if (movementIds.length) await db.from("movements").delete().in("id", movementIds)
+    if (categoryIds.length) await db.from("movement_categories").delete().in("id", categoryIds)
+    await db.from("budget_periods").delete().eq("id", periodId)
+  })
+
+  it("ministry summary: parent assigned is the sum of active sub-items and used includes all spend", async () => {
+    const { data, error } = await admin().rpc("get_ministry_budget_summary", {
+      p_period_id: periodId
+    })
+    expect(error).toBeNull()
+    const row = (data as unknown as Record<string, unknown>[]).find(
+      (r) => r.ministry_id === E2E_MINISTRY_ID
+    )!
+    expect(row).toMatchObject({
+      assigned_amount: 500, // A 300 + B 200; deactivated C and the stored 9999 are ignored
+      used_amount: 280, // initial 10 + A 120 + unassigned 150 (50 without fund + C 100, deactivated)
+      unassigned_used: 150,
+      remaining: 220
+    })
+  })
+
+  it("every summary row adds up: used = initial + active sub-items used + unassigned", async () => {
+    const db = admin()
+    const [ministries, items, subItems] = await Promise.all([
+      db.rpc("get_ministry_budget_summary", { p_period_id: periodId }),
+      db.rpc("get_budget_items_summary", { p_period_id: periodId }),
+      db.rpc("get_budget_sub_items_summary", { p_period_id: periodId })
+    ])
+    expect(ministries.error).toBeNull()
+    expect(items.error).toBeNull()
+    expect(subItems.error).toBeNull()
+    type Parent = {
+      ministry_id?: string
+      item_id?: string
+      initial_used_amount: number
+      used_amount: number
+      unassigned_used: number
+    }
+    type Sub = { ministry_id: string | null; budget_item_id: string | null; used_amount: number }
+    const subs = subItems.data as unknown as Sub[]
+    const check = (rows: Parent[], belongs: (s: Sub, r: Parent) => boolean) => {
+      expect(rows.length).toBeGreaterThan(0)
+      for (const r of rows) {
+        const subsUsed = subs.filter((s) => belongs(s, r)).reduce((a, s) => a + s.used_amount, 0)
+        expect(r.used_amount).toBe(r.initial_used_amount + subsUsed + r.unassigned_used)
+      }
+    }
+    check(ministries.data as unknown as Parent[], (s, r) => s.ministry_id === r.ministry_id)
+    check(items.data as unknown as Parent[], (s, r) => s.budget_item_id === r.item_id)
+  })
+
+  it("sub-item summary: per-fund used/remaining for active sub-items only", async () => {
+    const { data, error } = await admin().rpc("get_budget_sub_items_summary", {
+      p_period_id: periodId
+    })
+    expect(error).toBeNull()
+    const rows = data as unknown as Record<string, unknown>[]
+    const byName = (n: string) => rows.find((r) => r.name === n)
+    expect(byName("A")).toMatchObject({
+      sub_item_id: subIds.A,
+      parent_type: "MINISTRY",
+      ministry_id: E2E_MINISTRY_ID,
+      budget_item_id: null,
+      assigned_amount: 300,
+      used_amount: 120,
+      remaining: 180
+    })
+    expect(byName("B")).toMatchObject({ used_amount: 0, remaining: 200 })
+    expect(byName("C")).toBeUndefined()
+    expect(byName("Y fund")).toMatchObject({
+      parent_type: "ITEM",
+      ministry_id: null,
+      budget_item_id: itemId,
+      assigned_amount: 150,
+      used_amount: 60,
+      remaining: 90
+    })
+  })
+
+  it("items summary: parent sums sub-items and adds own-category spend not covered by them", async () => {
+    const { data, error } = await admin().rpc("get_budget_items_summary", { p_period_id: periodId })
+    expect(error).toBeNull()
+    const row = (data as unknown as Record<string, unknown>[]).find((r) => r.item_id === itemId)
+    expect(row).toMatchObject({
+      assigned_amount: 150,
+      used_amount: 115, // Y 60 + own category X 30 + deactivated Z 25
+      unassigned_used: 55, // X 30 + Z 25: no visible line claims them
+      remaining: 35
+    })
+  })
+
+  it("rejects two active sub-items of one item with the same category", async () => {
+    const { error } = await admin()
+      .from("budget_sub_items")
+      .insert({ budget_item_id: itemId, name: "Y dup", assigned_amount: 1, category_id: categoryY })
+    expect(error?.code).toBe("23505")
+    expect(error?.message).toContain("budget_sub_items_item_category_unique")
+  })
+
+  it("rejects reactivating a sub-item whose category is taken by an active sibling", async () => {
+    const { error } = await admin()
+      .from("budget_sub_items")
+      .update({ is_active: true })
+      .eq("id", subIds.YOld)
+    expect(error?.code).toBe("23505")
+  })
+})
+
+describeIfLocal("Trigger: budget_intentions fund validation", () => {
+  const admin = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+  let periodId = ""
+  let otherMinistryId = ""
+  let ownSubId = ""
+  let otherSubId = ""
+  let itemSubId = ""
+  let itemId = ""
+  let ministerId = ""
+  const intentionIds: string[] = []
+
+  const newIntention = async (requestedBy: string, fund?: string) => {
+    const { data, error } = await admin()
+      .from("budget_intentions")
+      .insert({
+        ministry_id: E2E_MINISTRY_ID,
+        requested_by: requestedBy,
+        purpose: "Fund trigger fixture",
+        amount: 1000,
+        funding_method: "TRANSFER",
+        status: "APPROVED",
+        budget_sub_item_id: fund ?? null
+      })
+      .select("id")
+      .single()
+    if (error) throw error
+    intentionIds.push(data.id)
+    return data.id
+  }
+
+  beforeAll(async () => {
+    const db = admin()
+    const { data: period, error: periodError } = await db
+      .from("budget_periods")
+      .insert({
+        label: "Fund trigger fixture",
+        year: 2086,
+        start_date: "2086-03-01",
+        end_date: "2087-02-28"
+      })
+      .select()
+      .single()
+    if (periodError) throw periodError
+    periodId = period.id
+
+    const { data: ministry, error: ministryError } = await db
+      .from("ministries")
+      .insert({ name: `tmp-fund-${Date.now()}` })
+      .select("id")
+      .single()
+    if (ministryError) throw ministryError
+    otherMinistryId = ministry.id
+
+    const { data: budgets, error: budgetsError } = await db
+      .from("ministry_budgets")
+      .insert([
+        { ministry_id: E2E_MINISTRY_ID, budget_period_id: periodId, assigned_amount: 0 },
+        { ministry_id: otherMinistryId, budget_period_id: periodId, assigned_amount: 0 }
+      ])
+      .select()
+    if (budgetsError) throw budgetsError
+
+    const { data: item, error: itemError } = await db
+      .from("budget_items")
+      .insert({ budget_period_id: periodId, name: "Fund trigger item", assigned_amount: 0 })
+      .select()
+      .single()
+    if (itemError) throw itemError
+    itemId = item.id
+
+    const { data: subs, error: subsError } = await db
+      .from("budget_sub_items")
+      .insert([
+        {
+          ministry_budget_id: budgets.find((b) => b.ministry_id === E2E_MINISTRY_ID)!.id,
+          name: "Own fund",
+          assigned_amount: 10
+        },
+        {
+          ministry_budget_id: budgets.find((b) => b.ministry_id === otherMinistryId)!.id,
+          name: "Other fund",
+          assigned_amount: 10
+        },
+        { budget_item_id: itemId, name: "Item fund", assigned_amount: 10 }
+      ])
+      .select()
+    if (subsError) throw subsError
+    ownSubId = subs.find((s) => s.name === "Own fund")!.id
+    otherSubId = subs.find((s) => s.name === "Other fund")!.id
+    itemSubId = subs.find((s) => s.name === "Item fund")!.id
+
+    const { data: minister, error: ministerError } = await db
+      .from("users")
+      .select("id")
+      .eq("email", E2E_USERS.minister.email)
+      .single()
+    if (ministerError) throw ministerError
+    ministerId = minister.id
+  })
+
+  afterAll(async () => {
+    const db = admin()
+    if (intentionIds.length) await db.from("budget_intentions").delete().in("id", intentionIds)
+    await db
+      .from("budget_sub_items")
+      .delete()
+      .in("id", [ownSubId, otherSubId, itemSubId].filter(Boolean))
+    await db.from("budget_items").delete().eq("budget_period_id", periodId)
+    await db.from("ministry_budgets").delete().eq("budget_period_id", periodId)
+    await db.from("ministries").delete().eq("id", otherMinistryId)
+    await db.from("budget_periods").delete().eq("id", periodId)
+  })
+
+  it("accepts a sub-item of the request's own ministry", async () => {
+    const id = await newIntention(E2E_ADMIN_ID, ownSubId)
+    const { data } = await admin()
+      .from("budget_intentions")
+      .select("budget_sub_item_id")
+      .eq("id", id)
+      .single()
+    expect(data?.budget_sub_item_id).toBe(ownSubId)
+  })
+
+  it("rejects a sub-item of another ministry on insert", async () => {
+    await expect(newIntention(E2E_ADMIN_ID, otherSubId)).rejects.toMatchObject({
+      message: "El fondo no pertenece al ministerio de la solicitud"
+    })
+  })
+
+  it("rejects changing the request's ministry while it holds another ministry's fund", async () => {
+    const id = await newIntention(E2E_ADMIN_ID, ownSubId)
+    const { error } = await admin()
+      .from("budget_intentions")
+      .update({ ministry_id: otherMinistryId })
+      .eq("id", id)
+    expect(error?.message).toContain("El fondo no pertenece al ministerio de la solicitud")
+  })
+
+  it("rejects an item-parented sub-item on update", async () => {
+    const id = await newIntention(E2E_ADMIN_ID)
+    const { error } = await admin()
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: itemSubId })
+      .eq("id", id)
+    expect(error?.message).toContain("El fondo no pertenece al ministerio de la solicitud")
+  })
+
+  it("lets BURSAR set the fund and clear it", async () => {
+    const id = await newIntention(E2E_ADMIN_ID)
+    const bursar = await signIn(E2E_USERS.bursar)
+    const set = await bursar
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: ownSubId })
+      .eq("id", id)
+      .select("budget_sub_item_id")
+      .single()
+    expect(set.error).toBeNull()
+    expect(set.data?.budget_sub_item_id).toBe(ownSubId)
+    const cleared = await bursar
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: null })
+      .eq("id", id)
+      .select("budget_sub_item_id")
+      .single()
+    expect(cleared.error).toBeNull()
+    expect(cleared.data?.budget_sub_item_id).toBeNull()
+    await bursar.auth.signOut()
+  })
+
+  it("does not let the MINISTER owner of a request change its fund", async () => {
+    const id = await newIntention(ministerId)
+    const minister = await signIn(E2E_USERS.minister)
+    const { error } = await minister
+      .from("budget_intentions")
+      .update({ budget_sub_item_id: ownSubId })
+      .eq("id", id)
+    expect(error).not.toBeNull()
+    const { data } = await admin()
+      .from("budget_intentions")
+      .select("budget_sub_item_id")
+      .eq("id", id)
+      .single()
+    expect(data?.budget_sub_item_id).toBeNull()
+    await minister.auth.signOut()
+  })
+})
+
+describeIfLocal("RPC: ministry totals across a year boundary", () => {
+  const admin = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
+  const periodIds: string[] = []
+  const subIds: string[] = []
+  const intentionIds: string[] = []
+  let periodB = ""
+
+  beforeAll(async () => {
+    const db = admin()
+    const mkPeriod = async (year: number) => {
+      const { data, error } = await db
+        .from("budget_periods")
+        .insert({
+          label: `Boundary ${year}`,
+          year,
+          start_date: `${year}-03-01`,
+          end_date: `${year + 1}-02-28`
+        })
+        .select("id")
+        .single()
+      if (error) throw error
+      periodIds.push(data.id)
+      const { data: mb, error: mbError } = await db
+        .from("ministry_budgets")
+        .insert({
+          budget_period_id: data.id,
+          ministry_id: E2E_MINISTRY_ID,
+          assigned_amount: 0,
+          initial_used_amount: 5
+        })
+        .select("id")
+        .single()
+      if (mbError) throw mbError
+      const { data: sub, error: subError } = await db
+        .from("budget_sub_items")
+        .insert({ ministry_budget_id: mb.id, name: `Fund ${year}`, assigned_amount: 100 })
+        .select("id")
+        .single()
+      if (subError) throw subError
+      subIds.push(sub.id)
+      return { periodId: data.id, subId: sub.id }
+    }
+    const a = await mkPeriod(2071)
+    const b = await mkPeriod(2072)
+    periodB = b.periodId
+
+    const { data: intentions, error } = await db
+      .from("budget_intentions")
+      .insert([
+        // fund from period A, transfer dated inside period B
+        {
+          ministry_id: E2E_MINISTRY_ID,
+          requested_by: E2E_ADMIN_ID,
+          purpose: "Boundary fixture",
+          status: "APPROVED" as const,
+          amount: 70,
+          funding_method: "TRANSFER" as const,
+          budget_sub_item_id: a.subId
+        },
+        {
+          ministry_id: E2E_MINISTRY_ID,
+          requested_by: E2E_ADMIN_ID,
+          purpose: "Boundary fixture",
+          status: "APPROVED" as const,
+          amount: 40,
+          funding_method: "TRANSFER" as const,
+          budget_sub_item_id: b.subId
+        }
+      ])
+      .select()
+    if (error) throw error
+    intentionIds.push(...intentions.map((i) => i.id))
+    const { error: transfersError } = await db.from("intention_transfers").insert([
+      {
+        intention_id: intentions.find((i) => i.amount === 70)!.id,
+        amount: 70,
+        transfer_date: "2072-03-10",
+        registered_by: E2E_ADMIN_ID
+      },
+      {
+        intention_id: intentions.find((i) => i.amount === 40)!.id,
+        amount: 40,
+        transfer_date: "2072-03-12",
+        registered_by: E2E_ADMIN_ID
+      }
+    ])
+    if (transfersError) throw transfersError
+  })
+
+  afterAll(async () => {
+    const db = admin()
+    if (intentionIds.length) {
+      await db.from("intention_transfers").delete().in("intention_id", intentionIds)
+      await db.from("budget_intentions").delete().in("id", intentionIds)
+    }
+    if (subIds.length) await db.from("budget_sub_items").delete().in("id", subIds)
+    if (periodIds.length) {
+      await db.from("ministry_budgets").delete().in("budget_period_id", periodIds)
+      await db.from("budget_periods").delete().in("id", periodIds)
+    }
+  })
+
+  it("counts spend funded by another period's sub-item as unassigned, and totals add up", async () => {
+    const db = admin()
+    const [ministries, subItems] = await Promise.all([
+      db.rpc("get_ministry_budget_summary", { p_period_id: periodB }),
+      db.rpc("get_budget_sub_items_summary", { p_period_id: periodB })
+    ])
+    expect(ministries.error).toBeNull()
+    expect(subItems.error).toBeNull()
+    const row = (ministries.data as unknown as Record<string, number | string>[]).find(
+      (r) => r.ministry_id === E2E_MINISTRY_ID
+    )!
+    // 70 (fund of A, "Sin asignar" here) + 40 (B's own fund)
+    expect(row.unassigned_used).toBe(70)
+    expect(row.used_amount).toBe(5 + 110)
+    const subsUsed = (subItems.data as unknown as { ministry_id: string; used_amount: number }[])
+      .filter((s) => s.ministry_id === E2E_MINISTRY_ID)
+      .reduce((a, s) => a + s.used_amount, 0)
+    expect(subsUsed).toBe(40)
+    expect(row.used_amount).toBe(
+      (row.initial_used_amount as number) + subsUsed + (row.unassigned_used as number)
+    )
   })
 })

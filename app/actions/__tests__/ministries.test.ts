@@ -1,4 +1,9 @@
-import { createMinistry, getMinistryAssignments, assignMinister } from "../ministries"
+import {
+  createMinistry,
+  getMinistryAssignments,
+  assignMinister,
+  deleteMinistry
+} from "../ministries"
 import { createMinistrySchema } from "@/lib/validators/ministry"
 
 const mockGetCurrentUser = jest.fn()
@@ -8,6 +13,8 @@ const mockCan = jest.fn()
 const mockCreate = jest.fn()
 const mockGetAssignments = jest.fn()
 const mockAssign = jest.fn()
+const mockGetById = jest.fn()
+const mockDelete = jest.fn()
 const mockRevalidatePath = jest.fn()
 
 jest.mock("@/lib/supabase/server", () => ({
@@ -24,7 +31,9 @@ jest.mock("@/services/ministries/ministries.service", () => ({
   ministriesService: {
     create: (...args: unknown[]) => mockCreate(...args),
     getAssignments: (...args: unknown[]) => mockGetAssignments(...args),
-    assign: (...args: unknown[]) => mockAssign(...args)
+    assign: (...args: unknown[]) => mockAssign(...args),
+    getById: (...args: unknown[]) => mockGetById(...args),
+    delete: (...args: unknown[]) => mockDelete(...args)
   }
 }))
 
@@ -106,5 +115,41 @@ describe("assignMinister", () => {
     expect(mockAssign).toHaveBeenCalledWith(mockDb, "m-1", { user_id: "u-2" }, mockUser.id)
     expect(mockRevalidatePath).toHaveBeenCalledWith("/ministries")
     expect(data).toEqual(result)
+  })
+})
+
+describe("deleteMinistry", () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockGetById.mockResolvedValue({ id: "m-1", name: "Jóvenes" })
+  })
+
+  it("throws without permission", async () => {
+    mockCan.mockReturnValue(false)
+    await expect(deleteMinistry("m-1", "Jóvenes")).rejects.toThrow("Sin permisos")
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it("throws when the typed name does not match", async () => {
+    await expect(deleteMinistry("m-1", "Otro")).rejects.toThrow("El nombre no coincide")
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it("returns a structured result with blockers when the ministry has history", async () => {
+    const blockers = { budget_intentions: 2 }
+    mockDelete.mockResolvedValue({ deleted: false, blockers })
+    const result = await deleteMinistry("m-1", "Jóvenes")
+    expect(result).toEqual({ ok: false, reason: "HAS_HISTORY", blockers })
+    expect(mockRevalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("returns ok and revalidates when deleted", async () => {
+    mockDelete.mockResolvedValue({ deleted: true })
+    const result = await deleteMinistry("m-1", "Jóvenes")
+    expect(mockDelete).toHaveBeenCalledWith(mockDb, "m-1", mockUser.id)
+    expect(result).toEqual({ ok: true })
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/ministries")
   })
 })

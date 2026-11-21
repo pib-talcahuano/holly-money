@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { attachmentInputSchema } from "@/lib/validators/movement"
+import { uuidSchema } from "@/lib/validators/ministry-budget"
 import {
   MIN_REQUEST_AMOUNT,
   MAX_REQUEST_AMOUNT,
@@ -25,7 +26,8 @@ export const createIntentionSchema = z.object({
 
 export const reviewIntentionSchema = z.object({
   action: z.enum(["APPROVED", "REJECTED"]),
-  message: z.string().min(1, "El mensaje es requerido")
+  message: z.string().min(1, "El mensaje es requerido"),
+  fund_sub_item_id: uuidSchema("Fondo inválido").optional()
 })
 
 export const registerTransferSchema = z.object({

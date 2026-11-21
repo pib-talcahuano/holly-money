@@ -156,6 +156,17 @@ describe("budgetItemsService.updateAmounts", () => {
   })
 })
 
+describe("budgetItemsService.updateAmounts without assigned", () => {
+  it("leaves assigned_amount out of the update", async () => {
+    const { db, writes } = fakeDb({})
+    await budgetItemsService.updateAmounts(db, { id: ITEM_ID, initial_used_amount: 10 }, "user-1")
+    expect(Object.keys(writes[0].payload as object).sort()).toEqual([
+      "initial_used_amount",
+      "updated_at"
+    ])
+  })
+})
+
 describe("budgetItemsService.getSummary", () => {
   it("calls the RPC with the period id and returns the rows", async () => {
     mockRpc.mockResolvedValue({ data: [{ item_id: ITEM_ID }], error: null })

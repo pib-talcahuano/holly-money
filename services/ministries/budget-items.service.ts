@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { auditService } from "@/services/audit/audit.service"
+import { assertExpenseCategory } from "@/services/ministries/budget-category"
 import type {
   SetBudgetItemActiveInput,
   UpdateBudgetItemAmountsInput,
@@ -19,22 +20,12 @@ export type BudgetItemSummaryRow = {
   assigned_amount: number
   initial_used_amount: number
   used_amount: number
+  // Expenses of the item's own category not covered by any sub-item; included in used_amount.
+  unassigned_used: number
   remaining: number
 }
 
 const UNIQUE_VIOLATION = "23505"
-
-async function assertExpenseCategory(db: DB, categoryId: string) {
-  const { data, error } = await db
-    .from("movement_categories")
-    .select("movement_type")
-    .eq("id", categoryId)
-    .maybeSingle()
-  if (error) throw error
-  if (data?.movement_type !== "EXPENSE") {
-    throw new Error("Solo se pueden vincular categorías de egreso")
-  }
-}
 
 function rethrowFriendly(error: { code?: string; message?: string }): never {
   if (error.code === UNIQUE_VIOLATION) {
@@ -109,7 +100,7 @@ export const budgetItemsService = {
   // which change only through the dialog (upsertItem).
   async updateAmounts(db: DB, input: UpdateBudgetItemAmountsInput, userId: string) {
     const values = {
-      assigned_amount: input.assigned_amount,
+      ...(input.assigned_amount === undefined ? {} : { assigned_amount: input.assigned_amount }),
       initial_used_amount: input.initial_used_amount
     }
     const { data, error } = await db

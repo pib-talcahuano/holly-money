@@ -6,9 +6,11 @@ import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/serve
 import { PERMISSIONS, can } from "@/lib/permissions/rbac"
 import { ministryBudgetService } from "@/services/ministries/ministry-budget.service"
 import {
-  upsertBudgetPeriodSchema,
+  copyBudgetSchema,
+  createBudgetPeriodSchema,
   upsertMinistryBudgetSchema,
-  type UpsertBudgetPeriodInput,
+  type CopyBudgetInput,
+  type CreateBudgetPeriodInput,
   type UpsertMinistryBudgetInput
 } from "@/lib/validators/ministry-budget"
 
@@ -33,11 +35,11 @@ function revalidateBudgetConsumers(ministryId?: string) {
   if (ministryId) revalidatePath(`/ministries/${ministryId}`)
 }
 
-export async function upsertBudgetPeriod(input: UpsertBudgetPeriodInput) {
+export async function createBudgetPeriod(input: CreateBudgetPeriodInput) {
   const user = assertBudgetsAccess(await getCurrentUser())
-  const parsed = parseOrThrow(upsertBudgetPeriodSchema, input)
+  const parsed = parseOrThrow(createBudgetPeriodSchema, input)
   const db = await createSupabaseServerClient()
-  const data = await ministryBudgetService.upsertPeriod(db, parsed, user.id)
+  const data = await ministryBudgetService.createPeriodForYear(db, parsed.year, user.id)
   revalidateBudgetConsumers()
   return data
 }
@@ -49,4 +51,13 @@ export async function upsertMinistryBudget(input: UpsertMinistryBudgetInput) {
   const data = await ministryBudgetService.upsertBudget(db, parsed, user.id)
   revalidateBudgetConsumers(parsed.ministry_id)
   return data
+}
+
+export async function copyBudgetFromPeriod(input: CopyBudgetInput) {
+  const user = assertBudgetsAccess(await getCurrentUser())
+  const parsed = parseOrThrow(copyBudgetSchema, input)
+  const db = await createSupabaseServerClient()
+  const result = await ministryBudgetService.copyFromPeriod(db, parsed, user.id)
+  revalidatePath("/budgets")
+  return result
 }
