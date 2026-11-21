@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { GlobalSearch } from "../global-search"
 import { searchMovements } from "@/app/actions/movements"
-import type { MovementSearchResult } from "@/app/actions/movements"
+import type { MovementSearchResponse, MovementSearchResult } from "@/app/actions/movements"
 
 const mockPush = jest.fn()
 const mockCan = jest.fn()
@@ -37,6 +37,19 @@ const expense: MovementSearchResult = {
   delivered_by: "Pedro"
 }
 
+const totals = {
+  income: { total: 485000, count: 14 },
+  expense: { total: 12400, count: 1 },
+  net: 472600
+}
+
+function response(
+  results: MovementSearchResult[],
+  withTotals: MovementSearchResponse["totals"] = totals
+): MovementSearchResponse {
+  return { results, totals: withTotals }
+}
+
 beforeAll(() => {
   global.ResizeObserver = class {
     observe = jest.fn()
@@ -50,7 +63,7 @@ beforeEach(() => {
   jest.useFakeTimers()
   mockCan.mockReturnValue(true)
   searchMock.mockReset()
-  searchMock.mockResolvedValue([])
+  searchMock.mockResolvedValue({ results: [], totals: null })
   mockPush.mockReset()
 })
 
@@ -115,16 +128,18 @@ describe("GlobalSearch", () => {
   })
 
   it("groups results into Ingresos and Egresos", async () => {
-    searchMock.mockResolvedValue([income, expense])
+    searchMock.mockResolvedValue(response([income, expense]))
     const input = openDialog()
     await type(input, "ma")
-    expect(screen.getByText("Ingresos")).toBeInTheDocument()
-    expect(screen.getByText("Egresos")).toBeInTheDocument()
+    const headings = Array.from(document.querySelectorAll("[cmdk-group-heading]")).map(
+      (el) => el.textContent
+    )
+    expect(headings).toEqual(["Ingresos", "Egresos"])
     expect(screen.getByText(/Diezmos/)).toBeInTheDocument()
   })
 
   it("marks cancelled movements", async () => {
-    searchMock.mockResolvedValue([{ ...income, status: "CANCELLED" }])
+    searchMock.mockResolvedValue(response([{ ...income, status: "CANCELLED" }]))
     const input = openDialog()
     await type(input, "ma")
     expect(screen.getByText("Anulado")).toBeInTheDocument()
@@ -144,22 +159,22 @@ describe("GlobalSearch", () => {
   })
 
   it("ignores stale responses", async () => {
-    let resolveOld: (v: MovementSearchResult[]) => void = () => {}
+    let resolveOld: (v: MovementSearchResponse) => void = () => {}
     searchMock
       .mockImplementationOnce(() => new Promise((r) => (resolveOld = r)))
-      .mockResolvedValueOnce([expense])
+      .mockResolvedValueOnce(response([expense]))
     const input = openDialog()
     await type(input, "ma")
     await type(input, "mab")
     await act(async () => {
-      resolveOld([income])
+      resolveOld(response([income]))
     })
     expect(screen.getByText(/Gastos básicos/)).toBeInTheDocument()
     expect(screen.queryByText(/Diezmos/)).not.toBeInTheDocument()
   })
 
   it("navigates to the movement when a result is chosen", async () => {
-    searchMock.mockResolvedValue([income])
+    searchMock.mockResolvedValue(response([income]))
     const input = openDialog()
     await type(input, "ma")
     fireEvent.click(screen.getByText(/Diezmos/))
@@ -168,7 +183,7 @@ describe("GlobalSearch", () => {
   })
 
   it("navigates to the full list from the footer", async () => {
-    searchMock.mockResolvedValue([income])
+    searchMock.mockResolvedValue(response([income]))
     const input = openDialog()
     await type(input, "mabel s")
     fireEvent.click(screen.getByText("Ver todos los resultados"))
@@ -176,7 +191,9 @@ describe("GlobalSearch", () => {
   })
 
   it("hides previous results while a new search is loading", async () => {
-    searchMock.mockResolvedValueOnce([income]).mockImplementationOnce(() => new Promise(() => {}))
+    searchMock
+      .mockResolvedValueOnce(response([income]))
+      .mockImplementationOnce(() => new Promise(() => {}))
     const input = openDialog()
     await type(input, "ma")
     expect(screen.getByText(/Diezmos/)).toBeInTheDocument()
@@ -194,9 +211,67 @@ describe("GlobalSearch", () => {
   })
 
   it("selects the first result so Enter opens it, not the full list", async () => {
-    searchMock.mockResolvedValue([income, expense])
+    searchMock.mockResolvedValue(response([income, expense]))
     const input = openDialog()
     await type(input, "ma")
+    fireEvent.keyDown(input, { key: "Enter" })
+    expect(mockPush).toHaveBeenCalledWith("/movements/m1")
+    expect(mockPush).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows the totals strip between the results and the footer", async () => {
+    searchMock.mockResolvedValue(response([income, expense]))
+    const input = openDialog()
+    await type(input, "ma")
+    const strip = screen.getByLabelText("Totales de la búsqueda")
+    expect(strip).toHaveTextContent("Total histórico · 15 coincidencias")
+    expect(strip).toHaveTextContent("Sin anulados")
+    expect(strip).toHaveTextContent("Ingresos")
+    expect(strip).toHaveTextContent("$485.000")
+    expect(strip).toHaveTextContent("14 registros")
+    expect(strip).toHaveTextContent("Egresos")
+    expect(strip).toHaveTextContent("$12.400")
+    expect(strip).toHaveTextContent("1 registro")
+    expect(strip).not.toHaveTextContent("1 registros")
+    expect(strip).toHaveTextContent("Neto")
+    expect(strip).toHaveTextContent("$472.600")
+    expect(strip).toHaveTextContent("Ing. menos egr.")
+  })
+
+  it("shows results without the strip when totals are null", async () => {
+    searchMock.mockResolvedValue(response([income], null))
+    const input = openDialog()
+    await type(input, "ma")
+    expect(screen.getByText(/Diezmos/)).toBeInTheDocument()
+    expect(screen.queryByLabelText("Totales de la búsqueda")).not.toBeInTheDocument()
+  })
+
+  it("shows no strip for an empty list, while loading or on error", async () => {
+    searchMock.mockResolvedValueOnce(response([], totals))
+    const input = openDialog()
+    await type(input, "zz")
+    expect(screen.queryByLabelText("Totales de la búsqueda")).not.toBeInTheDocument()
+
+    searchMock
+      .mockResolvedValueOnce(response([income]))
+      .mockImplementationOnce(() => new Promise(() => {}))
+    await type(input, "ma")
+    expect(screen.getByLabelText("Totales de la búsqueda")).toBeInTheDocument()
+    await type(input, "mab")
+    expect(screen.getByText("Buscando…")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Totales de la búsqueda")).not.toBeInTheDocument()
+
+    searchMock.mockRejectedValueOnce(new Error("boom"))
+    await type(input, "mabe")
+    expect(screen.getByText("No se pudo buscar")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Totales de la búsqueda")).not.toBeInTheDocument()
+  })
+
+  it("keeps Enter on the first result when the strip is shown", async () => {
+    searchMock.mockResolvedValue(response([income, expense]))
+    const input = openDialog()
+    await type(input, "ma")
+    expect(screen.getByLabelText("Totales de la búsqueda")).toBeInTheDocument()
     fireEvent.keyDown(input, { key: "Enter" })
     expect(mockPush).toHaveBeenCalledWith("/movements/m1")
     expect(mockPush).toHaveBeenCalledTimes(1)

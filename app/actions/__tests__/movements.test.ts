@@ -15,6 +15,7 @@ const mockCreate = jest.fn()
 const mockUpdate = jest.fn()
 const mockCancel = jest.fn()
 const mockList = jest.fn()
+const mockTotals = jest.fn()
 const mockSuggestDeliveredBy = jest.fn()
 const mockProcessIntegrations = jest.fn()
 const mockRevalidatePath = jest.fn()
@@ -49,6 +50,7 @@ jest.mock("@/services/movements/movements.service", () => ({
     update: (...args: unknown[]) => mockUpdate(...args),
     cancel: (...args: unknown[]) => mockCancel(...args),
     list: (...args: unknown[]) => mockList(...args),
+    totals: (...args: unknown[]) => mockTotals(...args),
     suggestDeliveredBy: (...args: unknown[]) => mockSuggestDeliveredBy(...args)
   }
 }))
@@ -258,6 +260,12 @@ describe("regeneratePdf", () => {
   })
 })
 
+const sampleTotals = {
+  income: { total: 485000, count: 14 },
+  expense: { total: 12400, count: 1 },
+  net: 472600
+}
+
 describe("searchMovements", () => {
   beforeEach(() => jest.clearAllMocks())
 
@@ -265,6 +273,7 @@ describe("searchMovements", () => {
     mockGetCurrentUser.mockResolvedValue(null)
     await expect(searchMovements("mabel")).rejects.toThrow("Sin permisos para ver movimientos")
     expect(mockList).not.toHaveBeenCalled()
+    expect(mockTotals).not.toHaveBeenCalled()
   })
 
   it("throws when the user lacks VIEW_MOVEMENT", async () => {
@@ -273,21 +282,52 @@ describe("searchMovements", () => {
     await expect(searchMovements("mabel")).rejects.toThrow("Sin permisos para ver movimientos")
     expect(mockCan).toHaveBeenCalledWith(mockUser.permissions, "VIEW_MOVEMENT")
     expect(mockList).not.toHaveBeenCalled()
+    expect(mockTotals).not.toHaveBeenCalled()
   })
 
-  it("returns [] for queries shorter than 2 characters", async () => {
+  it("returns empty results and null totals for queries shorter than 2 characters", async () => {
     mockGetCurrentUser.mockResolvedValue(mockUser)
     mockCan.mockReturnValue(true)
-    await expect(searchMovements("a")).resolves.toEqual([])
+    await expect(searchMovements("a")).resolves.toEqual({ results: [], totals: null })
     expect(mockList).not.toHaveBeenCalled()
+    expect(mockTotals).not.toHaveBeenCalled()
   })
 
   it("trims the query and calls the service", async () => {
     mockGetCurrentUser.mockResolvedValue(mockUser)
     mockCan.mockReturnValue(true)
     mockList.mockResolvedValue({ data: [], count: 0, page: 1, pageSize: 20 })
+    mockTotals.mockResolvedValue(sampleTotals)
     await searchMovements("  mabel ")
     expect(mockList).toHaveBeenCalledWith(mockDb, { search: "mabel", status: "ALL", pageSize: 20 })
+    expect(mockTotals).toHaveBeenCalledWith(mockDb, { search: "mabel", movement_type: "ALL" })
+  })
+
+  it("returns results with the totals", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({ data: [], count: 0, page: 1, pageSize: 20 })
+    mockTotals.mockResolvedValue(sampleTotals)
+    await expect(searchMovements("mabel")).resolves.toEqual({ results: [], totals: sampleTotals })
+  })
+
+  it("returns the results with null totals when totals fails", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({ data: [], count: 0, page: 1, pageSize: 20 })
+    mockTotals.mockRejectedValue(new Error("rpc down"))
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {})
+    await expect(searchMovements("mabel")).resolves.toEqual({ results: [], totals: null })
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it("rejects when list fails", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockRejectedValue(new Error("db down"))
+    mockTotals.mockResolvedValue(sampleTotals)
+    await expect(searchMovements("mabel")).rejects.toThrow("db down")
   })
 
   it("flattens the category name and omits extra fields", async () => {
@@ -320,7 +360,8 @@ describe("searchMovements", () => {
       page: 1,
       pageSize: 20
     })
-    const result = await searchMovements("mabel")
+    mockTotals.mockResolvedValue(sampleTotals)
+    const { results: result } = await searchMovements("mabel")
     expect(result).toEqual([
       {
         id: "mv-1",

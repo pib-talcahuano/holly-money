@@ -12,6 +12,7 @@ import { sendVoucherEmail } from "@/services/vouchers/voucher.service"
 import { settingsService } from "@/services/settings/settings.service"
 import { movementSearchSchema, deliveredBySuggestionSchema } from "@/lib/validators/movement"
 import type { NameSuggestion } from "@/lib/utils/name-suggestions"
+import type { MovementTotals } from "@/types/movement-totals"
 import type {
   CreateMovementInput,
   UpdateMovementInput,
@@ -117,31 +118,43 @@ export type MovementSearchResult = {
   delivered_by: string | null
 }
 
-export async function searchMovements(query: string): Promise<MovementSearchResult[]> {
+export type MovementSearchResponse = {
+  results: MovementSearchResult[]
+  totals: MovementTotals | null
+}
+
+export async function searchMovements(query: string): Promise<MovementSearchResponse> {
   const user = await getCurrentUser()
   if (!user || !can(user.permissions, PERMISSIONS.VIEW_MOVEMENT)) {
     throw new Error("Sin permisos para ver movimientos")
   }
 
   const parsed = movementSearchSchema.safeParse({ query })
-  if (!parsed.success) return []
+  if (!parsed.success) return { results: [], totals: null }
 
   const db = await createSupabaseServerClient()
-  const { data: rows } = await movementsService.list(db, {
-    search: parsed.data.query,
-    status: "ALL",
-    pageSize: 20
-  })
+  const [{ data: rows }, totals] = await Promise.all([
+    movementsService.list(db, { search: parsed.data.query, status: "ALL", pageSize: 20 }),
+    movementsService
+      .totals(db, { search: parsed.data.query, movement_type: "ALL" })
+      .catch((error: unknown) => {
+        console.error("searchMovements: totals failed", error)
+        return null
+      })
+  ])
 
-  return rows.map((row) => ({
-    id: row.id,
-    movement_date: row.movement_date,
-    movement_type: row.movement_type,
-    amount: row.amount,
-    status: row.status,
-    category_name: row.movement_categories?.name ?? null,
-    delivered_by: row.delivered_by
-  }))
+  return {
+    results: rows.map((row) => ({
+      id: row.id,
+      movement_date: row.movement_date,
+      movement_type: row.movement_type,
+      amount: row.amount,
+      status: row.status,
+      category_name: row.movement_categories?.name ?? null,
+      delivered_by: row.delivered_by
+    })),
+    totals
+  }
 }
 
 export async function suggestDeliveredBy(

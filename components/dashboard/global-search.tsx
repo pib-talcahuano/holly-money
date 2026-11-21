@@ -15,6 +15,7 @@ import {
   CommandShortcut
 } from "@/components/ui/command"
 import { useUser } from "@/components/providers/user-provider"
+import type { MovementTotals } from "@/types/movement-totals"
 import { PERMISSIONS } from "@/lib/permissions/rbac"
 import { cn, formatCLP, formatDate } from "@/lib/utils"
 
@@ -56,12 +57,70 @@ function ResultRow({
   )
 }
 
+function TotalBlock({
+  label,
+  amount,
+  caption,
+  className
+}: {
+  label: string
+  amount: number
+  caption: string
+  className?: string
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className={cn("truncate text-base font-bold tabular-nums", className)}>
+        {formatCLP(amount)}
+      </span>
+      <span className="text-xs text-muted-foreground">{caption}</span>
+    </div>
+  )
+}
+
+function recordsLabel(count: number) {
+  return `${count} ${count === 1 ? "registro" : "registros"}`
+}
+
+function TotalsStrip({ totals }: { totals: MovementTotals }) {
+  const matches = totals.income.count + totals.expense.count
+  return (
+    <div aria-label="Totales de la búsqueda" role="group" className="border-t px-3 py-3">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+        <span className="font-medium">
+          Total histórico · {matches} {matches === 1 ? "coincidencia" : "coincidencias"}
+        </span>
+        <span className="text-[11px] text-muted-foreground">Sin anulados</span>
+      </div>
+      <div className="flex gap-2">
+        <TotalBlock
+          label="Ingresos"
+          amount={totals.income.total}
+          caption={recordsLabel(totals.income.count)}
+          className="text-on-income"
+        />
+        <TotalBlock
+          label="Egresos"
+          amount={totals.expense.total}
+          caption={recordsLabel(totals.expense.count)}
+          className="text-on-expense"
+        />
+        <TotalBlock label="Neto" amount={totals.net} caption="Ing. menos egr." />
+      </div>
+    </div>
+  )
+}
+
 export function GlobalSearch() {
   const { can } = useUser()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState("")
   const [results, setResults] = useState<MovementSearchResult[]>([])
+  const [totals, setTotals] = useState<MovementTotals | null>(null)
   const [status, setStatus] = useState<Status>("idle")
   const [selected, setSelected] = useState("")
   const requestId = useRef(0)
@@ -87,16 +146,18 @@ export function GlobalSearch() {
     }
     const timer = setTimeout(() => {
       searchMovements(query)
-        .then((data) => {
+        .then(({ results: found, totals: foundTotals }) => {
           if (id !== requestId.current) return
-          setResults(data)
-          const first = data.find((r) => r.movement_type === "INCOME") ?? data[0]
+          setResults(found)
+          setTotals(foundTotals)
+          const first = found.find((r) => r.movement_type === "INCOME") ?? found[0]
           setSelected(first ? first.id : "")
           setStatus("done")
         })
         .catch(() => {
           if (id !== requestId.current) return
           setResults([])
+          setTotals(null)
           setStatus("error")
         })
     }, DEBOUNCE_MS)
@@ -109,6 +170,7 @@ export function GlobalSearch() {
       setStatus("loading")
     } else {
       setResults([])
+      setTotals(null)
       setStatus("idle")
     }
   }, [])
@@ -119,6 +181,7 @@ export function GlobalSearch() {
       requestId.current++
       setText("")
       setResults([])
+      setTotals(null)
       setStatus("idle")
     }
   }, [])
@@ -204,6 +267,7 @@ export function GlobalSearch() {
                 ))}
               </CommandGroup>
             )}
+            {showResults && results.length > 0 && totals && <TotalsStrip totals={totals} />}
             {showResults && results.length > 0 && (
               <CommandGroup>
                 <CommandItem
