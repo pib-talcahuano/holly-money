@@ -47,9 +47,15 @@ export const movementSearchSchema = z.object({
   query: z.string().trim().min(2).max(100)
 })
 
+export const deliveredBySuggestionSchema = z.object({
+  query: z.string().trim().min(2).max(100),
+  movement_type: z.enum(["INCOME", "EXPENSE"])
+})
+
 export type AttachmentInput = z.infer<typeof attachmentInputSchema>
 export type CreateMovementInput = z.infer<typeof createMovementSchema>
 export type UpdateMovementInput = z.infer<typeof updateMovementSchema>
 export type CancelMovementInput = z.infer<typeof cancelMovementSchema>
 export type MovementFilters = z.infer<typeof movementFiltersSchema>
 export type MovementSearchInput = z.infer<typeof movementSearchSchema>
+export type DeliveredBySuggestionInput = z.infer<typeof deliveredBySuggestionSchema>

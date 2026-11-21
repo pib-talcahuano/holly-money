@@ -3,7 +3,8 @@ import {
   updateMovement,
   cancelMovement,
   regeneratePdf,
-  searchMovements
+  searchMovements,
+  suggestDeliveredBy
 } from "../movements"
 
 const mockGetCurrentUser = jest.fn()
@@ -14,6 +15,7 @@ const mockCreate = jest.fn()
 const mockUpdate = jest.fn()
 const mockCancel = jest.fn()
 const mockList = jest.fn()
+const mockSuggestDeliveredBy = jest.fn()
 const mockProcessIntegrations = jest.fn()
 const mockRevalidatePath = jest.fn()
 const mockSendVoucherEmail = jest.fn()
@@ -46,7 +48,8 @@ jest.mock("@/services/movements/movements.service", () => ({
     create: (...args: unknown[]) => mockCreate(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
     cancel: (...args: unknown[]) => mockCancel(...args),
-    list: (...args: unknown[]) => mockList(...args)
+    list: (...args: unknown[]) => mockList(...args),
+    suggestDeliveredBy: (...args: unknown[]) => mockSuggestDeliveredBy(...args)
   }
 }))
 
@@ -338,5 +341,53 @@ describe("searchMovements", () => {
         delivered_by: null
       }
     ])
+  })
+})
+
+describe("suggestDeliveredBy", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("throws when unauthenticated", async () => {
+    mockGetCurrentUser.mockResolvedValue(null)
+    await expect(suggestDeliveredBy("mabel", "INCOME")).rejects.toThrow(
+      "Sin permisos para crear movimientos"
+    )
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
+  })
+
+  it("throws when the user lacks CREATE_MOVEMENT", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(false)
+    await expect(suggestDeliveredBy("mabel", "INCOME")).rejects.toThrow(
+      "Sin permisos para crear movimientos"
+    )
+    expect(mockCan).toHaveBeenCalledWith(mockUser.permissions, "CREATE_MOVEMENT")
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
+  })
+
+  it("returns [] for queries shorter than 2 characters", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    await expect(suggestDeliveredBy("a", "INCOME")).resolves.toEqual([])
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
+  })
+
+  it("trims the query, calls the service and returns its result", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    const suggestions = [{ name: "Mabel Pérez", count: 3 }]
+    mockSuggestDeliveredBy.mockResolvedValue(suggestions)
+    await expect(suggestDeliveredBy("  mabel ", "INCOME")).resolves.toEqual(suggestions)
+    expect(mockSuggestDeliveredBy).toHaveBeenCalledWith(mockDb, {
+      query: "mabel",
+      movementType: "INCOME"
+    })
+  })
+
+  it("returns [] for an invalid movement type", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    await expect(suggestDeliveredBy("mabel", "OTHER" as never)).resolves.toEqual([])
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
   })
 })

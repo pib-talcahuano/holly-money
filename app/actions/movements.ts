@@ -10,7 +10,8 @@ import { movementAttachmentsService } from "@/services/movements/movement-attach
 import { processMovementIntegrations } from "@/services/google/movement-postprocess"
 import { sendVoucherEmail } from "@/services/vouchers/voucher.service"
 import { settingsService } from "@/services/settings/settings.service"
-import { movementSearchSchema } from "@/lib/validators/movement"
+import { movementSearchSchema, deliveredBySuggestionSchema } from "@/lib/validators/movement"
+import type { NameSuggestion } from "@/lib/utils/name-suggestions"
 import type {
   CreateMovementInput,
   UpdateMovementInput,
@@ -141,4 +142,23 @@ export async function searchMovements(query: string): Promise<MovementSearchResu
     category_name: row.movement_categories?.name ?? null,
     delivered_by: row.delivered_by
   }))
+}
+
+export async function suggestDeliveredBy(
+  query: string,
+  movementType: "INCOME" | "EXPENSE"
+): Promise<NameSuggestion[]> {
+  const user = await getCurrentUser()
+  if (!user || !can(user.permissions, PERMISSIONS.CREATE_MOVEMENT)) {
+    throw new Error("Sin permisos para crear movimientos")
+  }
+
+  const parsed = deliveredBySuggestionSchema.safeParse({ query, movement_type: movementType })
+  if (!parsed.success) return []
+
+  const db = await createSupabaseServerClient()
+  return movementsService.suggestDeliveredBy(db, {
+    query: parsed.data.query,
+    movementType: parsed.data.movement_type
+  })
 }
