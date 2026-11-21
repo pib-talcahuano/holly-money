@@ -1,4 +1,4 @@
-import { buildMovementSearchFilter } from "@/lib/utils/movement-search"
+import { buildMovementSearchFilter, parseAmountTerm } from "@/lib/utils/movement-search"
 
 const none = { categoryIds: [], subcategoryIds: [] }
 
@@ -41,5 +41,16 @@ describe("buildMovementSearchFilter", () => {
 
   it("returns null for empty text", () => {
     expect(buildMovementSearchFilter("", none)).toBeNull()
+  })
+})
+
+describe("parseAmountTerm", () => {
+  it("parses plain digits and thousands dots", () => {
+    expect(parseAmountTerm("20.000")).toBe(20000)
+    expect(parseAmountTerm("15000")).toBe(15000)
+  })
+
+  it("returns null for anything else", () => {
+    for (const t of ["1.5", "20.00050", "mabel 2", ""]) expect(parseAmountTerm(t)).toBeNull()
   })
 })

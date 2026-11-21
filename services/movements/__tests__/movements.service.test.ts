@@ -19,7 +19,12 @@ function chain(result: Result) {
   return { proxy, calls }
 }
 
-function makeDb(opts: { categories?: Result; subcategories?: Result; movements?: Result }) {
+function makeDb(opts: {
+  categories?: Result
+  subcategories?: Result
+  movements?: Result
+  rpc?: Result
+}) {
   const categories = chain(opts.categories ?? { data: [], error: null })
   const subcategories = chain(opts.subcategories ?? { data: [], error: null })
   const movements = chain(opts.movements ?? { data: [], error: null, count: 0 })
@@ -28,7 +33,8 @@ function makeDb(opts: { categories?: Result; subcategories?: Result; movements?:
     if (table === "movement_subcategories") return subcategories.proxy
     return movements.proxy
   })
-  return { db: { from } as never, from, categories, subcategories, movements }
+  const rpc = jest.fn(async () => opts.rpc ?? { data: [], error: null })
+  return { db: { from, rpc } as never, from, rpc, categories, subcategories, movements }
 }
 
 describe("movementsService.list search", () => {
@@ -182,5 +188,95 @@ describe("suggestDeliveredBy", () => {
       movementType: "INCOME"
     })
     expect(result.map((r) => r.name)).toEqual(names.slice(0, 8))
+  })
+})
+
+describe("movementsService.totals", () => {
+  it("resolves ids and calls the rpc with the text", async () => {
+    const t = makeDb({
+      categories: { data: [{ id: "c1" }], error: null },
+      subcategories: { data: [{ id: "s1" }, { id: "s2" }], error: null }
+    })
+    await movementsService.totals(t.db, { search: "mabel", movement_type: "ALL" })
+    expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", {
+      p_term: "mabel",
+      p_category_ids: ["c1"],
+      p_subcategory_ids: ["s1", "s2"]
+    })
+  })
+
+  it("passes amount and movement type", async () => {
+    const t = makeDb({})
+    await movementsService.totals(t.db, { search: "20.000", movement_type: "INCOME" })
+    expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", {
+      p_term: "20.000",
+      p_category_ids: [],
+      p_subcategory_ids: [],
+      p_amount: 20000,
+      p_movement_type: "INCOME"
+    })
+  })
+
+  it("skips the lookups without text", async () => {
+    for (const search of [undefined, "", "   "]) {
+      const t = makeDb({})
+      await movementsService.totals(t.db, { search, movement_type: "ALL" })
+      expect(t.from).not.toHaveBeenCalled()
+      expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", {})
+    }
+    const t = makeDb({})
+    await movementsService.totals(t.db, { movement_type: "EXPENSE" })
+    expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", { p_movement_type: "EXPENSE" })
+  })
+
+  it("sanitizes the text", async () => {
+    const t = makeDb({})
+    await movementsService.totals(t.db, { search: "a,(b)" })
+    expect(t.rpc).toHaveBeenCalledWith(
+      "get_movement_totals",
+      expect.objectContaining({ p_term: "ab" })
+    )
+  })
+
+  it("maps rows into income, expense and net", async () => {
+    const t = makeDb({
+      rpc: {
+        data: [
+          { movement_type: "INCOME", total: 485000, record_count: 14 },
+          { movement_type: "EXPENSE", total: 12400, record_count: 1 }
+        ],
+        error: null
+      }
+    })
+    expect(await movementsService.totals(t.db, {})).toEqual({
+      income: { total: 485000, count: 14 },
+      expense: { total: 12400, count: 1 },
+      net: 472600
+    })
+  })
+
+  it("returns zeros for no rows and for a single type", async () => {
+    expect(await movementsService.totals(makeDb({}).db, {})).toEqual({
+      income: { total: 0, count: 0 },
+      expense: { total: 0, count: 0 },
+      net: 0
+    })
+    const t = makeDb({
+      rpc: { data: [{ movement_type: "EXPENSE", total: "300", record_count: "2" }], error: null }
+    })
+    expect(await movementsService.totals(t.db, {})).toEqual({
+      income: { total: 0, count: 0 },
+      expense: { total: 300, count: 2 },
+      net: -300
+    })
+  })
+
+  it("throws rpc and lookup errors", async () => {
+    const r = makeDb({ rpc: { data: null, error: new Error("rpc boom") } })
+    await expect(movementsService.totals(r.db, { search: "x" })).rejects.toThrow("rpc boom")
+    const c = makeDb({ categories: { data: null, error: new Error("cat boom") } })
+    await expect(movementsService.totals(c.db, { search: "x" })).rejects.toThrow("cat boom")
+    const s = makeDb({ subcategories: { data: null, error: new Error("sub boom") } })
+    await expect(movementsService.totals(s.db, { search: "x" })).rejects.toThrow("sub boom")
   })
 })

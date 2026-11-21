@@ -11,6 +11,7 @@
 
 import { createClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
+import { movementsService } from "@/services/movements/movements.service"
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
 const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? ""
@@ -27,7 +28,11 @@ const E2E_ADMIN_ID = "e2e00000-0000-0000-0000-000000000001"
 
 describeIfLocal("RPC: get_movement_totals", () => {
   const marker = `MOVTOT-${Date.now()}`
+  const deliveredBy = `Zelmira ${marker}`
+  const categoryName = `Totals fixture ${marker}`
+  const subcategoryName = `Totals sub ${marker}`
   let categoryId = ""
+  let subcategoryId = ""
   const movementIds: string[] = []
   const adminClient = () => createClient<Database>(SUPABASE_URL, SECRET_KEY)
 
@@ -42,11 +47,19 @@ describeIfLocal("RPC: get_movement_totals", () => {
     const admin = adminClient()
     const { data: category, error: categoryError } = await admin
       .from("movement_categories")
-      .insert({ movement_type: "INCOME", name: `Totals fixture ${marker}` })
+      .insert({ movement_type: "INCOME", name: categoryName })
       .select()
       .single()
     if (categoryError) throw categoryError
     categoryId = category.id
+
+    const { data: subcategory, error: subcategoryError } = await admin
+      .from("movement_subcategories")
+      .insert({ category_id: categoryId, name: subcategoryName })
+      .select()
+      .single()
+    if (subcategoryError) throw subcategoryError
+    subcategoryId = subcategory.id
 
     const base = { created_by_id: E2E_ADMIN_ID, category_id: categoryId, notes: marker }
     const { data: movements, error } = await admin
@@ -56,6 +69,8 @@ describeIfLocal("RPC: get_movement_totals", () => {
           ...base,
           movement_type: "INCOME",
           amount: 1000,
+          subcategory_id: subcategoryId,
+          delivered_by: deliveredBy,
           movement_date: "2096-01-10T12:00:00Z",
           status: "ACTIVE"
         },
@@ -90,6 +105,7 @@ describeIfLocal("RPC: get_movement_totals", () => {
   afterAll(async () => {
     const admin = adminClient()
     if (movementIds.length) await admin.from("movements").delete().in("id", movementIds)
+    if (subcategoryId) await admin.from("movement_subcategories").delete().eq("id", subcategoryId)
     if (categoryId) await admin.from("movement_categories").delete().eq("id", categoryId)
   })
 
@@ -146,5 +162,45 @@ describeIfLocal("RPC: get_movement_totals", () => {
     expect(error).not.toBeNull()
     expect(error?.message).toMatch(/permission denied/i)
     expect(data).toBeNull()
+  })
+
+  describe("totals() count matches list() for the same text", () => {
+    const texts: Record<string, () => string> = {
+      "notes marker": () => marker,
+      "delivered_by name": () => deliveredBy,
+      "category name": () => categoryName,
+      "subcategory name": () => subcategoryName,
+      "amount of a fixture": () => "2500",
+      "amount with thousands dot": () => "2.500",
+      "no matches": () => `${marker}-no-match`
+    }
+
+    for (const [label, getText] of Object.entries(texts)) {
+      it(`agrees for ${label}`, async () => {
+        const client = await signIn()
+        const search = getText()
+        const totals = await movementsService.totals(client, { search, movement_type: "ALL" })
+        const list = await movementsService.list(client, {
+          search,
+          movement_type: "ALL",
+          status: "ACTIVE"
+        })
+        expect(totals.income.count + totals.expense.count).toBe(list.count)
+      })
+    }
+
+    it("finds the expected fixtures through each branch", async () => {
+      const client = await signIn()
+      const byDelivered = await movementsService.totals(client, { search: deliveredBy })
+      expect(byDelivered.income).toEqual({ total: 1000, count: 1 })
+      const bySub = await movementsService.totals(client, { search: subcategoryName })
+      expect(bySub.income).toEqual({ total: 1000, count: 1 })
+      const byCategory = await movementsService.totals(client, { search: categoryName })
+      expect(byCategory.income).toEqual({ total: 3500, count: 2 })
+      expect(byCategory.expense).toEqual({ total: 400, count: 1 })
+      expect(byCategory.net).toBe(3100)
+      const none = await movementsService.totals(client, { search: `${marker}-no-match` })
+      expect(none.net).toBe(0)
+    })
   })
 })
