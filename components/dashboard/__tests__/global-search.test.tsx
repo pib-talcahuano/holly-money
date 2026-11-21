@@ -174,4 +174,31 @@ describe("GlobalSearch", () => {
     fireEvent.click(screen.getByText("Ver todos los resultados"))
     expect(mockPush).toHaveBeenCalledWith("/movements?search=mabel%20s")
   })
+
+  it("hides previous results while a new search is loading", async () => {
+    searchMock.mockResolvedValueOnce([income]).mockImplementationOnce(() => new Promise(() => {}))
+    const input = openDialog()
+    await type(input, "ma")
+    expect(screen.getByText(/Diezmos/)).toBeInTheDocument()
+    await type(input, "mab")
+    expect(screen.getByText("Buscando…")).toBeInTheDocument()
+    expect(screen.queryByText(/Diezmos/)).not.toBeInTheDocument()
+    expect(screen.queryByText("Ver todos los resultados")).not.toBeInTheDocument()
+  })
+
+  it("hides the footer on error", async () => {
+    searchMock.mockRejectedValue(new Error("boom"))
+    const input = openDialog()
+    await type(input, "zz")
+    expect(screen.queryByText("Ver todos los resultados")).not.toBeInTheDocument()
+  })
+
+  it("selects the first result so Enter opens it, not the full list", async () => {
+    searchMock.mockResolvedValue([income, expense])
+    const input = openDialog()
+    await type(input, "ma")
+    fireEvent.keyDown(input, { key: "Enter" })
+    expect(mockPush).toHaveBeenCalledWith("/movements/m1")
+    expect(mockPush).toHaveBeenCalledTimes(1)
+  })
 })

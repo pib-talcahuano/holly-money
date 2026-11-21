@@ -63,6 +63,7 @@ export function GlobalSearch() {
   const [text, setText] = useState("")
   const [results, setResults] = useState<MovementSearchResult[]>([])
   const [status, setStatus] = useState<Status>("idle")
+  const [selected, setSelected] = useState("")
   const requestId = useRef(0)
   const allowed = can(PERMISSIONS.VIEW_MOVEMENT)
 
@@ -89,6 +90,8 @@ export function GlobalSearch() {
         .then((data) => {
           if (id !== requestId.current) return
           setResults(data)
+          const first = data.find((r) => r.movement_type === "INCOME") ?? data[0]
+          setSelected(first ? first.id : "")
           setStatus("done")
         })
         .catch(() => {
@@ -124,6 +127,7 @@ export function GlobalSearch() {
 
   const query = text.trim()
   const searchable = query.length >= MIN_QUERY_LENGTH
+  const showResults = status === "done"
   const incomes = results.filter((r) => r.movement_type === "INCOME")
   const expenses = results.filter((r) => r.movement_type === "EXPENSE")
 
@@ -151,7 +155,12 @@ export function GlobalSearch() {
         title="Buscar movimientos"
         description="Busca por entregado por, notas, categoría o monto"
       >
-        <Command shouldFilter={false} label="Buscar movimientos">
+        <Command
+          shouldFilter={false}
+          label="Buscar movimientos"
+          value={selected}
+          onValueChange={setSelected}
+        >
           <CommandInput
             value={text}
             onValueChange={handleTextChange}
@@ -173,7 +182,7 @@ export function GlobalSearch() {
             {status === "done" && results.length === 0 && (
               <p className="py-6 text-center text-sm text-muted-foreground">Sin resultados</p>
             )}
-            {incomes.length > 0 && (
+            {showResults && incomes.length > 0 && (
               <CommandGroup heading="Ingresos">
                 {incomes.map((item) => (
                   <ResultRow
@@ -184,7 +193,7 @@ export function GlobalSearch() {
                 ))}
               </CommandGroup>
             )}
-            {expenses.length > 0 && (
+            {showResults && expenses.length > 0 && (
               <CommandGroup heading="Egresos">
                 {expenses.map((item) => (
                   <ResultRow
@@ -195,7 +204,7 @@ export function GlobalSearch() {
                 ))}
               </CommandGroup>
             )}
-            {searchable && (
+            {showResults && results.length > 0 && (
               <CommandGroup>
                 <CommandItem
                   value="__view-all__"
