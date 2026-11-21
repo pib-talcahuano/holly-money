@@ -6,7 +6,7 @@
  * removes its fixtures afterwards.
  */
 
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
 const mockLogSystem = jest.fn()
 // The audit service reads request cookies (impersonation), which don't exist outside Next.
@@ -28,7 +28,8 @@ const SRC_YEAR = 2081
 const DST_YEAR = 2082
 
 describeIfLocal("copyFromPeriod (local Supabase)", () => {
-  const db = createClient<Database>(SUPABASE_URL, SECRET_KEY)
+  // Created in beforeAll: describe.skip still runs this body, and createClient throws on empty keys.
+  let db: SupabaseClient<Database>
   let srcId = ""
   let dstId = ""
   let userId = ""
@@ -74,6 +75,7 @@ describeIfLocal("copyFromPeriod (local Supabase)", () => {
   }
 
   beforeAll(async () => {
+    db = createClient<Database>(SUPABASE_URL, SECRET_KEY)
     await cleanup()
     const { data: user } = await db.from("users").select("id").limit(1).single()
     userId = user!.id
