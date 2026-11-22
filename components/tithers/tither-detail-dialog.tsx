@@ -40,8 +40,8 @@ export function TitherDetailDialog({ tither, year, onClose }: Props) {
             <DialogDescription>Diezmos mes a mes</DialogDescription>
           </div>
 
-          <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-border">
-            <div className="bg-primary px-4 py-3 text-primary-foreground">
+          <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-border sm:grid-cols-3">
+            <div className="col-span-2 bg-primary px-4 py-3 text-primary-foreground sm:col-span-1">
               <p className={`${LABEL} mb-1 text-primary-foreground/70`}>Total</p>
               <p className="break-words font-heading text-lg font-extrabold tabular-nums">
                 {formatCLP(tither.total)}
@@ -55,7 +55,7 @@ export function TitherDetailDialog({ tither, year, onClose }: Props) {
             </div>
             <div className="px-4 py-3">
               <p className={`${LABEL} mb-1 text-faint`}>Último diezmo</p>
-              <p className="text-sm font-bold tabular-nums text-foreground">
+              <p className="whitespace-nowrap text-sm font-bold tabular-nums text-foreground">
                 {formatDate(tither.lastDate)}
               </p>
             </div>
