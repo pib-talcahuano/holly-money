@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Field, FieldGroup, FieldLabel, FieldError } from "@/components/ui/field"
+import { DeliveredByAutocomplete } from "@/components/movements/delivered-by-autocomplete"
 import { AttachmentInput } from "@/components/ui/attachment-input"
 import { MAX_ATTACHMENTS_PER_ENTITY } from "@/lib/constants/attachments"
 import { attachmentHref } from "@/lib/storage/attachments"
@@ -89,14 +90,30 @@ export function MovementStep2Fields({ state }: { state: MovementFormState }) {
   const { form, isCapitalInjection, deliveredByLabel, paymentMethodOptions, categoryOptions, subcategoryOptions } =
     state
   const currentCategoryId = useWatch({ control: form.control, name: "category_id" })
+  const movementType = useWatch({ control: form.control, name: "movement_type" })
   const lockedCategoryName = categoryOptions.find((c) => c.id === currentCategoryId)?.name
 
   return (
     <div className="grid gap-6 sm:gap-8 grid-cols-1 sm:grid-cols-2">
       {!isCapitalInjection && (
         <Field>
-          <FieldLabel className={labelClass}>{deliveredByLabel}</FieldLabel>
-          <Input className="h-12 sm:h-14" placeholder="Opcional" {...form.register("delivered_by")} />
+          <FieldLabel htmlFor="delivered_by" className={labelClass}>
+            {deliveredByLabel}
+          </FieldLabel>
+          <Controller
+            control={form.control}
+            name="delivered_by"
+            render={({ field }) => (
+              <DeliveredByAutocomplete
+                id="delivered_by"
+                className="h-12 sm:h-14"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                movementType={movementType === "EXPENSE" ? "EXPENSE" : "INCOME"}
+              />
+            )}
+          />
         </Field>
       )}
 

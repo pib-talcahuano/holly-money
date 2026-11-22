@@ -2,6 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database.types"
 import { auditService } from "@/services/audit/audit.service"
 import { sanitizePostgrestSearch } from "@/lib/utils/postgrest"
+import { buildMovementSearchFilter, parseAmountTerm } from "@/lib/utils/movement-search"
+import {
+  accentInsensitiveRegex,
+  groupNameSuggestions,
+  normalizeName,
+  type NameSuggestion
+} from "@/lib/utils/name-suggestions"
+import type { MovementTotals } from "@/types/movement-totals"
 import type {
   AttachmentInput,
   CancelMovementInput,
@@ -66,7 +74,59 @@ type ListFilters = {
   pageSize?: number
 }
 
+// Categories and subcategories whose name matches the (already sanitized) search term.
+async function resolveSearchMatches(db: DB, term: string) {
+  const [categories, subcategories] = await Promise.all([
+    db.from("movement_categories").select("id").ilike("name", `%${term}%`),
+    db.from("movement_subcategories").select("id").ilike("name", `%${term}%`)
+  ])
+  if (categories.error) throw categories.error
+  if (subcategories.error) throw subcategories.error
+  return {
+    categoryIds: (categories.data ?? []).map((c) => c.id),
+    subcategoryIds: (subcategories.data ?? []).map((c) => c.id)
+  }
+}
+
+type TotalsFilters = {
+  search?: string
+  movement_type?: "INCOME" | "EXPENSE" | "ALL"
+}
+
 export const movementsService = {
+  async totals(db: DB, filters: TotalsFilters = {}): Promise<MovementTotals> {
+    const args: Database["public"]["Functions"]["get_movement_totals"]["Args"] = {}
+    if (filters.movement_type && filters.movement_type !== "ALL") {
+      args.p_movement_type = filters.movement_type
+    }
+    const term = filters.search?.trim() ? sanitizePostgrestSearch(filters.search) : ""
+    if (term) {
+      const { categoryIds, subcategoryIds } = await resolveSearchMatches(db, term)
+      // PostgREST turns "*" into "%" in ilike values; mirror it so counts match list()
+      args.p_term = term.replaceAll("*", "%")
+      args.p_category_ids = categoryIds
+      args.p_subcategory_ids = subcategoryIds
+      const amount = parseAmountTerm(term)
+      if (amount !== null) args.p_amount = amount
+    }
+
+    const { data, error } = await db.rpc("get_movement_totals", args)
+    if (error) throw error
+
+    const result: MovementTotals = {
+      income: { total: 0, count: 0 },
+      expense: { total: 0, count: 0 },
+      net: 0
+    }
+    for (const row of data ?? []) {
+      const bucket = row.movement_type === "INCOME" ? result.income : result.expense
+      bucket.total = Number(row.total)
+      bucket.count = Number(row.record_count)
+    }
+    result.net = result.income.total - result.expense.total
+    return result
+  },
+
   async list(db: DB, filters: ListFilters = {}) {
     const pageSize = filters.pageSize ?? PAGE_SIZE
     const page = Math.max(1, filters.page ?? 1)
@@ -92,18 +152,40 @@ export const movementsService = {
     if (filters.search?.trim()) {
       const s = sanitizePostgrestSearch(filters.search)
       if (s) {
-        // category is no longer a plain text column on movements (it's now
-        // category_id, a FK to movement_categories) so it can't be ilike'd
-        // directly here. PostgREST .or() filters can't reach into an
-        // embedded relation's column, so category name search is dropped
-        // rather than attempting a fragile embedded-filter workaround.
-        query = query.ilike("delivered_by", `%${s}%`)
+        const orFilter = buildMovementSearchFilter(s, await resolveSearchMatches(db, s))
+        if (orFilter) query = query.or(orFilter)
       }
     }
 
     const { data, error, count } = await query
     if (error) throw error
     return { data: data ?? [], count: count ?? 0, page, pageSize }
+  },
+
+  async suggestDeliveredBy(
+    db: DB,
+    input: { query: string; movementType: "INCOME" | "EXPENSE" }
+  ): Promise<NameSuggestion[]> {
+    const term = sanitizePostgrestSearch(input.query)
+    if (!term) return []
+
+    const { data, error } = await db
+      .from("movements")
+      .select("delivered_by")
+      .eq("status", "ACTIVE")
+      .eq("movement_type", input.movementType)
+      .not("delivered_by", "is", null)
+      .filter("delivered_by", "imatch", accentInsensitiveRegex(term))
+      .order("movement_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(200)
+    if (error) throw error
+
+    const needle = normalizeName(term)
+    const names = (data ?? [])
+      .map((row) => row.delivered_by)
+      .filter((name): name is string => !!name && normalizeName(name).includes(needle))
+    return groupNameSuggestions(names, 8)
   },
 
   async findById(db: DB, id: string) {

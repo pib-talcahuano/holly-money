@@ -10,6 +10,9 @@ import { movementAttachmentsService } from "@/services/movements/movement-attach
 import { processMovementIntegrations } from "@/services/google/movement-postprocess"
 import { sendVoucherEmail } from "@/services/vouchers/voucher.service"
 import { settingsService } from "@/services/settings/settings.service"
+import { movementSearchSchema, deliveredBySuggestionSchema } from "@/lib/validators/movement"
+import type { NameSuggestion } from "@/lib/utils/name-suggestions"
+import type { MovementTotals } from "@/types/movement-totals"
 import type {
   CreateMovementInput,
   UpdateMovementInput,
@@ -103,4 +106,72 @@ export async function removeMovementAttachment(attachmentId: string): Promise<vo
 
   const db = await createSupabaseServerClient()
   await movementAttachmentsService.remove(db, attachmentId, user.id)
+}
+
+export type MovementSearchResult = {
+  id: string
+  movement_date: string
+  movement_type: "INCOME" | "EXPENSE"
+  amount: number
+  status: "ACTIVE" | "CANCELLED"
+  category_name: string | null
+  delivered_by: string | null
+}
+
+export type MovementSearchResponse = {
+  results: MovementSearchResult[]
+  totals: MovementTotals | null
+}
+
+export async function searchMovements(query: string): Promise<MovementSearchResponse> {
+  const user = await getCurrentUser()
+  if (!user || !can(user.permissions, PERMISSIONS.VIEW_MOVEMENT)) {
+    throw new Error("Sin permisos para ver movimientos")
+  }
+
+  const parsed = movementSearchSchema.safeParse({ query })
+  if (!parsed.success) return { results: [], totals: null }
+
+  const db = await createSupabaseServerClient()
+  const [{ data: rows }, totals] = await Promise.all([
+    movementsService.list(db, { search: parsed.data.query, status: "ALL", pageSize: 20 }),
+    movementsService
+      .totals(db, { search: parsed.data.query, movement_type: "ALL" })
+      .catch((error: unknown) => {
+        console.error("searchMovements: totals failed", error)
+        return null
+      })
+  ])
+
+  return {
+    results: rows.map((row) => ({
+      id: row.id,
+      movement_date: row.movement_date,
+      movement_type: row.movement_type,
+      amount: row.amount,
+      status: row.status,
+      category_name: row.movement_categories?.name ?? null,
+      delivered_by: row.delivered_by
+    })),
+    totals
+  }
+}
+
+export async function suggestDeliveredBy(
+  query: string,
+  movementType: "INCOME" | "EXPENSE"
+): Promise<NameSuggestion[]> {
+  const user = await getCurrentUser()
+  if (!user || !can(user.permissions, PERMISSIONS.CREATE_MOVEMENT)) {
+    throw new Error("Sin permisos para crear movimientos")
+  }
+
+  const parsed = deliveredBySuggestionSchema.safeParse({ query, movement_type: movementType })
+  if (!parsed.success) return []
+
+  const db = await createSupabaseServerClient()
+  return movementsService.suggestDeliveredBy(db, {
+    query: parsed.data.query,
+    movementType: parsed.data.movement_type
+  })
 }

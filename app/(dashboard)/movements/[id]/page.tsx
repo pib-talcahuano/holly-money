@@ -8,6 +8,8 @@ import { RegeneratePdfButton } from "@/components/movements/regenerate-pdf-butto
 import { VoucherActions } from "@/components/vouchers/voucher-actions"
 import { Button } from "@/components/ui/button"
 import { cn, formatDate, formatDateTime, formatCLP } from "@/lib/utils"
+import { getLateRegistrationDays } from "@/lib/utils/late-registration"
+import { LateRegistrationBadge } from "@/components/movements/late-registration-badge"
 import { attachmentHref } from "@/lib/storage/attachments"
 import { auditActionLabel, auditActionVariant } from "@/lib/constants/audit"
 import { AuditDiff } from "@/components/audit/audit-diff"
@@ -71,6 +73,7 @@ export default async function MovementDetailPage({ params }: Props) {
   const deliveredByLabel = row.movement_type === "INCOME" ? "Entregado por" : "Entregado a"
   const isIncome = row.movement_type === "INCOME"
   const isActive = row.status === "ACTIVE"
+  const lateDays = getLateRegistrationDays(row.movement_date, row.created_at)
 
   const voucherPayload: MovementIntegrationPayload = {
     movementId: row.id,
@@ -180,6 +183,7 @@ export default async function MovementDetailPage({ params }: Props) {
               Fecha del movimiento
             </p>
             <p className="text-[13.5px] font-semibold">{formatDate(row.movement_date)}</p>
+            {lateDays !== null && <LateRegistrationBadge days={lateDays} className="mt-1" />}
           </div>
           <div>
             <p className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-faint mb-1">

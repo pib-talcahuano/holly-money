@@ -4,6 +4,7 @@ import { getCurrentUser, createSupabaseServerClient } from "@/lib/supabase/serve
 import { PERMISSIONS, can } from "@/lib/permissions/rbac"
 import { movementsService } from "@/services/movements/movements.service"
 import { MovementsTable } from "@/components/movements/movements-table"
+import { MovementTotalsSummary } from "@/components/movements/movement-totals-summary"
 import { MovementsFilters } from "@/components/movements/movements-filters"
 import { Button } from "@/components/ui/button"
 import { Plus, PiggyBank, ChevronLeft, ChevronRight } from "lucide-react"
@@ -28,16 +29,22 @@ export default async function MovementsPage({ searchParams }: Props) {
   const page = Math.max(1, Number(params.page ?? "1") || 1)
 
   const db = await createSupabaseServerClient()
-  const {
-    data: rows,
-    count,
-    pageSize
-  } = await movementsService.list(db, {
-    search,
-    movement_type,
-    status,
-    page
-  })
+  const totalsPromise =
+    status === "CANCELLED"
+      ? Promise.resolve(null)
+      : movementsService.totals(db, { search, movement_type }).catch((error: unknown) => {
+          console.error("Failed to load movement totals", error)
+          return null
+        })
+  const [{ data: rows, count, pageSize }, totals] = await Promise.all([
+    movementsService.list(db, {
+      search,
+      movement_type,
+      status,
+      page
+    }),
+    totalsPromise
+  ])
 
   const totalPages = Math.max(1, Math.ceil(count / pageSize))
 
@@ -85,12 +92,15 @@ export default async function MovementsPage({ searchParams }: Props) {
         initialStatus={status}
       />
 
+      {totals && <MovementTotalsSummary totals={totals} movementType={movement_type} />}
+
       <MovementsTable
         variant="full"
         canWrite={canWrite}
         rows={rows.map((row) => ({
           id: row.id,
           movement_date: row.movement_date,
+          created_at: row.created_at,
           movement_type: row.movement_type,
           amount: String(row.amount),
           category_name: (row.movement_categories as { name: string } | null)?.name ?? "—",

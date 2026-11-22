@@ -1,0 +1,291 @@
+import { movementsService } from "../movements.service"
+
+type Result = { data: unknown; error: unknown; count?: number }
+
+function chain(result: Result) {
+  const calls: Record<string, unknown[][]> = {}
+  const proxy: Record<string, unknown> = {}
+  const record =
+    (name: string) =>
+    (...args: unknown[]) => {
+      ;(calls[name] ??= []).push(args)
+      return proxy
+    }
+  for (const m of ["select", "order", "range", "eq", "ilike", "or", "not", "limit", "filter"]) {
+    proxy[m] = record(m)
+  }
+  proxy.then = (resolve: (v: Result) => unknown, reject: (e: unknown) => unknown) =>
+    Promise.resolve(result).then(resolve, reject)
+  return { proxy, calls }
+}
+
+function makeDb(opts: {
+  categories?: Result
+  subcategories?: Result
+  movements?: Result
+  rpc?: Result
+}) {
+  const categories = chain(opts.categories ?? { data: [], error: null })
+  const subcategories = chain(opts.subcategories ?? { data: [], error: null })
+  const movements = chain(opts.movements ?? { data: [], error: null, count: 0 })
+  const from = jest.fn((table: string) => {
+    if (table === "movement_categories") return categories.proxy
+    if (table === "movement_subcategories") return subcategories.proxy
+    return movements.proxy
+  })
+  const rpc = jest.fn(async () => opts.rpc ?? { data: [], error: null })
+  return { db: { from, rpc } as never, from, rpc, categories, subcategories, movements }
+}
+
+describe("movementsService.list search", () => {
+  it("looks up categories and subcategories by name with ilike", async () => {
+    const t = makeDb({})
+    await movementsService.list(t.db, { search: "diez" })
+    expect(t.from).toHaveBeenCalledWith("movement_categories")
+    expect(t.from).toHaveBeenCalledWith("movement_subcategories")
+    expect(t.categories.calls.ilike).toEqual([["name", "%diez%"]])
+    expect(t.subcategories.calls.ilike).toEqual([["name", "%diez%"]])
+  })
+
+  it("builds the or filter from lookup ids and text columns", async () => {
+    const t = makeDb({
+      categories: { data: [{ id: "c1" }, { id: "c2" }], error: null },
+      subcategories: { data: [{ id: "s1" }], error: null }
+    })
+    await movementsService.list(t.db, { search: "diez" })
+    expect(t.movements.calls.or).toHaveLength(1)
+    const filter = t.movements.calls.or[0][0] as string
+    expect(filter).toContain("category_id.in.(c1,c2)")
+    expect(filter).toContain("subcategory_id.in.(s1)")
+    expect(filter).toContain("delivered_by.ilike")
+    expect(filter).toContain("notes.ilike")
+  })
+
+  it("keeps movement_type and status filters alongside the search", async () => {
+    const t = makeDb({})
+    await movementsService.list(t.db, {
+      search: "diez",
+      movement_type: "INCOME",
+      status: "ACTIVE"
+    })
+    expect(t.movements.calls.eq).toEqual([
+      ["movement_type", "INCOME"],
+      ["status", "ACTIVE"]
+    ])
+    expect(t.movements.calls.or).toHaveLength(1)
+  })
+
+  it("throws when the category lookup fails", async () => {
+    const t = makeDb({ categories: { data: null, error: new Error("cat boom") } })
+    await expect(movementsService.list(t.db, { search: "diez" })).rejects.toThrow("cat boom")
+  })
+
+  it("throws when the subcategory lookup fails", async () => {
+    const t = makeDb({ subcategories: { data: null, error: new Error("sub boom") } })
+    await expect(movementsService.list(t.db, { search: "diez" })).rejects.toThrow("sub boom")
+  })
+
+  it("does not call or() nor look up categories when the search is empty", async () => {
+    const t = makeDb({})
+    await movementsService.list(t.db, { search: "   " })
+    expect(t.movements.calls.or).toBeUndefined()
+    expect(t.from).not.toHaveBeenCalledWith("movement_categories")
+  })
+})
+
+describe("suggestDeliveredBy", () => {
+  const rows = (...names: string[]) => ({
+    data: names.map((delivered_by) => ({ delivered_by })),
+    error: null
+  })
+
+  it("queries active movements of the type with an accent-insensitive imatch", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "mabel", movementType: "INCOME" })
+    expect(t.from).toHaveBeenCalledWith("movements")
+    expect(t.movements.calls.select).toEqual([["delivered_by"]])
+    expect(t.movements.calls.eq).toEqual([
+      ["status", "ACTIVE"],
+      ["movement_type", "INCOME"]
+    ])
+    expect(t.movements.calls.not).toEqual([["delivered_by", "is", null]])
+    expect(t.movements.calls.filter).toEqual([["delivered_by", "imatch", "m[aáàâä]b[eéèêë]l"]])
+    expect(t.movements.calls.ilike).toBeUndefined()
+    expect(t.movements.calls.order).toEqual([
+      ["movement_date", { ascending: false }],
+      ["created_at", { ascending: false }]
+    ])
+    expect(t.movements.calls.limit).toEqual([[200]])
+  })
+
+  it("filters by EXPENSE when requested", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "mabel", movementType: "EXPENSE" })
+    expect(t.movements.calls.eq).toContainEqual(["movement_type", "EXPENSE"])
+  })
+
+  it("groups spellings and drops rows that do not match in JavaScript", async () => {
+    const t = makeDb({ movements: rows("Mabel", "Mábel", "MABEL", "Juan") })
+    const result = await movementsService.suggestDeliveredBy(t.db, {
+      query: "mabel",
+      movementType: "INCOME"
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({ name: "Mabel", count: 3 })
+  })
+
+  it("builds the regex for a plain and a spaced query", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "ana", movementType: "INCOME" })
+    await movementsService.suggestDeliveredBy(t.db, {
+      query: "hna.  mabel",
+      movementType: "INCOME"
+    })
+    expect(t.movements.calls.filter).toEqual([
+      ["delivered_by", "imatch", "[aáàâä][nñ][aáàâä]"],
+      ["delivered_by", "imatch", "h[nñ][aáàâä]\\.\\s+m[aáàâä]b[eéèêë]l"]
+    ])
+  })
+
+  it("escapes metacharacters and keeps % literal", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "a.b", movementType: "INCOME" })
+    await movementsService.suggestDeliveredBy(t.db, { query: "50%", movementType: "INCOME" })
+    expect(t.movements.calls.filter).toEqual([
+      ["delivered_by", "imatch", "[aáàâä]\\.b"],
+      ["delivered_by", "imatch", "50%"]
+    ])
+  })
+
+  it("sanitizes PostgREST metacharacters before the filter", async () => {
+    const t = makeDb({ movements: rows() })
+    await movementsService.suggestDeliveredBy(t.db, { query: "a,(b)", movementType: "INCOME" })
+    expect(t.movements.calls.filter).toEqual([["delivered_by", "imatch", "[aáàâä]b"]])
+  })
+
+  it("returns [] without querying when the sanitized query is empty", async () => {
+    const t = makeDb({ movements: rows("Mabel") })
+    const result = await movementsService.suggestDeliveredBy(t.db, {
+      query: " (,) ",
+      movementType: "INCOME"
+    })
+    expect(result).toEqual([])
+    expect(t.from).not.toHaveBeenCalled()
+  })
+
+  it("throws database errors", async () => {
+    const t = makeDb({ movements: { data: null, error: new Error("boom") } })
+    await expect(
+      movementsService.suggestDeliveredBy(t.db, { query: "mabel", movementType: "INCOME" })
+    ).rejects.toThrow("boom")
+  })
+
+  it("returns at most 8 suggestions", async () => {
+    const names = Array.from({ length: 12 }, (_, i) => `Persona${String.fromCharCode(97 + i)}`)
+    const t = makeDb({ movements: rows(...names) })
+    const result = await movementsService.suggestDeliveredBy(t.db, {
+      query: "persona",
+      movementType: "INCOME"
+    })
+    expect(result.map((r) => r.name)).toEqual(names.slice(0, 8))
+  })
+})
+
+describe("movementsService.totals", () => {
+  it("resolves ids and calls the rpc with the text", async () => {
+    const t = makeDb({
+      categories: { data: [{ id: "c1" }], error: null },
+      subcategories: { data: [{ id: "s1" }, { id: "s2" }], error: null }
+    })
+    await movementsService.totals(t.db, { search: "mabel", movement_type: "ALL" })
+    expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", {
+      p_term: "mabel",
+      p_category_ids: ["c1"],
+      p_subcategory_ids: ["s1", "s2"]
+    })
+  })
+
+  it("passes amount and movement type", async () => {
+    const t = makeDb({})
+    await movementsService.totals(t.db, { search: "20.000", movement_type: "INCOME" })
+    expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", {
+      p_term: "20.000",
+      p_category_ids: [],
+      p_subcategory_ids: [],
+      p_amount: 20000,
+      p_movement_type: "INCOME"
+    })
+  })
+
+  it("skips the lookups without text", async () => {
+    for (const search of [undefined, "", "   "]) {
+      const t = makeDb({})
+      await movementsService.totals(t.db, { search, movement_type: "ALL" })
+      expect(t.from).not.toHaveBeenCalled()
+      expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", {})
+    }
+    const t = makeDb({})
+    await movementsService.totals(t.db, { movement_type: "EXPENSE" })
+    expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", { p_movement_type: "EXPENSE" })
+  })
+
+  it("maps * to % like PostgREST does for list", async () => {
+    const t = makeDb({})
+    await movementsService.totals(t.db, { search: "ma*a" })
+    expect(t.rpc).toHaveBeenCalledWith(
+      "get_movement_totals",
+      expect.objectContaining({ p_term: "ma%a" })
+    )
+  })
+
+  it("sanitizes the text", async () => {
+    const t = makeDb({})
+    await movementsService.totals(t.db, { search: "a,(b)" })
+    expect(t.rpc).toHaveBeenCalledWith(
+      "get_movement_totals",
+      expect.objectContaining({ p_term: "ab" })
+    )
+  })
+
+  it("maps rows into income, expense and net", async () => {
+    const t = makeDb({
+      rpc: {
+        data: [
+          { movement_type: "INCOME", total: 485000, record_count: 14 },
+          { movement_type: "EXPENSE", total: 12400, record_count: 1 }
+        ],
+        error: null
+      }
+    })
+    expect(await movementsService.totals(t.db, {})).toEqual({
+      income: { total: 485000, count: 14 },
+      expense: { total: 12400, count: 1 },
+      net: 472600
+    })
+  })
+
+  it("returns zeros for no rows and for a single type", async () => {
+    expect(await movementsService.totals(makeDb({}).db, {})).toEqual({
+      income: { total: 0, count: 0 },
+      expense: { total: 0, count: 0 },
+      net: 0
+    })
+    const t = makeDb({
+      rpc: { data: [{ movement_type: "EXPENSE", total: "300", record_count: "2" }], error: null }
+    })
+    expect(await movementsService.totals(t.db, {})).toEqual({
+      income: { total: 0, count: 0 },
+      expense: { total: 300, count: 2 },
+      net: -300
+    })
+  })
+
+  it("throws rpc and lookup errors", async () => {
+    const r = makeDb({ rpc: { data: null, error: new Error("rpc boom") } })
+    await expect(movementsService.totals(r.db, { search: "x" })).rejects.toThrow("rpc boom")
+    const c = makeDb({ categories: { data: null, error: new Error("cat boom") } })
+    await expect(movementsService.totals(c.db, { search: "x" })).rejects.toThrow("cat boom")
+    const s = makeDb({ subcategories: { data: null, error: new Error("sub boom") } })
+    await expect(movementsService.totals(s.db, { search: "x" })).rejects.toThrow("sub boom")
+  })
+})

@@ -1,4 +1,11 @@
-import { createMovement, updateMovement, cancelMovement, regeneratePdf } from "../movements"
+import {
+  createMovement,
+  updateMovement,
+  cancelMovement,
+  regeneratePdf,
+  searchMovements,
+  suggestDeliveredBy
+} from "../movements"
 
 const mockGetCurrentUser = jest.fn()
 const mockDb = {}
@@ -7,6 +14,9 @@ const mockCan = jest.fn()
 const mockCreate = jest.fn()
 const mockUpdate = jest.fn()
 const mockCancel = jest.fn()
+const mockList = jest.fn()
+const mockTotals = jest.fn()
+const mockSuggestDeliveredBy = jest.fn()
 const mockProcessIntegrations = jest.fn()
 const mockRevalidatePath = jest.fn()
 const mockSendVoucherEmail = jest.fn()
@@ -30,7 +40,7 @@ jest.mock("@/services/settings/settings.service", () => ({
 }))
 
 jest.mock("@/lib/permissions/rbac", () => ({
-  PERMISSIONS: { CREATE_MOVEMENT: "CREATE_MOVEMENT" },
+  PERMISSIONS: { CREATE_MOVEMENT: "CREATE_MOVEMENT", VIEW_MOVEMENT: "VIEW_MOVEMENT" },
   can: (...args: unknown[]) => mockCan(...args)
 }))
 
@@ -38,7 +48,10 @@ jest.mock("@/services/movements/movements.service", () => ({
   movementsService: {
     create: (...args: unknown[]) => mockCreate(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
-    cancel: (...args: unknown[]) => mockCancel(...args)
+    cancel: (...args: unknown[]) => mockCancel(...args),
+    list: (...args: unknown[]) => mockList(...args),
+    totals: (...args: unknown[]) => mockTotals(...args),
+    suggestDeliveredBy: (...args: unknown[]) => mockSuggestDeliveredBy(...args)
   }
 }))
 
@@ -244,5 +257,178 @@ describe("regeneratePdf", () => {
 
     expect(mockProcessIntegrations).toHaveBeenCalledWith("mv-1", mockUser.id)
     expect(mockRevalidatePath).toHaveBeenCalledWith("/movements/mv-1")
+  })
+})
+
+const sampleTotals = {
+  income: { total: 485000, count: 14 },
+  expense: { total: 12400, count: 1 },
+  net: 472600
+}
+
+describe("searchMovements", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("throws when unauthenticated", async () => {
+    mockGetCurrentUser.mockResolvedValue(null)
+    await expect(searchMovements("mabel")).rejects.toThrow("Sin permisos para ver movimientos")
+    expect(mockList).not.toHaveBeenCalled()
+    expect(mockTotals).not.toHaveBeenCalled()
+  })
+
+  it("throws when the user lacks VIEW_MOVEMENT", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(false)
+    await expect(searchMovements("mabel")).rejects.toThrow("Sin permisos para ver movimientos")
+    expect(mockCan).toHaveBeenCalledWith(mockUser.permissions, "VIEW_MOVEMENT")
+    expect(mockList).not.toHaveBeenCalled()
+    expect(mockTotals).not.toHaveBeenCalled()
+  })
+
+  it("returns empty results and null totals for queries shorter than 2 characters", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    await expect(searchMovements("a")).resolves.toEqual({ results: [], totals: null })
+    expect(mockList).not.toHaveBeenCalled()
+    expect(mockTotals).not.toHaveBeenCalled()
+  })
+
+  it("trims the query and calls the service", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({ data: [], count: 0, page: 1, pageSize: 20 })
+    mockTotals.mockResolvedValue(sampleTotals)
+    await searchMovements("  mabel ")
+    expect(mockList).toHaveBeenCalledWith(mockDb, { search: "mabel", status: "ALL", pageSize: 20 })
+    expect(mockTotals).toHaveBeenCalledWith(mockDb, { search: "mabel", movement_type: "ALL" })
+  })
+
+  it("returns results with the totals", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({ data: [], count: 0, page: 1, pageSize: 20 })
+    mockTotals.mockResolvedValue(sampleTotals)
+    await expect(searchMovements("mabel")).resolves.toEqual({ results: [], totals: sampleTotals })
+  })
+
+  it("returns the results with null totals when totals fails", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({ data: [], count: 0, page: 1, pageSize: 20 })
+    mockTotals.mockRejectedValue(new Error("rpc down"))
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {})
+    await expect(searchMovements("mabel")).resolves.toEqual({ results: [], totals: null })
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it("rejects when list fails", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockRejectedValue(new Error("db down"))
+    mockTotals.mockResolvedValue(sampleTotals)
+    await expect(searchMovements("mabel")).rejects.toThrow("db down")
+  })
+
+  it("flattens the category name and omits extra fields", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockList.mockResolvedValue({
+      data: [
+        {
+          id: "mv-1",
+          movement_date: "2026-05-01",
+          movement_type: "INCOME",
+          amount: 5000,
+          status: "ACTIVE",
+          delivered_by: "Mabel",
+          created_by_id: "user-9",
+          users: { full_name: "X" },
+          movement_categories: { name: "Diezmos" }
+        },
+        {
+          id: "mv-2",
+          movement_date: "2026-05-02",
+          movement_type: "EXPENSE",
+          amount: 100,
+          status: "CANCELLED",
+          delivered_by: null,
+          movement_categories: null
+        }
+      ],
+      count: 2,
+      page: 1,
+      pageSize: 20
+    })
+    mockTotals.mockResolvedValue(sampleTotals)
+    const { results: result } = await searchMovements("mabel")
+    expect(result).toEqual([
+      {
+        id: "mv-1",
+        movement_date: "2026-05-01",
+        movement_type: "INCOME",
+        amount: 5000,
+        status: "ACTIVE",
+        category_name: "Diezmos",
+        delivered_by: "Mabel"
+      },
+      {
+        id: "mv-2",
+        movement_date: "2026-05-02",
+        movement_type: "EXPENSE",
+        amount: 100,
+        status: "CANCELLED",
+        category_name: null,
+        delivered_by: null
+      }
+    ])
+  })
+})
+
+describe("suggestDeliveredBy", () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it("throws when unauthenticated", async () => {
+    mockGetCurrentUser.mockResolvedValue(null)
+    await expect(suggestDeliveredBy("mabel", "INCOME")).rejects.toThrow(
+      "Sin permisos para crear movimientos"
+    )
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
+  })
+
+  it("throws when the user lacks CREATE_MOVEMENT", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(false)
+    await expect(suggestDeliveredBy("mabel", "INCOME")).rejects.toThrow(
+      "Sin permisos para crear movimientos"
+    )
+    expect(mockCan).toHaveBeenCalledWith(mockUser.permissions, "CREATE_MOVEMENT")
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
+  })
+
+  it("returns [] for queries shorter than 2 characters", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    await expect(suggestDeliveredBy("a", "INCOME")).resolves.toEqual([])
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
+  })
+
+  it("trims the query, calls the service and returns its result", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    const suggestions = [{ name: "Mabel Pérez", count: 3 }]
+    mockSuggestDeliveredBy.mockResolvedValue(suggestions)
+    await expect(suggestDeliveredBy("  mabel ", "INCOME")).resolves.toEqual(suggestions)
+    expect(mockSuggestDeliveredBy).toHaveBeenCalledWith(mockDb, {
+      query: "mabel",
+      movementType: "INCOME"
+    })
+  })
+
+  it("returns [] for an invalid movement type", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    await expect(suggestDeliveredBy("mabel", "OTHER" as never)).resolves.toEqual([])
+    expect(mockSuggestDeliveredBy).not.toHaveBeenCalled()
   })
 })

@@ -5,7 +5,9 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cancelMovement } from "@/app/actions/movements"
-import { cn, formatDate, formatCLP } from "@/lib/utils"
+import { cn, formatDate, formatDateTime, formatCLP } from "@/lib/utils"
+import { getLateRegistrationDays } from "@/lib/utils/late-registration"
+import { LateRegistrationBadge } from "@/components/movements/late-registration-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,7 +44,9 @@ function MovementStatus({ status }: { status: string }) {
   const isActive = status === "ACTIVE"
   return (
     <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-muted-foreground">
-      <span className={cn("size-[7px] shrink-0 rounded-full", isActive ? "bg-income" : "bg-expense")} />
+      <span
+        className={cn("size-[7px] shrink-0 rounded-full", isActive ? "bg-income" : "bg-expense")}
+      />
       {STATUS_LABEL[status] ?? status}
     </span>
   )
@@ -64,6 +68,11 @@ export type SerializedMovement = {
   created_by: { full_name: string }
   cancelled_by?: { full_name: string } | null
   cancelled_at?: string | null
+  created_at?: string | null
+}
+
+function lateDaysOf(row: SerializedMovement): number | null {
+  return row.created_at ? getLateRegistrationDays(row.movement_date, row.created_at) : null
 }
 
 function Field({ label, value }: { label: string; value?: string | null }) {
@@ -106,6 +115,7 @@ export function MovementsTable({
   const [annulReason, setAnnulReason] = useState("")
   const [isCancelling, setIsCancelling] = useState(false)
   const isFull = variant === "full"
+  const selectedLateDays = selected ? lateDaysOf(selected) : null
 
   const closeDialog = useCallback(() => {
     setSelected(null)
@@ -167,39 +177,45 @@ export function MovementsTable({
           </Empty>
         ) : (
           <ItemGroup>
-            {rows.map((row) => (
-              <Item
-                key={row.id}
-                variant="muted"
-                size="sm"
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelected(row)}
-                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(row)}
-                className="cursor-pointer"
-              >
-                <ItemContent>
-                  <ItemHeader>
-                    <MovementTypeBadge type={row.movement_type} />
-                  </ItemHeader>
-                  <ItemTitle className="text-sm">
-                    {row.category_name}
-                    {row.subcategory_name && (
-                      <span className="text-muted-foreground"> › {row.subcategory_name}</span>
-                    )}
-                  </ItemTitle>
-                  <ItemDescription>
-                    {formatDate(row.movement_date)} ·{" "}
-                    <span className="font-bold text-foreground tabular-nums">
-                      {formatCLP(Number(row.amount))}
-                    </span>
-                  </ItemDescription>
-                </ItemContent>
-                <ItemActions>
-                  <MovementStatus status={row.status} />
-                </ItemActions>
-              </Item>
-            ))}
+            {rows.map((row) => {
+              const lateDays = lateDaysOf(row)
+              return (
+                <Item
+                  key={row.id}
+                  variant="muted"
+                  size="sm"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelected(row)}
+                  onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(row)}
+                  className="cursor-pointer"
+                >
+                  <ItemContent>
+                    <ItemHeader>
+                      <MovementTypeBadge type={row.movement_type} />
+                    </ItemHeader>
+                    <ItemTitle className="text-sm">
+                      {row.category_name}
+                      {row.subcategory_name && (
+                        <span className="text-muted-foreground"> › {row.subcategory_name}</span>
+                      )}
+                    </ItemTitle>
+                    <ItemDescription>
+                      {formatDate(row.movement_date)} ·{" "}
+                      <span className="font-bold text-foreground tabular-nums">
+                        {formatCLP(Number(row.amount))}
+                      </span>
+                      {lateDays !== null && (
+                        <LateRegistrationBadge days={lateDays} className="ml-2 align-middle" />
+                      )}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <MovementStatus status={row.status} />
+                  </ItemActions>
+                </Item>
+              )
+            })}
           </ItemGroup>
         )}
       </div>
@@ -224,70 +240,99 @@ export function MovementsTable({
               : "grid-cols-[84px_108px_84px_1fr_84px] px-5 py-4 min-w-[640px]"
           )}
         >
-          <span role="columnheader" className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint">
+          <span
+            role="columnheader"
+            className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint"
+          >
             Fecha
           </span>
-          <span role="columnheader" className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint">
+          <span
+            role="columnheader"
+            className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint"
+          >
             Tipo
           </span>
-          <span role="columnheader" className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint">
+          <span
+            role="columnheader"
+            className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint"
+          >
             Monto
           </span>
-          <span role="columnheader" className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint">
+          <span
+            role="columnheader"
+            className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint"
+          >
             Categoría
           </span>
           {isFull && (
-            <span role="columnheader" className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint">
+            <span
+              role="columnheader"
+              className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint"
+            >
               Registrado por
             </span>
           )}
-          <span role="columnheader" className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint">
+          <span
+            role="columnheader"
+            className="font-extrabold text-[10.5px] uppercase tracking-[0.06em] text-faint"
+          >
             Estado
           </span>
         </div>
         <div role="rowgroup">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              role="row"
-              tabIndex={0}
-              onClick={() => setSelected(row)}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(row)}
-              className={cn(
-                "grid gap-x-3.5 items-center border-t border-border cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                isFull
-                  ? "grid-cols-[96px_110px_100px_1fr_130px_100px] px-6 py-[15px] text-[13.5px] min-w-[860px]"
-                  : "grid-cols-[84px_108px_84px_1fr_84px] px-5 py-4 text-[13px] min-w-[640px]"
-              )}
-            >
-              <span role="cell" className="text-muted-foreground whitespace-nowrap tabular-nums">
-                {formatDate(row.movement_date)}
-              </span>
-              <span role="cell">
-                <MovementTypeBadge type={row.movement_type} />
-              </span>
-              <span role="cell" className="font-bold text-foreground tabular-nums">
-                {formatCLP(Number(row.amount))}
-              </span>
-              <span role="cell" className="text-muted-foreground">
-                {row.category_name}
-                {row.subcategory_name ? ` › ${row.subcategory_name}` : ""}
-              </span>
-              {isFull && (
-                <span role="cell" className="text-muted-foreground">
-                  {row.created_by.full_name}
-                  {row.status === "CANCELLED" && row.cancelled_by && (
-                    <span className="block text-[11px] font-bold text-expense">
-                      Anuló: {row.cancelled_by.full_name}
-                    </span>
+          {rows.map((row) => {
+            const lateDays = lateDaysOf(row)
+            return (
+              <div
+                key={row.id}
+                role="row"
+                tabIndex={0}
+                onClick={() => setSelected(row)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setSelected(row)}
+                className={cn(
+                  "grid gap-x-3.5 items-center border-t border-border cursor-pointer transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isFull
+                    ? "grid-cols-[96px_110px_100px_1fr_130px_100px] px-6 py-[15px] text-[13.5px] min-w-[860px]"
+                    : "grid-cols-[84px_108px_84px_1fr_84px] px-5 py-4 text-[13px] min-w-[640px]"
+                )}
+              >
+                <span role="cell" className="flex flex-col items-start gap-1 text-muted-foreground">
+                  <span className="whitespace-nowrap tabular-nums">
+                    {formatDate(row.movement_date)}
+                  </span>
+                  {lateDays !== null && (
+                    <LateRegistrationBadge
+                      days={lateDays}
+                      className="whitespace-normal leading-tight text-[10.5px]"
+                    />
                   )}
                 </span>
-              )}
-              <span role="cell">
-                <MovementStatus status={row.status} />
-              </span>
-            </div>
-          ))}
+                <span role="cell">
+                  <MovementTypeBadge type={row.movement_type} />
+                </span>
+                <span role="cell" className="font-bold text-foreground tabular-nums">
+                  {formatCLP(Number(row.amount))}
+                </span>
+                <span role="cell" className="text-muted-foreground">
+                  {row.category_name}
+                  {row.subcategory_name ? ` › ${row.subcategory_name}` : ""}
+                </span>
+                {isFull && (
+                  <span role="cell" className="text-muted-foreground">
+                    {row.created_by.full_name}
+                    {row.status === "CANCELLED" && row.cancelled_by && (
+                      <span className="block text-[11px] font-bold text-expense">
+                        Anuló: {row.cancelled_by.full_name}
+                      </span>
+                    )}
+                  </span>
+                )}
+                <span role="cell">
+                  <MovementStatus status={row.status} />
+                </span>
+              </div>
+            )
+          })}
         </div>
         {!rows.length && (
           <Empty className="border-0 py-16">
@@ -352,6 +397,20 @@ export function MovementsTable({
                 <Field label="Correo de comprobante" value={selected.receipt_email} />
               </div>
 
+              {selectedLateDays !== null && selected.created_at && (
+                <div className="flex flex-col gap-1">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                    Registro
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatDateTime(selected.created_at)}
+                    </p>
+                    <LateRegistrationBadge days={selectedLateDays} />
+                  </div>
+                </div>
+              )}
+
               {selected.notes && (
                 <div className="flex flex-col gap-1">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -390,8 +449,8 @@ export function MovementsTable({
                     </span>
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground mb-2.5">
-                    No se elimina: queda marcado como anulado y deja de afectar los saldos. La
-                    razón es obligatoria y queda en auditoría.
+                    No se elimina: queda marcado como anulado y deja de afectar los saldos. La razón
+                    es obligatoria y queda en auditoría.
                   </p>
                   <textarea
                     autoFocus
