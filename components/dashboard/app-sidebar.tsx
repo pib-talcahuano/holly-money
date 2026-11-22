@@ -17,7 +17,8 @@ import {
   CreditCard,
   Tags,
   Banknote,
-  Wallet
+  Wallet,
+  HandCoins
 } from "lucide-react"
 import {
   Sidebar,
@@ -69,6 +70,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/movements",
         label: "Movimientos",
         icon: ArrowLeftRight,
+        roles: ["ADMIN", "BURSAR", "FINANCE"]
+      },
+      {
+        href: "/tithers",
+        label: "Diezmadores",
+        icon: HandCoins,
         roles: ["ADMIN", "BURSAR", "FINANCE"]
       },
       {
