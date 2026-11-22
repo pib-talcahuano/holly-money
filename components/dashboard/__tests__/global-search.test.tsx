@@ -276,4 +276,34 @@ describe("GlobalSearch", () => {
     expect(mockPush).toHaveBeenCalledWith("/movements/m1")
     expect(mockPush).toHaveBeenCalledTimes(1)
   })
+
+  it("renders the strip outside the cmdk list", async () => {
+    searchMock.mockResolvedValue(response([income, expense]))
+    const input = openDialog()
+    await type(input, "ma")
+    const strip = screen.getByLabelText("Totales de la búsqueda")
+    const list = document.querySelector("[cmdk-list]")
+    expect(list).not.toBeNull()
+    expect(list?.contains(strip)).toBe(false)
+  })
+
+  it("hides the strip when every hit is cancelled and counts are zero", async () => {
+    const zero = { income: { total: 0, count: 0 }, expense: { total: 0, count: 0 }, net: 0 }
+    searchMock.mockResolvedValue(response([{ ...income, status: "CANCELLED" }], zero))
+    const input = openDialog()
+    await type(input, "ma")
+    expect(screen.getByText("Anulado")).toBeInTheDocument()
+    expect(screen.queryByLabelText("Totales de la búsqueda")).not.toBeInTheDocument()
+  })
+
+  it("uses the singular for a single match", async () => {
+    const one = { income: { total: 500, count: 1 }, expense: { total: 0, count: 0 }, net: 500 }
+    searchMock.mockResolvedValue(response([income], one))
+    const input = openDialog()
+    await type(input, "ma")
+    expect(screen.getByLabelText("Totales de la búsqueda")).toHaveTextContent(
+      "Total histórico · 1 coincidencia"
+    )
+    expect(screen.getByLabelText("Totales de la búsqueda")).not.toHaveTextContent("1 coincidencias")
+  })
 })

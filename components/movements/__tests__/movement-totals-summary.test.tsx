@@ -9,7 +9,9 @@ const totals: MovementTotals = {
 }
 
 const caption = (n: number) =>
-  `Suma de las ${n} coincidencias de todo el historial, no solo de esta página. Los movimientos anulados no suman.`
+  n === 1
+    ? "Suma de la 1 coincidencia de todo el historial, no solo de esta página. Los movimientos anulados no suman."
+    : `Suma de las ${n} coincidencias de todo el historial, no solo de esta página. Los movimientos anulados no suman.`
 
 describe("MovementTotalsSummary", () => {
   it("shows the three cards and the caption for ALL", () => {

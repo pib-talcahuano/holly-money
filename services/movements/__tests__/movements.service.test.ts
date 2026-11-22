@@ -229,6 +229,15 @@ describe("movementsService.totals", () => {
     expect(t.rpc).toHaveBeenCalledWith("get_movement_totals", { p_movement_type: "EXPENSE" })
   })
 
+  it("maps * to % like PostgREST does for list", async () => {
+    const t = makeDb({})
+    await movementsService.totals(t.db, { search: "ma*a" })
+    expect(t.rpc).toHaveBeenCalledWith(
+      "get_movement_totals",
+      expect.objectContaining({ p_term: "ma%a" })
+    )
+  })
+
   it("sanitizes the text", async () => {
     const t = makeDb({})
     await movementsService.totals(t.db, { search: "a,(b)" })

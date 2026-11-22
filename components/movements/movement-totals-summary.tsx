@@ -66,8 +66,9 @@ export function MovementTotalsSummary({ totals, movementType }: Props) {
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Suma de las {matches} coincidencias de todo el historial, no solo de esta página. Los
-        movimientos anulados no suman.
+        {matches === 1
+          ? "Suma de la 1 coincidencia de todo el historial, no solo de esta página. Los movimientos anulados no suman."
+          : `Suma de las ${matches} coincidencias de todo el historial, no solo de esta página. Los movimientos anulados no suman.`}
       </p>
     </section>
   )

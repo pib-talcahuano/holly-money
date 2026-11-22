@@ -102,7 +102,8 @@ export const movementsService = {
     const term = filters.search?.trim() ? sanitizePostgrestSearch(filters.search) : ""
     if (term) {
       const { categoryIds, subcategoryIds } = await resolveSearchMatches(db, term)
-      args.p_term = term
+      // PostgREST turns "*" into "%" in ilike values; mirror it so counts match list()
+      args.p_term = term.replaceAll("*", "%")
       args.p_category_ids = categoryIds
       args.p_subcategory_ids = subcategoryIds
       const amount = parseAmountTerm(term)

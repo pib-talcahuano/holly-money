@@ -172,6 +172,7 @@ describeIfLocal("RPC: get_movement_totals", () => {
       "subcategory name": () => subcategoryName,
       "amount of a fixture": () => "2500",
       "amount with thousands dot": () => "2.500",
+      "wildcard asterisk": () => `Zel*${marker}`,
       "no matches": () => `${marker}-no-match`
     }
 

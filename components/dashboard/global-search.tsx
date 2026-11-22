@@ -69,11 +69,11 @@ function TotalBlock({
   className?: string
 }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2">
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-lg bg-muted/50 px-3 py-2">
       <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <span className={cn("truncate text-base font-bold tabular-nums", className)}>
+      <span className={cn("break-words text-sm font-bold tabular-nums sm:text-base", className)}>
         {formatCLP(amount)}
       </span>
       <span className="text-xs text-muted-foreground">{caption}</span>
@@ -85,8 +85,12 @@ function recordsLabel(count: number) {
   return `${count} ${count === 1 ? "registro" : "registros"}`
 }
 
+function matchCount(totals: MovementTotals) {
+  return totals.income.count + totals.expense.count
+}
+
 function TotalsStrip({ totals }: { totals: MovementTotals }) {
-  const matches = totals.income.count + totals.expense.count
+  const matches = matchCount(totals)
   return (
     <div aria-label="Totales de la búsqueda" role="group" className="border-t px-3 py-3">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
@@ -95,7 +99,7 @@ function TotalsStrip({ totals }: { totals: MovementTotals }) {
         </span>
         <span className="text-[11px] text-muted-foreground">Sin anulados</span>
       </div>
-      <div className="flex gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <TotalBlock
           label="Ingresos"
           amount={totals.income.total}
@@ -267,7 +271,6 @@ export function GlobalSearch() {
                 ))}
               </CommandGroup>
             )}
-            {showResults && results.length > 0 && totals && <TotalsStrip totals={totals} />}
             {showResults && results.length > 0 && (
               <CommandGroup>
                 <CommandItem
@@ -280,6 +283,9 @@ export function GlobalSearch() {
               </CommandGroup>
             )}
           </CommandList>
+          {showResults && results.length > 0 && totals && matchCount(totals) > 0 && (
+            <TotalsStrip totals={totals} />
+          )}
         </Command>
       </CommandDialog>
     </>
