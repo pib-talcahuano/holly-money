@@ -28,6 +28,8 @@ function makeDb(opts: { pages?: Result[]; updates?: Result[] }) {
   const orders: unknown[][] = []
   const ranges: unknown[][] = []
   const updateArgs: unknown[][] = []
+  const updateEqs: unknown[][] = []
+  const events: string[] = []
   const inArgs: unknown[][] = []
   const forbidden: string[] = []
   const from = jest.fn((table: string) => {
@@ -38,7 +40,8 @@ function makeDb(opts: { pages?: Result[]; updates?: Result[] }) {
       return proxy
     }
     proxy.eq = (...a: unknown[]) => {
-      eqs.push(a)
+      if (state.updating) updateEqs.push(a)
+      else eqs.push(a)
       return proxy
     }
     proxy.order = (...a: unknown[]) => {
@@ -52,6 +55,7 @@ function makeDb(opts: { pages?: Result[]; updates?: Result[] }) {
     }
     proxy.update = (...a: unknown[]) => {
       updateArgs.push(a)
+      events.push("update")
       state.updating = true
       return proxy
     }
@@ -79,6 +83,8 @@ function makeDb(opts: { pages?: Result[]; updates?: Result[] }) {
     orders,
     ranges,
     updateArgs,
+    updateEqs,
+    events,
     inArgs,
     forbidden
   }
@@ -91,10 +97,17 @@ function idRows(count: number, name: string, offset = 0) {
   }))
 }
 
+let consoleError: jest.SpyInstance
+
 beforeEach(() => {
   jest.clearAllMocks()
   logMovementsBulk.mockResolvedValue(undefined)
   logSystem.mockResolvedValue({ error: null })
+  consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined)
+})
+
+afterEach(() => {
+  consoleError.mockRestore()
 })
 
 describe("peopleService.list", () => {
@@ -212,6 +225,8 @@ describe("peopleService.merge validation", () => {
 
 describe("peopleService.merge", () => {
   const base = { movementType: "INCOME" as const, userId: "u1" }
+  const ids = (count: number, offset = 0) =>
+    Array.from({ length: count }, (_, i) => ({ id: `id-${offset + i}` }))
 
   it("returns 0 and writes nothing when no movement matches", async () => {
     const t = makeDb({ pages: [{ data: idRows(3, "Otro"), error: null }] })
@@ -244,34 +259,47 @@ describe("peopleService.merge", () => {
     expect(t.inArgs).toEqual([["id", ["b"]]])
   })
 
-  it("updates in chunks of 200 and audits each updated movement", async () => {
-    const rows = [...idRows(250, "ana"), { id: "x", delivered_by: "Otra" }]
+  it("updates per old name in chunks of 200, guarded by type and old name", async () => {
+    const rows = [
+      ...idRows(250, "ana"),
+      { id: "o1", delivered_by: "Ana  " },
+      { id: "x", delivered_by: "Otra" }
+    ]
     const t = makeDb({
       pages: [{ data: rows, error: null }],
       updates: [
-        { data: idRows(200, "").map((r) => ({ id: r.id })), error: null },
-        { data: idRows(50, "", 200).map((r) => ({ id: r.id })), error: null }
+        { data: ids(200), error: null },
+        { data: ids(50, 200), error: null },
+        { data: [{ id: "o1" }], error: null }
       ]
     })
     const result = await peopleService.merge(t.db, {
       ...base,
-      fromNames: ["ana", "ana"],
+      fromNames: ["ana", "ana", "Ana  "],
       toName: "  Ana   Maria "
     })
-    expect(result).toEqual({ updated: 250 })
-    expect(t.from).toHaveBeenCalledTimes(3)
-    expect(t.inArgs.map((a) => (a[1] as string[]).length)).toEqual([200, 50])
+    expect(result).toEqual({ updated: 251 })
+    expect(t.from).toHaveBeenCalledTimes(4)
+    expect(t.inArgs.map((a) => (a[1] as string[]).length)).toEqual([200, 50, 1])
     expect(t.inArgs.every((a) => a[0] === "id")).toBe(true)
+    expect(t.updateEqs).toEqual([
+      ["movement_type", "INCOME"],
+      ["delivered_by", "ana"],
+      ["movement_type", "INCOME"],
+      ["delivered_by", "ana"],
+      ["movement_type", "INCOME"],
+      ["delivered_by", "Ana  "]
+    ])
     expect(t.forbidden).toEqual([])
 
     const patch = t.updateArgs[0][0] as Record<string, unknown>
     const { updated_at: updatedAt, ...patchRest } = patch
     expect(patchRest).toEqual({ delivered_by: "Ana Maria", updated_by_id: "u1" })
     expect(updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
-    expect(t.selects.filter((s) => s[1] === "id")).toHaveLength(2)
+    expect(t.selects.filter((s) => s[1] === "id")).toHaveLength(3)
 
     const audited = logMovementsBulk.mock.calls.flatMap((c) => c[0])
-    expect(audited).toHaveLength(250)
+    expect(audited).toHaveLength(251)
     const { note: firstNote, ...firstRest } = audited[0]
     expect(firstRest).toEqual({
       movement_id: "id-0",
@@ -281,11 +309,15 @@ describe("peopleService.merge", () => {
       new_value: { delivered_by: "Ana Maria" }
     })
     expect(firstNote).toMatch(/^Unión de nombres [0-9a-f-]{36}$/)
+    expect(audited[250]).toMatchObject({
+      movement_id: "o1",
+      previous_value: { delivered_by: "Ana  " }
+    })
     const notes = new Set(audited.map((a: { note: string }) => a.note))
     expect(notes.size).toBe(1)
 
-    expect(logSystem).toHaveBeenCalledTimes(1)
-    const sys = logSystem.mock.calls[0][0]
+    expect(logSystem).toHaveBeenCalledTimes(2)
+    const sys = logSystem.mock.calls[1][0]
     const { merge_id: mergeId, ...sysValue } = sys.new_value
     expect(typeof mergeId).toBe("string")
     expect({ ...sys, new_value: sysValue }).toEqual({
@@ -294,57 +326,129 @@ describe("peopleService.merge", () => {
       user_id: "u1",
       new_value: {
         movement_type: "INCOME",
-        from_names: ["ana"],
+        from_names: ["ana", "Ana  "],
         to_name: "Ana Maria",
-        updated: 250
+        updated: 251
       }
     })
     expect([...notes][0]).toContain(mergeId)
   })
 
-  it("throws one error with the counts when an update returns fewer ids", async () => {
+  it("writes the start audit entry before the first update", async () => {
     const t = makeDb({
-      pages: [{ data: idRows(250, "ana"), error: null }],
-      updates: [
-        { data: idRows(199, "").map((r) => ({ id: r.id })), error: null },
-        { data: idRows(50, "", 200).map((r) => ({ id: r.id })), error: null }
-      ]
+      pages: [{ data: idRows(2, "ana"), error: null }],
+      updates: [{ data: ids(2), error: null }]
+    })
+    logSystem.mockImplementation((entry) => {
+      t.events.push(`system:${(entry as unknown as { action: string }).action}`)
+      return Promise.resolve({ error: null })
+    })
+    logMovementsBulk.mockImplementation(() => {
+      t.events.push("audit")
+      return Promise.resolve()
+    })
+    await peopleService.merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
+    expect(t.events).toEqual([
+      "system:Unión de nombres iniciada",
+      "update",
+      "audit",
+      "system:Nombres unidos"
+    ])
+    const start = logSystem.mock.calls[0][0] as unknown as {
+      entity: string
+      new_value: Record<string, unknown>
+    }
+    expect(start.entity).toBe("people")
+    const { merge_id: startId, ...startRest } = start.new_value
+    expect(startRest).toEqual({
+      movement_type: "INCOME",
+      from_names: ["ana"],
+      to_name: "Ana M",
+      expected: 2
+    })
+    expect((logSystem.mock.calls[1][0] as SystemEntry).new_value.merge_id).toBe(startId)
+  })
+
+  it("does not update anything when the start audit entry fails", async () => {
+    logSystem.mockResolvedValue({ error: new Error("sys boom") })
+    const t = makeDb({ pages: [{ data: idRows(2, "ana"), error: null }] })
+    await expect(
+      peopleService.merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
+    ).rejects.toThrow(/No se modificó nada/)
+    expect(t.updateArgs).toEqual([])
+  })
+
+  it("reports a short Spanish error when the guard skips rows changed meanwhile", async () => {
+    const t = makeDb({
+      pages: [{ data: idRows(5, "ana"), error: null }],
+      updates: [{ data: ids(3), error: null }]
     })
     const error = await peopleService
       .merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
       .catch((e: Error) => e)
-    expect(error).toBeInstanceOf(Error)
     const message = (error as Error).message
-    expect(message).toContain("249")
-    expect(message).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/)
-    expect(logMovementsBulk.mock.calls.flatMap((c) => c[0])).toHaveLength(249)
+    expect(message).toMatch(
+      /^No se pudieron unir todos los nombres: se actualizaron 3 de 5 movimientos y faltan 0 entradas de auditoría \(unión [0-9a-f-]{36}\)\. Puedes volver a intentarlo\.$/
+    )
+    expect(logMovementsBulk.mock.calls.flatMap((c) => c[0])).toHaveLength(3)
   })
 
-  it("throws one error when the audit fails after updating", async () => {
+  it("keeps raw audit errors out of the message and logs them", async () => {
     logMovementsBulk.mockRejectedValue(new Error("audit boom"))
     const t = makeDb({
       pages: [{ data: idRows(3, "ana"), error: null }],
-      updates: [{ data: [{ id: "id-0" }, { id: "id-1" }, { id: "id-2" }], error: null }]
+      updates: [{ data: ids(3), error: null }]
     })
     const error = await peopleService
       .merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
       .catch((e: Error) => e)
-    expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toContain("3")
-    expect((error as Error).message).toContain("audit boom")
+    const message = (error as Error).message
+    expect(message).toContain("se actualizaron 3 de 3 movimientos y faltan 3 entradas de auditoría")
+    expect(message).not.toContain("audit boom")
+    expect(consoleError).toHaveBeenCalled()
   })
 
-  it("throws when the update itself errors, after trying the rest", async () => {
+  it("keeps raw update errors out of the message, logs them and continues", async () => {
     const t = makeDb({
       pages: [{ data: idRows(250, "ana"), error: null }],
       updates: [
         { data: null, error: new Error("update boom") },
-        { data: idRows(50, "", 200).map((r) => ({ id: r.id })), error: null }
+        { data: ids(50, 200), error: null }
       ]
     })
+    const error = await peopleService
+      .merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
+      .catch((e: Error) => e)
+    const message = (error as Error).message
+    expect(message).toContain("se actualizaron 50 de 250 movimientos")
+    expect(message).not.toContain("update boom")
+    expect(consoleError).toHaveBeenCalled()
+    expect(logMovementsBulk.mock.calls.flatMap((c) => c[0])).toHaveLength(50)
+  })
+
+  it("refuses more than 5000 movements without writing anything", async () => {
+    const page = (offset: number) => ({
+      data: idRows(1000, "ana", offset),
+      error: null
+    })
+    const pages = [0, 1, 2, 3, 4, 5].map((n) => page(n * 1000))
+    const t = makeDb({ pages: [...pages, { data: idRows(1, "ana", 6000), error: null }] })
     await expect(
       peopleService.merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
-    ).rejects.toThrow(/update boom/)
-    expect(logMovementsBulk.mock.calls.flatMap((c) => c[0])).toHaveLength(50)
+    ).rejects.toThrow("Demasiados movimientos en una sola unión (6001). El máximo es 5000.")
+    expect(t.updateArgs).toEqual([])
+    expect(logSystem).not.toHaveBeenCalled()
+    expect(logMovementsBulk).not.toHaveBeenCalled()
+  })
+
+  it("preview applies the same cap", async () => {
+    const pages = [0, 1, 2, 3, 4, 5].map((n) => ({
+      data: idRows(1000, "ana", n * 1000),
+      error: null
+    }))
+    const t = makeDb({ pages })
+    await expect(
+      peopleService.preview(t.db, { movementType: "INCOME", fromNames: ["ana"], toName: "Ana M" })
+    ).rejects.toThrow(/Demasiados movimientos en una sola unión \(6000\)/)
   })
 })

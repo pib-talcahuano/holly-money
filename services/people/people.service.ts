@@ -9,6 +9,7 @@ type DB = SupabaseClient<Database>
 const PAGE_SIZE = 1000
 const UPDATE_CHUNK_SIZE = 200
 const MAX_NAME_LENGTH = 100
+const MAX_MERGE_MOVEMENTS = 5000
 
 type IdNameRow = { id: string; delivered_by: string | null }
 
@@ -66,8 +67,12 @@ async function findAffected(
   )
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
+function assertWithinCap(count: number) {
+  if (count > MAX_MERGE_MOVEMENTS) {
+    throw new Error(
+      `Demasiados movimientos en una sola unión (${count}). El máximo es ${MAX_MERGE_MOVEMENTS}.`
+    )
+  }
 }
 
 export const peopleService = {
@@ -86,6 +91,7 @@ export const peopleService = {
   ): Promise<{ affected: number }> {
     const { target, sources } = prepare(input.fromNames, input.toName)
     const affected = await findAffected(db, input.movementType, sources, target)
+    assertWithinCap(affected.length)
     return { affected: affected.length }
   },
 
@@ -96,51 +102,80 @@ export const peopleService = {
     const { target, sources } = prepare(input.fromNames, input.toName)
     const affected = await findAffected(db, input.movementType, sources, target)
     if (affected.length === 0) return { updated: 0 }
+    assertWithinCap(affected.length)
 
-    const previousById = new Map(affected.map((row) => [row.id, row.delivered_by]))
     const mergeId = crypto.randomUUID()
     const note = `Unión de nombres ${mergeId}`
-    const failures: string[] = []
+    const fromNames = [...sources]
+
+    // Written before any update so a crash mid-merge leaves a trace of what was intended.
+    const { error: startError } = await auditService.logSystem({
+      entity: "people",
+      action: "Unión de nombres iniciada",
+      user_id: input.userId,
+      new_value: {
+        movement_type: input.movementType,
+        from_names: fromNames,
+        to_name: target,
+        expected: affected.length,
+        merge_id: mergeId
+      }
+    })
+    if (startError) {
+      console.error("people.merge: no se pudo registrar el inicio de la unión", startError)
+      throw new Error("No se pudo registrar la auditoría de la unión. No se modificó nada.")
+    }
+
+    // Group by the old spelling so each update can guard on it: a row renamed by someone else
+    // after our read simply does not match and is skipped (and reported as short).
+    const idsByOldName = new Map<string, string[]>()
+    for (const row of affected) {
+      idsByOldName.set(row.delivered_by, [...(idsByOldName.get(row.delivered_by) ?? []), row.id])
+    }
+
     let updated = 0
     let missingAudit = 0
+    let hadFailure = false
 
-    for (let i = 0; i < affected.length; i += UPDATE_CHUNK_SIZE) {
-      const ids = affected.slice(i, i + UPDATE_CHUNK_SIZE).map((row) => row.id)
-      const { data, error } = await db
-        .from("movements")
-        .update({
-          delivered_by: target,
-          updated_by_id: input.userId,
-          updated_at: new Date().toISOString()
-        })
-        .in("id", ids)
-        .select("id")
-      if (error) {
-        failures.push(`error al actualizar un lote de ${ids.length}: ${errorMessage(error)}`)
-        continue
-      }
-      const done = (data ?? []).map((row) => row.id)
-      updated += done.length
-      if (done.length < ids.length) {
-        failures.push(`un lote devolvió ${done.length} de ${ids.length} movimientos`)
-      }
-      if (done.length === 0) continue
-      try {
-        await auditService.logMovementsBulk(
-          done.map((id) => ({
-            movement_id: id,
-            action: "Nombre actualizado",
-            user_id: input.userId,
-            previous_value: { delivered_by: previousById.get(id) ?? null },
-            new_value: { delivered_by: target },
-            note
-          }))
-        )
-      } catch (auditError) {
-        missingAudit += done.length
-        failures.push(
-          `falló la auditoría de ${done.length} movimientos: ${errorMessage(auditError)}`
-        )
+    for (const [oldName, allIds] of idsByOldName) {
+      for (let i = 0; i < allIds.length; i += UPDATE_CHUNK_SIZE) {
+        const ids = allIds.slice(i, i + UPDATE_CHUNK_SIZE)
+        const { data, error } = await db
+          .from("movements")
+          .update({
+            delivered_by: target,
+            updated_by_id: input.userId,
+            updated_at: new Date().toISOString()
+          })
+          .eq("movement_type", input.movementType)
+          .eq("delivered_by", oldName)
+          .in("id", ids)
+          .select("id")
+        if (error) {
+          hadFailure = true
+          console.error("people.merge: error al actualizar un lote", error)
+          continue
+        }
+        const done = (data ?? []).map((row) => row.id)
+        updated += done.length
+        if (done.length < ids.length) hadFailure = true
+        if (done.length === 0) continue
+        try {
+          await auditService.logMovementsBulk(
+            done.map((id) => ({
+              movement_id: id,
+              action: "Nombre actualizado",
+              user_id: input.userId,
+              previous_value: { delivered_by: oldName },
+              new_value: { delivered_by: target },
+              note
+            }))
+          )
+        } catch (auditError) {
+          hadFailure = true
+          missingAudit += done.length
+          console.error("people.merge: error al auditar un lote", auditError)
+        }
       }
     }
 
@@ -151,18 +186,21 @@ export const peopleService = {
         user_id: input.userId,
         new_value: {
           movement_type: input.movementType,
-          from_names: [...sources],
+          from_names: fromNames,
           to_name: target,
           updated,
           merge_id: mergeId
         }
       })
-      if (error) failures.push(`falló el registro de auditoría del sistema: ${errorMessage(error)}`)
+      if (error) {
+        hadFailure = true
+        console.error("people.merge: error al registrar el resumen de la unión", error)
+      }
     }
 
-    if (failures.length > 0) {
+    if (hadFailure) {
       throw new Error(
-        `La unión de nombres ${mergeId} terminó con errores. Movimientos ya actualizados: ${updated} de ${affected.length}. Entradas de auditoría faltantes: ${missingAudit}. Detalle: ${failures.join("; ")}`
+        `No se pudieron unir todos los nombres: se actualizaron ${updated} de ${affected.length} movimientos y faltan ${missingAudit} entradas de auditoría (unión ${mergeId}). Puedes volver a intentarlo.`
       )
     }
     return { updated }

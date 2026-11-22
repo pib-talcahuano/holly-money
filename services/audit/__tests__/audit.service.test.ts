@@ -51,6 +51,16 @@ describe("auditService.logMovementsBulk", () => {
     ])
   })
 
+  it("uses the explicit impersonator_id over the session one", async () => {
+    await auditService.logMovementsBulk([
+      { ...entries(1)[0], impersonator_id: null },
+      { ...entries(1)[0], movement_id: "m9", impersonator_id: "imp-2" },
+      { ...entries(1)[0], movement_id: "m10" }
+    ])
+    const rows = insert.mock.calls[0][0]
+    expect(rows.map((r) => r.impersonator_id)).toEqual([null, "imp-2", "imp-1"])
+  })
+
   it("splits 1200 entries into inserts of 500, 500 and 200", async () => {
     await auditService.logMovementsBulk(entries(1200))
     expect(insert.mock.calls.map((c) => c[0].length)).toEqual([500, 500, 200])
