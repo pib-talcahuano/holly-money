@@ -36,4 +36,18 @@ describe("getVisibleGroups", () => {
     expect(links).not.toContain("/budgets")
     expect(links).toContain("/ministries/m-1")
   })
+
+  it.each(["ADMIN", "BURSAR", "FINANCE"])(
+    "shows Diezmadores right after Movimientos to %s",
+    (role) => {
+      const finance = getVisibleGroups([role]).find((g) => g.label === "Finanzas")
+      const links = finance?.links.map((l) => l.href) ?? []
+      expect(links).toContain("/tithers")
+      expect(links.indexOf("/tithers")).toBe(links.indexOf("/movements") + 1)
+    }
+  )
+
+  it.each(["MINISTER", "DELEGATE"])("hides Diezmadores from %s", (role) => {
+    expect(hrefs([role], "m-1")).not.toContain("/tithers")
+  })
 })
