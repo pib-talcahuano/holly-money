@@ -46,6 +46,8 @@ export function TithersTable({ tithers, year }: { tithers: Tither[]; year: numbe
           <p className="px-5 py-16 text-center text-sm text-muted-foreground">
             No hay diezmos registrados en {year}.
           </p>
+        ) : visible.length === 0 ? (
+          <p className="px-5 py-12 text-center text-sm text-muted-foreground">Sin coincidencias.</p>
         ) : (
           <div role="table" aria-label="Diezmadores">
             <div role="rowgroup" className="hidden sm:block">
@@ -71,11 +73,6 @@ export function TithersTable({ tithers, year }: { tithers: Tither[]; year: numbe
               </div>
             </div>
             <div role="rowgroup">
-              {visible.length === 0 && (
-                <p className="px-5 py-12 text-center text-sm text-muted-foreground">
-                  Sin coincidencias.
-                </p>
-              )}
               {visible.map((tither) => (
                 <div
                   key={tither.key}
@@ -104,6 +101,7 @@ export function TithersTable({ tithers, year }: { tithers: Tither[]; year: numbe
                     role="cell"
                     className="order-2 text-sm tabular-nums text-muted-foreground sm:order-none sm:text-right"
                   >
+                    <span className="mr-1 text-faint sm:hidden">Diezmos:</span>
                     {tither.count}
                   </span>
                   <span
@@ -119,6 +117,7 @@ export function TithersTable({ tithers, year }: { tithers: Tither[]; year: numbe
                     role="cell"
                     className="order-3 text-sm tabular-nums text-muted-foreground sm:order-none"
                   >
+                    <span className="mr-1 text-faint sm:hidden">Último:</span>
                     {formatDate(tither.lastDate)}
                   </span>
                 </div>

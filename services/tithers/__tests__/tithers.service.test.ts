@@ -12,7 +12,7 @@ function chain(results: Result | ((call: number, args: unknown[][]) => Result)) 
       ;(calls[name] ??= []).push(args)
       return proxy
     }
-  for (const m of ["select", "order", "eq", "gte", "lte"]) proxy[m] = record(m)
+  for (const m of ["select", "order", "eq", "ilike", "gte", "lte"]) proxy[m] = record(m)
   proxy.range = (...args: unknown[]) => {
     ;(calls.range ??= []).push(args)
     const current = typeof results === "function" ? results(rangeCalls, [args]) : results
@@ -53,9 +53,10 @@ describe("tithersService.list", () => {
       totals: { total: 0, count: 0, titherCount: 0 }
     })
     expect(t.from).not.toHaveBeenCalledWith("movements")
+    expect(t.category.calls.ilike).toEqual([["name", "Diezmos"]])
     expect(t.category.calls.eq).toEqual([
-      ["name", "Diezmos"],
-      ["movement_type", "INCOME"]
+      ["movement_type", "INCOME"],
+      ["is_active", true]
     ])
   })
 

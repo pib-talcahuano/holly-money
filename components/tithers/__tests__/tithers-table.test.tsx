@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import type { Tither } from "@/types/tithers"
 import { TithersTable } from "../tithers-table"
 
@@ -54,6 +54,12 @@ describe("TithersTable", () => {
     expect(screen.getByText("12-11-2026")).toBeInTheDocument()
   })
 
+  it("labels the count and the last date for small screens", () => {
+    render(<TithersTable tithers={tithers} year={2026} />)
+    expect(screen.getAllByText("Diezmos:")).toHaveLength(3)
+    expect(screen.getAllByText("Último:")).toHaveLength(3)
+  })
+
   it("filters by name ignoring accents and case", () => {
     render(<TithersTable tithers={tithers} year={2026} />)
     fireEvent.change(screen.getByPlaceholderText("Filtrar por nombre…"), {
@@ -69,6 +75,7 @@ describe("TithersTable", () => {
       target: { value: "zzz" }
     })
     expect(screen.getByText("Sin coincidencias.")).toBeInTheDocument()
+    expect(screen.queryByRole("table")).not.toBeInTheDocument()
   })
 
   it("shows an empty state without tithers", () => {
@@ -84,10 +91,14 @@ describe("TithersTable", () => {
     sparklines.forEach((svg) => expect(svg).toHaveAttribute("aria-hidden", "true"))
   })
 
-  it("opens the detail dialog and closes it with Escape", () => {
+  it("opens the detail dialog and closes it with Escape", async () => {
     render(<TithersTable tithers={tithers} year={2026} />)
     fireEvent.click(screen.getByText("Hna. Mabel"))
     const dialog = screen.getByRole("dialog", { name: /Hna\. Mabel/ })
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(dialog).getByText(/Hna\. Mabel · 2026/))
+    )
+    expect(within(dialog).getByRole("link", { name: /Ver movimientos/ })).not.toHaveFocus()
     expect(within(dialog).getByText("$200.000")).toBeInTheDocument()
     expect(within(dialog).getByText("10")).toBeInTheDocument()
     expect(within(dialog).getByText("12-11-2026")).toBeInTheDocument()

@@ -16,8 +16,9 @@ export const tithersService = {
     const { data: category, error: categoryError } = await db
       .from("movement_categories")
       .select("id")
-      .eq("name", TITHES_CATEGORY_NAME)
+      .ilike("name", TITHES_CATEGORY_NAME)
       .eq("movement_type", "INCOME")
+      .eq("is_active", true)
       .maybeSingle()
     if (categoryError) throw categoryError
     if (!category) {

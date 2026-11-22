@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import Link from "next/link"
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
@@ -29,12 +30,20 @@ const LABEL = "text-[10.5px] font-bold uppercase tracking-[0.06em]"
 type Props = { tither: Tither | null; year: number; onClose: () => void }
 
 export function TitherDetailDialog({ tither, year, onClose }: Props) {
+  const titleRef = useRef<HTMLHeadingElement>(null)
   return (
     <Dialog open={tither !== null} onOpenChange={(open) => !open && onClose()}>
       {tither && (
-        <DialogContent className="max-h-[90vh] w-[95vw] gap-5 overflow-y-auto rounded-xl border border-border bg-card p-6 sm:max-w-xl">
+        <DialogContent
+          initialFocus={titleRef}
+          className="max-h-[90dvh] w-[95vw] gap-5 overflow-y-auto rounded-xl border border-border bg-card p-6 sm:max-w-xl"
+        >
           <div className="flex flex-col gap-1 pr-8">
-            <DialogTitle className="break-words text-xl font-bold tracking-tight text-foreground">
+            <DialogTitle
+              ref={titleRef}
+              tabIndex={-1}
+              className="break-words outline-none text-xl font-bold tracking-tight text-foreground"
+            >
               {tither.name} · {year}
             </DialogTitle>
             <DialogDescription>Diezmos mes a mes</DialogDescription>
