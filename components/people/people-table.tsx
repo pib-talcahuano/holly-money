@@ -14,6 +14,10 @@ import { MergeDialog } from "./merge-dialog"
 const HEADER = "text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-faint"
 const COLUMNS = "sm:grid-cols-[28px_minmax(0,1.6fr)_110px_130px_130px_90px]"
 
+function plural(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`
+}
+
 type Props = { names: PersonName[]; movementType: PeopleMovementType }
 
 export function PeopleTable({ names, movementType }: Props) {
@@ -70,7 +74,7 @@ export function PeopleTable({ names, movementType }: Props) {
           </Button>
           {hiddenSelected > 0 && (
             <p className="text-xs text-muted-foreground">
-              {`${selected.length} seleccionados, ${hiddenSelected} ocultos por el filtro`}
+              {`${plural(selected.length, "seleccionado", "seleccionados")}, ${plural(hiddenSelected, "oculto", "ocultos")} por el filtro`}
             </p>
           )}
         </div>

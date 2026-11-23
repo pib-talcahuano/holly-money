@@ -42,6 +42,8 @@ describeIfLocal("peopleService.merge", () => {
   const special = `ZZP "Ana", (Rojas) 100% a_b\\c ${marker}`
   // A naive ilike/or pattern built from the special name could match this one: it must not change.
   const decoy = `ZZP Ana, Rojas 100% aXb/c ${marker}`
+  // Leading/trailing whitespace: the real .eq guard must match it exactly, not trimmed.
+  const padded = ` ZZP Ana ${marker} `
   const target = `ZZP Ana Maria ${marker}`
   const categoryName = `People fixture ${marker}`
   let categoryId = ""
@@ -113,6 +115,12 @@ describeIfLocal("peopleService.merge", () => {
         {
           ...base,
           movement_type: "INCOME",
+          delivered_by: padded,
+          movement_date: "2094-01-17T12:00:00Z"
+        },
+        {
+          ...base,
+          movement_type: "INCOME",
           delivered_by: decoy,
           movement_date: "2094-01-16T12:00:00Z"
         },
@@ -138,7 +146,7 @@ describeIfLocal("peopleService.merge", () => {
     await admin
       .from("system_audit_log")
       .delete()
-      .eq("entity", "people")
+      .eq("entity", "PEOPLE")
       .contains("new_value", { to_name: target })
     if (categoryId) await admin.from("movement_categories").delete().eq("id", categoryId)
   })
@@ -154,18 +162,18 @@ describeIfLocal("peopleService.merge", () => {
 
     const preview = await peopleService.preview(client, {
       movementType: "INCOME",
-      fromNames: [ana, anaSpaced, anita, special],
+      fromNames: [ana, anaSpaced, anita, special, padded],
       toName: target
     })
-    expect(preview).toEqual({ affected: 5 })
+    expect(preview).toEqual({ affected: 6 })
 
     const result = await peopleService.merge(client, {
       movementType: "INCOME",
-      fromNames: [ana, anaSpaced, anita, special],
+      fromNames: [ana, anaSpaced, anita, special, padded],
       toName: target,
       userId: E2E_ADMIN_ID
     })
-    expect(result).toEqual({ updated: 5 })
+    expect(result).toEqual({ updated: 6 })
 
     const after = await serviceClient()
       .from("movements")
@@ -175,8 +183,8 @@ describeIfLocal("peopleService.merge", () => {
     const income = (after.data ?? []).filter((m) => m.movement_type === "INCOME")
     const expense = (after.data ?? []).filter((m) => m.movement_type === "EXPENSE")
     const merged = income.filter((m) => m.delivered_by !== decoy)
-    expect(income).toHaveLength(6)
-    expect(merged).toHaveLength(5)
+    expect(income).toHaveLength(7)
+    expect(merged).toHaveLength(6)
     expect(merged.every((m) => m.delivered_by === target)).toBe(true)
     expect(merged.every((m) => m.updated_by_id === E2E_ADMIN_ID)).toBe(true)
     const decoyRow = income.find((m) => m.delivered_by === decoy)
@@ -191,7 +199,7 @@ describeIfLocal("peopleService.merge", () => {
       .in("movement_id", movementIds)
     expect(audit.error).toBeNull()
     const rows = audit.data ?? []
-    expect(rows).toHaveLength(5)
+    expect(rows).toHaveLength(6)
     expect(
       rows.some((r) => (r.previous_value as { delivered_by: string }).delivered_by === special)
     ).toBe(true)
@@ -203,30 +211,30 @@ describeIfLocal("peopleService.merge", () => {
       expect(row.previous_value).toEqual({ delivered_by: previousById.get(row.movement_id) })
       expect(row.note).toMatch(/^Unión de nombres /)
     }
-    expect(new Set(rows.map((r) => r.movement_id)).size).toBe(5)
+    expect(new Set(rows.map((r) => r.movement_id)).size).toBe(6)
 
     const mergeId = (rows[0].note as string).replace("Unión de nombres ", "")
     const system = await serviceClient()
       .from("system_audit_log")
       .select("entity, action, new_value")
-      .eq("entity", "people")
-      .eq("action", "Nombres unidos")
+      .eq("entity", "PEOPLE")
+      .eq("action", "PEOPLE_MERGED")
       .contains("new_value", { merge_id: mergeId })
     expect(system.error).toBeNull()
     expect(system.data).toHaveLength(1)
     const started = await serviceClient()
       .from("system_audit_log")
       .select("new_value")
-      .eq("entity", "people")
-      .eq("action", "Unión de nombres iniciada")
+      .eq("entity", "PEOPLE")
+      .eq("action", "PEOPLE_MERGE_STARTED")
       .contains("new_value", { merge_id: mergeId })
     expect(started.error).toBeNull()
     expect(started.data).toHaveLength(1)
-    expect(started.data?.[0].new_value).toMatchObject({ expected: 5, to_name: target })
+    expect(started.data?.[0].new_value).toMatchObject({ expected: 6, to_name: target })
     expect(system.data?.[0].new_value).toMatchObject({
       movement_type: "INCOME",
       to_name: target,
-      updated: 5
+      updated: 6
     })
   })
 })

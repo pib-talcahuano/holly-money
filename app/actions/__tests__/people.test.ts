@@ -14,7 +14,8 @@ jest.mock("@/lib/supabase/server", () => ({
 
 jest.mock("@/lib/permissions/rbac", () => ({
   PERMISSIONS: { MANAGE_PEOPLE: "MANAGE_PEOPLE" },
-  can: (...args: unknown[]) => mockCan(...args)
+  can: (...args: unknown[]) => mockCan(...args),
+  isImpersonating: (user: { impersonatorId?: string | null } | null) => !!user?.impersonatorId
 }))
 
 jest.mock("@/services/people/people.service", () => ({
@@ -59,6 +60,35 @@ describe.each([
     await expect(action({ ...input, from_names: [] })).resolves.toEqual(noPermission)
     expect(mockCan).toHaveBeenCalledWith(mockUser.permissions, "MANAGE_PEOPLE")
     expect(mockService).not.toHaveBeenCalled()
+    expect(mockRevalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("is not available while impersonating, checked after permission and before validation", async () => {
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, impersonatorId: "admin-1" })
+    mockCan.mockReturnValue(true)
+    await expect(action({ ...input, from_names: [] })).resolves.toEqual({
+      ok: false,
+      error: "No disponible mientras actúas como otro usuario"
+    })
+    expect(mockService).not.toHaveBeenCalled()
+    expect(mockRevalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("reports missing permission first even while impersonating", async () => {
+    mockGetCurrentUser.mockResolvedValue({ ...mockUser, impersonatorId: "admin-1" })
+    mockCan.mockReturnValue(false)
+    await expect(action(input)).resolves.toEqual(noPermission)
+  })
+
+  it("passes padded origin names to the service untrimmed", async () => {
+    mockGetCurrentUser.mockResolvedValue(mockUser)
+    mockCan.mockReturnValue(true)
+    mockService.mockResolvedValue({ affected: 1, updated: 1 })
+    await action({ ...input, from_names: ["  mabel perez ", "Mabel P."] })
+    expect(mockService).toHaveBeenCalledWith(
+      mockDb,
+      expect.objectContaining({ fromNames: ["  mabel perez ", "Mabel P."] })
+    )
   })
 
   it.each([
@@ -74,6 +104,7 @@ describe.each([
     mockCan.mockReturnValue(true)
     await expect(action(bad)).resolves.toEqual({ ok: false, error: message })
     expect(mockService).not.toHaveBeenCalled()
+    expect(mockRevalidatePath).not.toHaveBeenCalled()
   })
 
   it("returns a service Error message", async () => {

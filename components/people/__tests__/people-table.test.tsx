@@ -80,4 +80,11 @@ describe("PeopleTable", () => {
     expect(screen.getByText("2 seleccionados, 2 ocultos por el filtro")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Unir seleccionados/ })).toBeEnabled()
   })
+
+  it("uses singular forms in the hidden-by-filter hint", () => {
+    render(<PeopleTable names={names} movementType="INCOME" />)
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Mabel" }))
+    fireEvent.change(screen.getByLabelText("Filtrar por nombre"), { target: { value: "juan" } })
+    expect(screen.getByText("1 seleccionado, 1 oculto por el filtro")).toBeInTheDocument()
+  })
 })

@@ -150,13 +150,39 @@ describe("peopleService.list", () => {
     ])
   })
 
-  it("throws the database error", async () => {
+  it("throws a Spanish error and logs the raw database error", async () => {
     const t = makeDb({ pages: [{ data: null, error: new Error("list boom") }] })
-    await expect(peopleService.list(t.db, { movementType: "INCOME" })).rejects.toThrow("list boom")
+    await expect(peopleService.list(t.db, { movementType: "INCOME" })).rejects.toThrow(
+      "No se pudieron leer los movimientos"
+    )
+    expect(consoleError).toHaveBeenCalledWith(expect.any(String), expect.any(Error))
   })
 })
 
 describe("peopleService.preview", () => {
+  it("wraps read failures", async () => {
+    const t = makeDb({ pages: [{ data: null, error: new Error("raw") }] })
+    await expect(
+      peopleService.preview(t.db, { movementType: "INCOME", fromNames: ["ana"], toName: "Ana M" })
+    ).rejects.toThrow("No se pudieron leer los movimientos")
+  })
+
+  it("counts a row returned twice across pages only once", async () => {
+    const first = idRows(1000, "ana")
+    const t = makeDb({
+      pages: [
+        { data: first, error: null },
+        { data: [first[999], { id: "new", delivered_by: "ana" }], error: null }
+      ]
+    })
+    const result = await peopleService.preview(t.db, {
+      movementType: "INCOME",
+      fromNames: ["ana"],
+      toName: "Ana M"
+    })
+    expect(result).toEqual({ affected: 1001 })
+  })
+
   it("counts exact spellings in TypeScript without name filters", async () => {
     const tricky = 'Ana, (Pérez) "la"'
     const t = makeDb({
@@ -227,6 +253,32 @@ describe("peopleService.merge", () => {
   const base = { movementType: "INCOME" as const, userId: "u1" }
   const ids = (count: number, offset = 0) =>
     Array.from({ length: count }, (_, i) => ({ id: `id-${offset + i}` }))
+
+  it("wraps read failures without writing anything", async () => {
+    const t = makeDb({ pages: [{ data: null, error: new Error("raw") }] })
+    await expect(
+      peopleService.merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
+    ).rejects.toThrow("No se pudieron leer los movimientos")
+    expect(logSystem).not.toHaveBeenCalled()
+  })
+
+  it("dedupes rows by id so expected and updates never double count", async () => {
+    const first = idRows(1000, "ana")
+    const t = makeDb({
+      pages: [
+        { data: first, error: null },
+        { data: [first[999]], error: null }
+      ],
+      updates: Array.from({ length: 5 }, (_, i) => ({ data: ids(200, i * 200), error: null }))
+    })
+    const result = await peopleService.merge(t.db, {
+      ...base,
+      fromNames: ["ana"],
+      toName: "Ana M"
+    })
+    expect(result).toEqual({ updated: 1000 })
+    expect((logSystem.mock.calls[0][0] as SystemEntry).new_value.expected).toBe(1000)
+  })
 
   it("returns 0 and writes nothing when no movement matches", async () => {
     const t = makeDb({ pages: [{ data: idRows(3, "Otro"), error: null }] })
@@ -321,8 +373,8 @@ describe("peopleService.merge", () => {
     const { merge_id: mergeId, ...sysValue } = sys.new_value
     expect(typeof mergeId).toBe("string")
     expect({ ...sys, new_value: sysValue }).toEqual({
-      entity: "people",
-      action: "Nombres unidos",
+      entity: "PEOPLE",
+      action: "PEOPLE_MERGED",
       user_id: "u1",
       new_value: {
         movement_type: "INCOME",
@@ -349,16 +401,16 @@ describe("peopleService.merge", () => {
     })
     await peopleService.merge(t.db, { ...base, fromNames: ["ana"], toName: "Ana M" })
     expect(t.events).toEqual([
-      "system:Unión de nombres iniciada",
+      "system:PEOPLE_MERGE_STARTED",
       "update",
       "audit",
-      "system:Nombres unidos"
+      "system:PEOPLE_MERGED"
     ])
     const start = logSystem.mock.calls[0][0] as unknown as {
       entity: string
       new_value: Record<string, unknown>
     }
-    expect(start.entity).toBe("people")
+    expect(start.entity).toBe("PEOPLE")
     const { merge_id: startId, ...startRest } = start.new_value
     expect(startRest).toEqual({
       movement_type: "INCOME",

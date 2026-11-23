@@ -48,6 +48,20 @@ beforeEach(() => {
 })
 
 describe("MergeDialog (merge)", () => {
+  it("renders spellings that differ only by whitespace with their exact text", () => {
+    const spaced: PersonName[] = [
+      { name: "Ana  Pérez", count: 2, total: 0, lastDate: "2026-01-01", sameAs: [] },
+      { name: "Ana Pérez ", count: 1, total: 0, lastDate: "2026-01-01", sameAs: [] }
+    ]
+    setup(spaced)
+    const labels = screen.getAllByRole("radio").map((radio) => radio.closest("label")!)
+    const spans = labels.slice(0, 2).map((label) => label.querySelector("span")!)
+    expect(spans[0].firstChild?.textContent).toBe("Ana  Pérez")
+    expect(spans[1].firstChild?.textContent).toBe("Ana Pérez ")
+    expect(spans[0]).toHaveClass("whitespace-pre-wrap")
+    expect(spans[1]).toHaveClass("whitespace-pre-wrap")
+  })
+
   it("shows title and options, then previews the chosen name", async () => {
     setup()
     expect(screen.getByRole("heading", { name: "Unir nombres" })).toBeInTheDocument()

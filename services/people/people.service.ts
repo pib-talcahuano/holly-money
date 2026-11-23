@@ -29,7 +29,10 @@ async function fetchAllRows<T>(
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .range(from, from + PAGE_SIZE - 1)
-    if (error) throw error
+    if (error) {
+      console.error("people: error al leer los movimientos", error)
+      throw new Error("No se pudieron leer los movimientos")
+    }
     const page = (data ?? []) as unknown as T[]
     rows.push(...page)
     if (page.length < PAGE_SIZE) return rows
@@ -60,7 +63,9 @@ async function findAffected(
   sources: Set<string>,
   target: string
 ) {
-  const rows = await fetchAllRows<IdNameRow>(db, "id, delivered_by", movementType)
+  const fetched = await fetchAllRows<IdNameRow>(db, "id, delivered_by", movementType)
+  // Offset pagination can return a row twice if a movement is inserted while reading.
+  const rows = [...new Map(fetched.map((row) => [row.id, row])).values()]
   return rows.filter(
     (row): row is { id: string; delivered_by: string } =>
       row.delivered_by !== null && sources.has(row.delivered_by) && row.delivered_by !== target
@@ -110,8 +115,8 @@ export const peopleService = {
 
     // Written before any update so a crash mid-merge leaves a trace of what was intended.
     const { error: startError } = await auditService.logSystem({
-      entity: "people",
-      action: "Unión de nombres iniciada",
+      entity: "PEOPLE",
+      action: "PEOPLE_MERGE_STARTED",
       user_id: input.userId,
       new_value: {
         movement_type: input.movementType,
@@ -140,6 +145,9 @@ export const peopleService = {
     for (const [oldName, allIds] of idsByOldName) {
       for (let i = 0; i < allIds.length; i += UPDATE_CHUNK_SIZE) {
         const ids = allIds.slice(i, i + UPDATE_CHUNK_SIZE)
+        // Cancelled movements are edited on purpose (user decision): only the free-text name
+        // changes and each change is audited with the old value. Do not copy the "cancelled
+        // movements are read-only" rule from movementsService.update here.
         const { data, error } = await db
           .from("movements")
           .update({
@@ -181,8 +189,8 @@ export const peopleService = {
 
     if (updated > 0) {
       const { error } = await auditService.logSystem({
-        entity: "people",
-        action: "Nombres unidos",
+        entity: "PEOPLE",
+        action: "PEOPLE_MERGED",
         user_id: input.userId,
         new_value: {
           movement_type: input.movementType,

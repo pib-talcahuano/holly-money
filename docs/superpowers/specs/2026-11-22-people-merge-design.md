@@ -62,7 +62,7 @@ Fecha: 2026-11-22. Estado: borrador para aprobación. Origen: petición de la us
 ## Decisiones mías (revisar)
 
 - Permiso `MANAGE_PEOPLE` solo para ADMIN (decidido por la usuaria; BURSAR y el resto no lo reciben).
-- La unión incluye los movimientos anulados, para que el historial quede coherente.
+- La unión incluye los movimientos anulados, para que el historial quede coherente (confirmado por la usuaria).
 - La actualización no es atómica entre lotes; si algo falla a medias, el error lo dice con números en lugar de continuar sin avisar. Una función SQL atómica con la comprobación de permisos dentro queda como mejora si el volumen lo pide.
 
 ## Queda para quien construya

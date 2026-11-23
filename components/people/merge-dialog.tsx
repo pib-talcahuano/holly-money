@@ -248,7 +248,7 @@ function MergeForm({
                 checked={choice === person.name}
                 onChange={() => changeChoice(person.name)}
               />
-              <span className="min-w-0 break-words text-sm font-semibold text-foreground">
+              <span className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold text-foreground">
                 {person.name}
                 <span className="ml-2 font-normal text-muted-foreground">
                   ({plural(person.count, "movimiento", "movimientos")})

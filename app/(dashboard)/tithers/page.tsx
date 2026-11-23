@@ -5,6 +5,7 @@ import { tithersService } from "@/services/tithers/tithers.service"
 import { currentYearInSantiago, parseTithersYear, titherYearOptions } from "@/lib/utils/tithers"
 import { TithersSummary } from "@/components/tithers/tithers-summary"
 import { TithersTable } from "@/components/tithers/tithers-table"
+import { MergeNamesLink } from "@/components/tithers/merge-names-link"
 import { TithersYearSelect } from "@/components/tithers/tithers-year-select"
 
 type Props = {
@@ -34,7 +35,10 @@ export default async function TithersPage({ searchParams }: Props) {
             Quiénes dan diezmo y cuánto, por año
           </p>
         </div>
-        <TithersYearSelect year={year} options={titherYearOptions(currentYear)} />
+        <div className="flex flex-wrap items-center gap-3">
+          {can(user.permissions, PERMISSIONS.MANAGE_PEOPLE) && <MergeNamesLink />}
+          <TithersYearSelect year={year} options={titherYearOptions(currentYear)} />
+        </div>
       </div>
 
       {categoryFound ? (
