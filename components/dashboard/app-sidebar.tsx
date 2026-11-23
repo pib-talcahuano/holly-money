@@ -79,6 +79,12 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["ADMIN", "BURSAR", "FINANCE"]
       },
       {
+        href: "/people",
+        label: "Personas",
+        icon: Users,
+        roles: ["ADMIN"]
+      },
+      {
         href: "/payroll",
         label: "Remuneraciones",
         icon: Banknote,

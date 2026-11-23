@@ -46,7 +46,8 @@ const getPermissionsForRole = unstable_cache(
       .eq("enabled", true)
     return (data ?? []).map((p) => p.permission)
   },
-  ["role-permissions-v2"],
+  // Bump the key when a migration seeds a new permission, so cached per-role lists are not stale
+  ["role-permissions-v3"],
   { tags: ["role-permissions"], revalidate: 86400 }
 )
 
