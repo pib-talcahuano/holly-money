@@ -27,6 +27,7 @@ const describeIfLocal = isLocal && SUPABASE_URL && SECRET_KEY ? describe : descr
 //   2098 (2098-01)                                                  rls.test.ts: movements fixture
 //   2097 (2097-01)                                                  rls.test.ts: RPC summaries
 //   2096 (2096-01)                                                  movement-totals.test.ts
+//   2094 (2094-01)                                                  people-merge.test.ts
 //   2087 (2087-03..2088-02)                                         rls.test.ts: budget_sub_items RLS
 //   2086 (2086-03..2087-02)                                         rls.test.ts: fund trigger
 //   2081, 2082 (2081-03..2083-02)                                   budget-copy.test.ts

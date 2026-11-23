@@ -50,4 +50,13 @@ describe("getVisibleGroups", () => {
   it.each(["MINISTER", "DELEGATE"])("hides Diezmadores from %s", (role) => {
     expect(hrefs([role], "m-1")).not.toContain("/tithers")
   })
+
+  it("shows Personas in Finanzas to ADMIN", () => {
+    const finance = getVisibleGroups(["ADMIN"]).find((g) => g.label === "Finanzas")
+    expect(finance?.links.map((l) => l.href)).toContain("/people")
+  })
+
+  it.each(["BURSAR", "FINANCE", "MINISTER", "DELEGATE"])("hides Personas from %s", (role) => {
+    expect(hrefs([role], "m-1")).not.toContain("/people")
+  })
 })

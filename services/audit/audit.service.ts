@@ -22,6 +22,8 @@ type LogMovementInput = {
   impersonator_id?: string | null
 }
 
+const BULK_CHUNK_SIZE = 500
+
 async function resolveImpersonatorId(explicit?: string | null) {
   if (explicit !== undefined) return explicit
   const current = await getCurrentUser()
@@ -66,6 +68,28 @@ export const auditService = {
         : unknown,
       note: input.note ?? null
     })
+  },
+
+  /** Inserts many movement audit rows (500 per query); throws the database error on failure. */
+  async logMovementsBulk(inputs: LogMovementInput[]) {
+    if (inputs.length === 0) return
+    const admin = createSupabaseAdminClient()
+    const current = await getCurrentUser()
+    const sessionImpersonatorId = current?.impersonatorId ?? null
+    for (let i = 0; i < inputs.length; i += BULK_CHUNK_SIZE) {
+      const rows = inputs.slice(i, i + BULK_CHUNK_SIZE).map((input) => ({
+        movement_id: input.movement_id,
+        action: input.action,
+        user_id: input.user_id,
+        impersonator_id:
+          input.impersonator_id !== undefined ? input.impersonator_id : sessionImpersonatorId,
+        previous_value: (input.previous_value ?? null) as never,
+        new_value: (input.new_value ?? null) as never,
+        note: input.note ?? null
+      }))
+      const { error } = await admin.from("movement_audit_log").insert(rows)
+      if (error) throw error
+    }
   },
 
   async listSystem(limit = 80) {

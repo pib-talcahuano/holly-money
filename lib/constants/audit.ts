@@ -20,7 +20,8 @@ export const AUDIT_ENTITY_LABEL: Record<string, string> = {
   INBOUND_EMAIL_ROUTE: "Correo Entrante",
   APP_SETTINGS: "Configuración del Sistema",
   PAYROLL_RECORD: "Remuneración",
-  USERS: "Usuario"
+  USERS: "Usuario",
+  PEOPLE: "Personas"
 }
 
 export function auditEntityLabel(entity: string): string {
@@ -28,6 +29,10 @@ export function auditEntityLabel(entity: string): string {
 }
 
 export const AUDIT_ACTION_LABEL: Record<string, string> = {
+  // Personas (unión de nombres)
+  PEOPLE_MERGE_STARTED: "Unión de nombres iniciada",
+  PEOPLE_MERGED: "Nombres unidos",
+
   // Ministerios
   MINISTRY_CREATED: "Ministerio creado",
   MINISTRY_UPDATED: "Ministerio actualizado",

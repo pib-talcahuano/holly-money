@@ -22,6 +22,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/movements": "Movimientos",
   "/movements/new": "Nuevo Movimiento",
   "/tithers": "Diezmadores",
+  "/people": "Personas",
   "/users": "Usuarios",
   "/audit": "Auditoría",
   "/requests": "Solicitudes",
