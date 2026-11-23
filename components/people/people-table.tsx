@@ -32,6 +32,8 @@ export function PeopleTable({ names, movementType }: Props) {
     [names, checked]
   )
 
+  const hiddenSelected = selected.filter((person) => !visible.includes(person)).length
+
   function toggle(name: string) {
     setChecked((previous) => {
       const next = new Set(previous)
@@ -58,13 +60,20 @@ export function PeopleTable({ names, movementType }: Props) {
             className="h-10 pl-9"
           />
         </div>
-        <Button
-          type="button"
-          disabled={selected.length < 2}
-          onClick={() => setDialogNames(selected)}
-        >
-          Unir seleccionados ({selected.length})
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            disabled={selected.length < 2}
+            onClick={() => setDialogNames(selected)}
+          >
+            Unir seleccionados ({selected.length})
+          </Button>
+          {hiddenSelected > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {`${selected.length} seleccionados, ${hiddenSelected} ocultos por el filtro`}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-[14px] border border-border bg-card">

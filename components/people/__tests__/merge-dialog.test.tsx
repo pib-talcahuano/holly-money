@@ -180,6 +180,114 @@ describe("MergeDialog (merge)", () => {
   })
 })
 
+describe("MergeDialog (in-flight, normalization, polish)", () => {
+  async function startPendingMerge() {
+    const pending = deferred<{ ok: true; updated: number }>()
+    merge.mockReturnValueOnce(pending.promise)
+    const handlers = setup()
+    fireEvent.click(screen.getByRole("radio", { name: /Hna\. Mabel/ }))
+    const confirm = screen.getByRole("button", { name: "Unir nombres" })
+    await waitFor(() => expect(confirm).toBeEnabled())
+    return { pending, confirm, ...handlers }
+  }
+
+  it("ignores Escape and disables Cancel while a merge is pending, then closes once", async () => {
+    const { pending, confirm, onOpenChange, onDone } = await startPendingMerge()
+    fireEvent.click(confirm)
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeDisabled()
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" })
+    fireEvent.keyDown(document.body, { key: "Escape" })
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(screen.getByRole("heading", { name: "Unir nombres" })).toBeInTheDocument()
+    await act(async () => {
+      pending.resolve({ ok: true, updated: 4 })
+    })
+    expect(onOpenChange).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it("calls mergePeople once even when two clicks land in the same batch", async () => {
+    const { pending, confirm } = await startPendingMerge()
+    act(() => {
+      confirm.click()
+      confirm.click()
+    })
+    expect(merge).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      pending.resolve({ ok: true, updated: 4 })
+    })
+  })
+
+  it("sends the normalized final name while keeping exact origin spellings", async () => {
+    const messy: PersonName[] = [
+      { name: " Hna.  Mabel ", count: 2, total: 1, lastDate: "2026-11-12", sameAs: [] },
+      { name: "Mabel", count: 1, total: 1, lastDate: "2026-10-01", sameAs: [] }
+    ]
+    merge.mockResolvedValueOnce({ ok: true, updated: 3 })
+    setup(messy)
+    fireEvent.click(screen.getByRole("radio", { name: /Hna\./ }))
+    expect(await screen.findByText("Nombre final: Hna. Mabel")).toBeInTheDocument()
+    const expected = {
+      movement_type: "INCOME",
+      from_names: [" Hna.  Mabel ", "Mabel"],
+      to_name: "Hna. Mabel"
+    }
+    expect(preview).toHaveBeenCalledWith(expected)
+    const confirm = screen.getByRole("button", { name: "Unir nombres" })
+    await waitFor(() => expect(confirm).toBeEnabled())
+    fireEvent.click(confirm)
+    await waitFor(() => expect(merge).toHaveBeenCalledWith(expected))
+  })
+
+  it("shows Calculando… while the preview is pending", async () => {
+    const pending = deferred<{ ok: true; affected: number }>()
+    preview.mockReturnValueOnce(pending.promise)
+    setup()
+    fireEvent.click(screen.getByRole("radio", { name: /Hna\. Mabel/ }))
+    expect(screen.getByText("Calculando…")).toBeInTheDocument()
+    await act(async () => {
+      pending.resolve({ ok: true, affected: 4 })
+    })
+    expect(screen.queryByText("Calculando…")).not.toBeInTheDocument()
+  })
+
+  it("keeps persistent live regions", async () => {
+    setup()
+    expect(screen.getByRole("status")).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toBeInTheDocument()
+  })
+
+  it("shows a generic inline message when the preview throws", async () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {})
+    preview.mockRejectedValueOnce(new Error("boom"))
+    setup()
+    fireEvent.click(screen.getByRole("radio", { name: /Hna\. Mabel/ }))
+    expect(await screen.findByText("No se pudo completar la operación")).toBeInTheDocument()
+    spy.mockRestore()
+  })
+
+  it("clears the inline merge error when the choice changes", async () => {
+    merge.mockResolvedValueOnce({ ok: false, error: "Falló la unión" })
+    setup()
+    fireEvent.click(screen.getByRole("radio", { name: /Hna\. Mabel/ }))
+    const confirm = screen.getByRole("button", { name: "Unir nombres" })
+    await waitFor(() => expect(confirm).toBeEnabled())
+    fireEvent.click(confirm)
+    expect(await screen.findByText("Falló la unión")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("radio", { name: /^Mabel/ }))
+    expect(screen.queryByText("Falló la unión")).not.toBeInTheDocument()
+  })
+
+  it("says there is nothing to change and keeps confirm disabled when affected is 0", async () => {
+    preview.mockResolvedValue({ ok: true, affected: 0 })
+    setup()
+    fireEvent.click(screen.getByRole("radio", { name: /Hna\. Mabel/ }))
+    expect(await screen.findByText("No hay movimientos para cambiar.")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Unir nombres" })).toBeDisabled()
+  })
+})
+
 describe("MergeDialog (rename)", () => {
   it("shows a single text field and previews only when the text changes", async () => {
     jest.useFakeTimers()
@@ -197,11 +305,13 @@ describe("MergeDialog (rename)", () => {
       await act(async () => {
         jest.advanceTimersByTime(260)
       })
+      expect(preview).toHaveBeenCalledTimes(1)
       expect(preview).toHaveBeenCalledWith({
         movement_type: "INCOME",
         from_names: ["Mabel"],
         to_name: "Mabel Rojas"
       })
+      expect(screen.getByRole("button", { name: "Renombrar" })).toBeInTheDocument()
     } finally {
       jest.useRealTimers()
     }
