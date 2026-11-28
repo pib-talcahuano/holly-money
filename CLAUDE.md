@@ -31,7 +31,7 @@ pnpm test:e2e --headed
 # Supabase local stack (CLI is a devDependency)
 pnpm supabase <sub command>      # e.g. pnpm supabase status, pnpm supabase db reset
 
-# Regenerate DB types from local Supabase
+# Regenerate DB types from local Supabase (runs `supabase@latest` via dlx, not the pinned devDependency)
 pnpm types:generate
 
 # React Email dev server (emails/ directory, port 3001)
@@ -43,10 +43,9 @@ pnpm docs
 
 Always use `pnpm`, never `npm` or `yarn`.
 
-`pnpm run ci` runs lint + typecheck; both must pass. `pnpm test` (jest, `passWithNoTests`) now
-has real coverage (~47 test files under `__tests__/` dirs across `app/actions/`, `lib/`,
-`services/`) and runs as its own CI job — it's no longer a bare placeholder, treat failures as
-real. `services/__integration__/rls.test.ts` exercises RLS policies against a real local Supabase
+`pnpm run ci` runs lint + typecheck; both must pass. `pnpm test` (jest) has real coverage
+(~90 test files in `__tests__/` dirs across `app/actions/`, `lib/`, `services/`, `components/`,
+`emails/`) and runs as its own CI job — treat failures as real. `services/__integration__/rls.test.ts` exercises RLS policies against a real local Supabase
 instance. `pnpm test:e2e` runs the Playwright suite (`e2e/`) against a locally running `pnpm dev`
 + seeded local Supabase — it is **not** run in CI, is not a regression gate, and doubles as a
 design-reference screenshot generator (`docs/screenshots/`, committed to the repo). See
@@ -58,9 +57,9 @@ design-reference screenshot generator (`docs/screenshots/`, committed to the rep
 
 **Layer separation:**
 
-- `app/` — Route handlers and page components. `(dashboard)` route group pages: `dashboard`, `movements` (+ `new`, `[id]`, `[id]/edit`), `ministries` (+ `[id]`), `requests` (+ `[id]`, intentions/approval workflow), `payroll`, `users`, `audit`, `settings` (incl. `settings/permissions`, `settings/inbound-email`), `profile`, `notifications`, `voucher-book` (quick income/expense entry form, not linked in sidebar).
-- `app/actions/` — Server actions (auth, movements, users, ministries, requests, ministry-settlements, categories, payment-methods, payroll, permissions, settings, theme, impersonation, inbound-email-routes, vouchers).
-- `app/api/` — API routes (movements, users, ministries, requests, notifications, reminders, settings, auth, attachments, dashboard, inbound-email-routes, webhooks/resend-inbound).
+- `app/` — Route handlers and page components. `(dashboard)` route group pages: `dashboard`, `movements` (+ `new`, `[id]`, `[id]/edit`), `ministries` (+ `[id]`), `requests` (+ `[id]`, intentions/approval workflow), `budgets`, `people` (merge/rename «Entregado por/a» names, ADMIN-only), `tithers` (diezmadores, monthly trend), `payroll`, `users`, `audit`, `settings` (incl. `settings/permissions`, `settings/inbound-email`), `profile`, `notifications`, `voucher-book` (quick income/expense entry form, not linked in sidebar).
+- `app/actions/` — Server actions (auth, movements, users, ministries, ministry-budgets, budget-items, budget-sub-items, requests, ministry-settlements, categories, payment-methods, payroll, people, permissions, settings, theme, impersonation, inbound-email-routes, vouchers, attachments).
+- `app/api/` — API routes (movements, users, ministries, requests, notifications, reminders, comment-notifications, permissions, settings, auth, attachments, dashboard, inbound-email-routes, webhooks/resend-inbound).
 - `components/` — UI (`components/ui/`) and domain components (`components/movements/`, `components/dashboard/`, `components/intentions/`, etc.)
 - `services/` — All business logic. Never call the Supabase client directly from API routes or server actions; use the service layer.
 - `lib/supabase/` — Supabase client helpers:
@@ -72,7 +71,7 @@ design-reference screenshot generator (`docs/screenshots/`, committed to the rep
 - `proxy.ts` — route protection (Next.js 16 convention); unauthenticated requests redirect to `/`
 - `types/` — Shared TypeScript types; `types/database.types.ts` is auto-generated (do not edit manually)
 
-**Roles:** four roles: `ADMIN`, `BURSAR` (tesorero), `FINANCE` (comisión de finanzas), `MINISTER` (encargado de ministerio). A user can hold several of `BURSAR`/`FINANCE`/`MINISTER` (`users.roles` is an array; `ADMIN` and `DELEGATE` are never combined). Permissions are the union of the roles. Own-ministry scoping of the request views (`isOwnMinistryScoped(user)`) applies only to users whose roles are all `MINISTER`/`DELEGATE` (and who can't `REVIEW_INTENTIONS`); any other role keeps the full workflow view. RLS checks roles with `has_any_role(ARRAY[...])`, never `get_my_role()`. TS code uses `hasRole`/`hasAnyRole` from `lib/constants/roles.ts`. Authorization is permission-based, not role-name-based: check `can(permissions, PERMISSIONS.X)`, never compare role strings in business logic. Sidebar visibility does use role names (`components/dashboard/app-sidebar.tsx`) — that's the one deliberate exception. `isImpersonating()` in `rbac.ts` deliberately blocks `MANAGE_USERS` while impersonating, even if the impersonated user's role would nominally grant it.
+**Roles:** five roles: `ADMIN`, `BURSAR` (tesorero), `FINANCE` (comisión de finanzas), `MINISTER` (encargado de ministerio), `DELEGATE` (delegado de ministerio, can submit requests for its ministries). A user can hold several of `BURSAR`/`FINANCE`/`MINISTER` (`users.roles` is an array); `ADMIN` and `DELEGATE` are exclusive — never combined (`EXCLUSIVE_ROLES`, enforced by the `users_roles_valid_check` DB constraint). Permissions are the union of the roles. Own-ministry scoping of the request views (`isOwnMinistryScoped(user)`) applies only to users whose roles are all `MINISTER`/`DELEGATE` (and who can't `REVIEW_INTENTIONS`); any other role keeps the full workflow view. RLS checks roles with `has_any_role(ARRAY[...])`, never `get_my_role()`. TS code uses `hasRole`/`hasAnyRole` from `lib/constants/roles.ts`. Authorization is permission-based, not role-name-based: check `can(permissions, PERMISSIONS.X)`, never compare role strings in business logic. Sidebar visibility does use role names (`components/dashboard/app-sidebar.tsx`) — that's the one deliberate exception. `isImpersonating()` in `rbac.ts` deliberately blocks `MANAGE_USERS` while impersonating, even if the impersonated user's role would nominally grant it.
 
 **Data flow for mutations:**
 API route or server action → reads Supabase session → validates with Zod schema from `lib/validators/` → calls service → service uses Supabase server client → service calls `auditService` for audit log → movement mutations then call `processMovementIntegrations` (email notification via Resend).
@@ -81,7 +80,7 @@ API route or server action → reads Supabase session → validates with Zod sch
 Supabase Auth with email/password (`signInWithPassword`). No public sign-up — accounts are created by an ADMIN via the users management page; the invited user receives an email (Resend) and activates via `/activate`. Password reset via `/api/auth/forgot-password`. Session is read server-side via `createServerClient()` from `lib/supabase/server.ts`. An ADMIN can also impersonate another (non-ADMIN, active) user for up to 30 minutes — `services/impersonation/`.
 
 **Ministries:**
-`ministries` + `ministry_assignments` tables; a MINISTER user is assigned to a ministry via `ministry_assignments` (FK to `users`) — there is no free-text minister field. Managed by ADMIN only at `/ministries`; budgets live at `/budgets` (`MANAGE_BUDGETS`). Used by the requests workflow. `services/ministries/ministry-leftover.service.ts` computes per-ministry leftover (transferred minus settled) via the `get_ministry_leftover_summary` RPC.
+`ministries` + `ministry_assignments` tables; a MINISTER user is assigned to a ministry via `ministry_assignments` (FK to `users`) — there is no free-text minister field. Managed by ADMIN only at `/ministries`; budgets live at `/budgets` (`MANAGE_BUDGETS`), per year, with budget items and sub-items (`services/ministries/budget-items.service.ts`, `budget-sub-items.service.ts`). Used by the requests workflow. `services/ministries/ministry-leftover.service.ts` computes per-ministry leftover (transferred minus settled) via the `get_ministry_leftover_summary` RPC.
 
 **Requests workflow:**
 `budget_intentions`, `intention_transfers`, `expense_settlements`, `request_comments` tables. Ministers submit spending intentions (amount + description); BURSAR reviews (approve/reject), registers the transfer once approved, and ministers later settle the expense with proof. FINANCE has read-only visibility into the same workflow (no `REVIEW_INTENTIONS` permission — cannot approve/reject or register transfers). Per-ministry budgets (`budget_periods`/`ministry_budgets`, managed by ADMIN and BURSAR with `MANAGE_BUDGETS` at `/budgets`) exist and are surfaced on the ministry detail page, but request approval is not coupled to a budget balance. Services: `services/intentions/`, `services/settlements/`. Pages: `app/(dashboard)/requests/page.tsx` (+ `[id]`). See `docs/flows.md` for the full sequence diagram.
@@ -96,7 +95,7 @@ File attachments (movements, intentions, settlements, payroll liquidaciones) upl
 Emails sent to any `@pibtalcahuano.com` address are received via a Resend inbound webhook (`app/api/webhooks/resend-inbound/route.ts`, signature-verified with `RESEND_WEBHOOK_SECRET`) and forwarded to configured recipient lists looked up by local-part (`services/email/inbound-routes.service.ts`). Managed at `/settings/inbound-email`, requires `MANAGE_SETTINGS`.
 
 **Reminders:**
-`app/api/reminders/route.ts` is called by an external scheduled job (cron), authenticated via a shared `CRON_SECRET` sent as `x-cron-secret` (constant-time compare). Summarizes pending intentions/settlements/missing transfers via the `get_pending_reminders` RPC and emails treasury.
+`app/api/reminders/route.ts` is called by an external scheduled job (cron), authenticated via a shared `CRON_SECRET` sent as `x-cron-secret` (constant-time compare). Summarizes pending intentions/settlements/missing transfers via the `get_pending_reminders` RPC and emails treasury. `app/api/comment-notifications/route.ts` is a second cron endpoint (same `CRON_SECRET` scheme) that sends notifications for pending request comments (`services/intentions/comment-notifications.service.ts`).
 
 **Movement post-processing:**
 `services/google/movement-postprocess.ts` runs after a movement is created/edited — despite the directory name, it no longer does anything Google-specific; the earlier Google Apps Script pipeline (PDF generation + Sheets sync) has been removed entirely. It now only sends an email notification via Resend, tracked on `movements.notification_status`/`notification_error`. Email notifications go through Resend (`services/email/`), with React Email templates in `emails/`. See `docs/email.md` for the full list of emails sent and how to add a new one.
